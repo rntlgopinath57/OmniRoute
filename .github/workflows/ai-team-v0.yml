@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - "feature/ai-team-control-plane"
+      - "release/v3.8.51"
     paths:
       - "ai-team/**"
       - ".github/workflows/ai-team-v0.yml"
