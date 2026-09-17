@@ -1,0 +1,31 @@
+name: AI Team Control Plane
+
+on:
+  pull_request:
+    paths:
+      - 'config/ai-team/**'
+      - 'scripts/ai-team/**'
+      - '.github/workflows/ai-team-control-plane.yml'
+  push:
+    paths:
+      - 'config/ai-team/**'
+      - 'scripts/ai-team/**'
+      - '.github/workflows/ai-team-control-plane.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate AI Team registry and routing
+        run: node scripts/ai-team/doctor.mjs
