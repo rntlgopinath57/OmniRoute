@@ -9,13 +9,15 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REPOSITORY = process.env.GITHUB_REPOSITORY || "rntlgopinath57/OmniRoute";
 const BRANCH = process.env.GITHUB_REF_NAME || "feature/ai-team-control-plane";
 
+// Keep activation deterministic and independent of OmniRoute's volatile `auto`
+// free-provider choice. These are keyless models in the v3.8.50 registry.
 const MODELS = Object.freeze({
-  "coding-strong": "auto",
-  "research-strong": "auto",
-  "automation-efficient": "auto",
-  "design-multimodal": "auto",
-  "general-balanced": "auto",
-  review: "auto",
+  "coding-strong": "pollinations/openai",
+  "research-strong": "pollinations/openai",
+  "automation-efficient": "pollinations/openai-fast",
+  "design-multimodal": "pollinations/openai",
+  "general-balanced": "pollinations/openai",
+  review: "pollinations/mistral",
 });
 
 function resolveRepositoryPath(path) {
