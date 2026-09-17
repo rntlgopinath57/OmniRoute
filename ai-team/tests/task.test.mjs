@@ -41,11 +41,16 @@ test("rejects an empty task", () => {
   assert.throws(() => normalizeTask({ task: "   " }), /non-empty task string/);
 });
 
-test("returns a classified structured result", () => {
+test("returns a classified and routed structured result", () => {
   assert.deepEqual(executeTask({ task: "Create a workflow every morning" }), {
     status: "success",
     task: "Create a workflow every morning",
     type: "automation",
+    route: {
+      primaryProvider: "openai",
+      fallbackProvider: "anthropic",
+      modelProfile: "automation-efficient",
+    },
     result: "AI Team task received successfully",
   });
 });
