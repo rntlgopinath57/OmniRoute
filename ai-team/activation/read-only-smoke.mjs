@@ -8,9 +8,8 @@ import { runProjectJob } from "../src/project-jobs.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REPOSITORY = process.env.GITHUB_REPOSITORY || "rntlgopinath57/OmniRoute";
 const BRANCH = process.env.GITHUB_REF_NAME || "feature/ai-team-control-plane";
+const LIVE_INFERENCE = process.env.AI_TEAM_LIVE_INFERENCE === "true";
 
-// Keep activation deterministic and independent of OmniRoute's volatile `auto`
-// free-provider choice. These are keyless models in the v3.8.50 registry.
 const MODELS = Object.freeze({
   "coding-strong": "pollinations/openai",
   "research-strong": "pollinations/openai",
@@ -32,6 +31,19 @@ function resolveRepositoryPath(path) {
   }
 
   return absolutePath;
+}
+
+function inspectBuildOrder(text) {
+  const numberedSteps = [...text.matchAll(/^\s*(\d+)\.\s+(.+)$/gm)];
+  const sequential = numberedSteps.every((match, index) => Number(match[1]) === index + 1);
+  const step10 = numberedSteps[9]?.[2]?.trim().replace(/\.$/, "") ?? "";
+
+  return {
+    count: numberedSteps.length,
+    sequential,
+    step10,
+    valid: numberedSteps.length === 10 && sequential && step10 === "Project automations",
+  };
 }
 
 const repositoryAdapter = Object.freeze({
@@ -62,19 +74,39 @@ const plannerClient = Object.freeze({
   },
 });
 
+const deterministicExecutor = Object.freeze({
+  async generate({ task }) {
+    const check = inspectBuildOrder(task);
+    return {
+      output: check.valid
+        ? "The Build order contains exactly 10 numbered steps, and step 10 is Project automations."
+        : `Build order verification failed: count=${check.count}, sequential=${check.sequential}, step10=${JSON.stringify(check.step10)}.`,
+    };
+  },
+});
+
+const deterministicReviewer = Object.freeze({
+  async review({ task, output }) {
+    const check = inspectBuildOrder(task);
+    const outputMatches =
+      /exactly 10 numbered steps/i.test(output) && /step 10 is Project automations/i.test(output);
+    return { verdict: check.valid && outputMatches ? "PASS" : "FAIL" };
+  },
+});
+
 const omniRouteClient = createOmniRouteClient({
   baseUrl: process.env.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128",
   apiKey: process.env.OMNIROUTE_API_KEY,
   models: MODELS,
 });
 
-const providerClients = Object.freeze({
-  openai: omniRouteClient,
-  anthropic: omniRouteClient,
-  google: omniRouteClient,
-});
+const providerClients = LIVE_INFERENCE
+  ? Object.freeze({ openai: omniRouteClient, anthropic: omniRouteClient, google: omniRouteClient })
+  : Object.freeze({ openai: deterministicExecutor });
 
-const reviewerClients = providerClients;
+const reviewerClients = LIVE_INFERENCE
+  ? providerClients
+  : Object.freeze({ google: deterministicReviewer });
 
 const result = await runProjectJob({
   job: {
@@ -101,6 +133,7 @@ console.log(
   JSON.stringify(
     {
       status: result.status,
+      executionMode: LIVE_INFERENCE ? "live-inference" : "deterministic-ci",
       jobId: result.jobId,
       repository: result.repository,
       branch: result.branch,
