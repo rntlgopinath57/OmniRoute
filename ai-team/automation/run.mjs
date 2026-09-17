@@ -6,23 +6,31 @@ import { getProjectAutomation, listProjectAutomations } from "../src/automation-
 import { runReadOnlyAutomation } from "../src/automation-runner.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const TARGET_ROOT = process.env.AI_TEAM_TARGET_ROOT
+  ? resolve(ROOT, process.env.AI_TEAM_TARGET_ROOT)
+  : ROOT;
+const targetRootRelative = relative(ROOT, TARGET_ROOT);
+
+if (targetRootRelative.startsWith("..") || isAbsolute(targetRootRelative)) {
+  throw new Error("AI_TEAM_TARGET_ROOT must stay inside the checked-out workspace");
+}
 
 function resolveRepositoryPath(path) {
   if (typeof path !== "string" || !path.trim()) {
     throw new TypeError("path must be a non-empty string");
   }
 
-  const absolutePath = resolve(ROOT, path.trim());
-  const relativePath = relative(ROOT, absolutePath);
+  const absolutePath = resolve(TARGET_ROOT, path.trim());
+  const relativePath = relative(TARGET_ROOT, absolutePath);
   if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
-    throw new Error("repository path must stay inside the checked-out repository");
+    throw new Error("repository path must stay inside the selected target repository");
   }
 
   return absolutePath;
 }
 
 const automationId = process.argv[2] || "omniroute-readiness";
-const branch = process.env.GITHUB_REF_NAME || "feature/ai-team-control-plane";
+const branch = process.env.AI_TEAM_TARGET_BRANCH || process.env.GITHUB_REF_NAME;
 const automation = getProjectAutomation(automationId, { branch });
 
 const repositoryAdapter = Object.freeze({
@@ -40,6 +48,7 @@ console.log(
   JSON.stringify(
     {
       ...result,
+      targetRoot: relative(ROOT, TARGET_ROOT) || ".",
       availableAutomations: listProjectAutomations(),
     },
     null,
