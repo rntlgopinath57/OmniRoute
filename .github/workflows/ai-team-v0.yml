@@ -1,0 +1,36 @@
+name: AI Team v0 Core
+
+on:
+  pull_request:
+    paths:
+      - "ai-team/**"
+      - ".github/workflows/ai-team-v0.yml"
+  push:
+    branches:
+      - "feature/ai-team-control-plane"
+    paths:
+      - "ai-team/**"
+      - ".github/workflows/ai-team-v0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+
+      - name: Run isolated AI Team tests
+        run: node --test ai-team/tests/*.test.mjs
+
+      - name: Smoke test task intake
+        run: node ai-team/src/main.mjs '{"task":"Review Bharosa security","type":"analysis"}'
