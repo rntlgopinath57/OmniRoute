@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "loadPolicy": "on_demand",
+  "sources": [
+    {
+      "id": "google-skills",
+      "type": "external_skill_library",
+      "upstream": "https://github.com/google/skills",
+      "mirror": "https://github.com/rntlgopinath57/Google-skills",
+      "trust": "official",
+      "load": "on_demand",
+      "domains": ["google-cloud", "firebase", "firestore", "iam", "security", "monitoring", "analytics", "agent-platform"]
+    },
+    {
+      "id": "anthropic-skills",
+      "type": "external_skill_library",
+      "upstream": "https://github.com/anthropics/skills",
+      "mirror": "https://github.com/rntlgopinath57/anthropic-skills",
+      "trust": "official",
+      "load": "on_demand",
+      "domains": ["coding", "mcp", "documents", "frontend", "skill-authoring", "workflow-patterns"]
+    },
+    {
+      "id": "openai-plugins",
+      "type": "external_skill_library",
+      "upstream": "https://github.com/openai/plugins",
+      "mirror": "https://github.com/rntlgopinath57/openai-plugins",
+      "trust": "official",
+      "load": "on_demand",
+      "domains": ["coding", "github", "verification", "agent-tools", "developer-workflows"]
+    }
+  ]
+}

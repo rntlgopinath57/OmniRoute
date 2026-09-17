@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "defaultMode": "read_only",
+  "principles": [
+    "least_privilege",
+    "progressive_disclosure",
+    "verify_before_notify",
+    "synthetic_data_for_sensitive_testing",
+    "no_secret_material_in_skill_or_capability_configs"
+  ],
+  "allowedWithoutExtraGate": [
+    "read_authorized_repository_content",
+    "create_non_production_branch",
+    "open_pull_request",
+    "static_analysis",
+    "public_web_research",
+    "synthetic_browser_test",
+    "read_only_health_check",
+    "send_preconfigured_owner_only_alert_without_sensitive_data"
+  ],
+  "requireExplicitGate": [
+    "merge_into_release_or_protected_branch",
+    "production_deploy",
+    "live_database_write",
+    "secret_or_credential_change",
+    "identity_or_permission_change",
+    "message_external_third_party",
+    "delete_persistent_data",
+    "rotate_live_tokens_or_keys"
+  ],
+  "projects": {
+    "bharosa": {
+      "automationDataPolicy": "synthetic_only",
+      "publicScanPolicy": "minimal_disclosure",
+      "mediatedContactRequired": true,
+      "forbid": [
+        "profile_enumeration",
+        "sequential_profile_discovery",
+        "parent_phone_disclosure_on_public_scan",
+        "home_address_disclosure_on_public_scan",
+        "medical_notes_disclosure_on_public_scan",
+        "live_firestore_mutation_without_explicit_gate",
+        "real_child_data_in_automated_tests",
+        "pii_in_logs_or_test_artifacts"
+      ],
+      "requiredControls": [
+        "opaque_unpredictable_public_tokens",
+        "rate_limit_or_abuse_control",
+        "fail_closed_on_backend_or_auth_uncertainty",
+        "scan_alert_deduplication_or_throttling",
+        "admin_and_parent_authorization_boundary",
+        "independent_verification_before_security_success_claim"
+      ]
+    }
+  }
+}

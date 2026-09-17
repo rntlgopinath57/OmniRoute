@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "defaultPolicy": "verification-before-notify",
+  "capabilities": [
+    {
+      "id": "agent.orchestrate",
+      "taskClasses": ["multi_agent", "workflow", "routing", "retry", "human_gate"],
+      "executor": "google-adk-python",
+      "source": "https://github.com/rntlgopinath57/google-adk-python",
+      "mode": "sandbox_only",
+      "status": "evaluation",
+      "skills": ["google-skills"],
+      "verification": {"required": true, "strategy": "verification-before-notify"},
+      "notes": "Use ADK as a nested workflow runtime where it clearly improves orchestration; do not replace OmniRoute routing by default."
+    },
+    {
+      "id": "research.web",
+      "taskClasses": ["research", "scraping", "structured_extraction", "repo_discovery"],
+      "executor": "crawl4ai",
+      "source": "https://github.com/rntlgopinath57/crawl4ai",
+      "mode": "read_only",
+      "status": "ready_for_sandbox",
+      "skills": [],
+      "verification": {"required": true, "strategy": "browser.verify"},
+      "notes": "Prefer deterministic CSS/XPath extraction when possible; use LLM extraction only when needed."
+    },
+    {
+      "id": "browser.verify",
+      "taskClasses": ["browser_test", "ui_verification", "stateful_web_check", "self_healing_test"],
+      "executor": "playwright-mcp",
+      "source": "https://github.com/rntlgopinath57/microsoft-playwright-mcp",
+      "mode": "read_only",
+      "status": "ready_for_sandbox",
+      "skills": [],
+      "verification": {"required": true, "strategy": "verification-before-notify"},
+      "notes": "Use MCP for persistent/exploratory browser loops. Prefer Playwright CLI + Skills later for high-throughput coding-agent browser work."
+    },
+    {
+      "id": "skills.resolve.google",
+      "taskClasses": ["firebase", "firestore", "google_cloud", "iam", "cloud_security", "google_monitoring"],
+      "executor": "skill_resolver",
+      "source": "google-skills",
+      "mode": "read_only",
+      "status": "ready",
+      "skills": ["google-skills"],
+      "verification": {"required": true, "strategy": "verification-before-notify"},
+      "notes": "Load only the task-relevant Google skill rather than the full library."
+    },
+    {
+      "id": "bharosa.security-audit",
+      "taskClasses": ["bharosa", "qr_security", "privacy_audit", "idor_bola", "firestore_rules", "abuse_resistance"],
+      "executor": "playwright-mcp",
+      "source": "https://github.com/rntlgopinath57/microsoft-playwright-mcp",
+      "mode": "synthetic_only",
+      "status": "ready_for_sandbox",
+      "skills": ["google-skills", "bharosa-security-audit"],
+      "verification": {"required": true, "strategy": "browser.verify"},
+      "notes": "Never enumerate or expose live child/family data. Use synthetic profiles and fail closed."
+    },
+    {
+      "id": "github.repo-scout",
+      "taskClasses": ["github_discovery", "open_source_evaluation", "automation_research"],
+      "executor": "crawl4ai",
+      "source": "https://github.com/rntlgopinath57/crawl4ai",
+      "mode": "read_only",
+      "status": "ready_for_sandbox",
+      "skills": ["verification-before-notify"],
+      "verification": {"required": true, "strategy": "verification-before-notify"},
+      "notes": "Prefer official/trusted maintainers, active projects, clear licensing, and genuinely free/self-hostable options."
+    }
+  ]
+}
