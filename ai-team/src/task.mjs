@@ -1,3 +1,5 @@
+import { selectModelRoute } from "./router.mjs";
+
 const CLASSIFICATION_RULES = [
   {
     type: "automation",
@@ -91,11 +93,13 @@ export function normalizeTask(input) {
 
 export function executeTask(input) {
   const task = normalizeTask(input);
+  const route = selectModelRoute(task.type);
 
   return {
     status: "success",
     task: task.task,
     type: task.type,
+    route,
     result: "AI Team task received successfully",
   };
 }
