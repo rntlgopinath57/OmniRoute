@@ -20,6 +20,7 @@ jobs:
       CI: "true"
       OMNIROUTE_NO_UPDATE_NOTIFIER: "1"
       OMNIROUTE_BASE_URL: "http://127.0.0.1:20128"
+      OMNIROUTE_SERVER_HOST: "127.0.0.1"
 
     steps:
       - name: Checkout
@@ -36,8 +37,17 @@ jobs:
       - name: Start local OmniRoute gateway
         run: omniroute serve --no-open --daemon
 
-      - name: Verify gateway is reachable
-        run: curl --fail --silent --show-error --max-time 15 http://127.0.0.1:20128/v1/models > /tmp/omniroute-models.json
+      - name: Wait for local gateway
+        run: |
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error --max-time 5 \
+              http://127.0.0.1:20128/v1/models > /tmp/omniroute-models.json; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "OmniRoute did not become reachable within 90 seconds" >&2
+          exit 1
 
       - name: Run bounded read-only project job
         run: node ai-team/activation/read-only-smoke.mjs
