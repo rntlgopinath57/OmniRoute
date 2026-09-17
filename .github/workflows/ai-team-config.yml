@@ -5,7 +5,9 @@ on:
     paths:
       - "config/ai-team/**"
       - "skills/**"
+      - "scripts/ai-team/**"
       - "scripts/check/validate-ai-team-config.mjs"
+      - "scripts/check/ai-team-runtime-smoke.mjs"
       - ".github/workflows/ai-team-config.yml"
   push:
     branches:
@@ -13,7 +15,9 @@ on:
     paths:
       - "config/ai-team/**"
       - "skills/**"
+      - "scripts/ai-team/**"
       - "scripts/check/validate-ai-team-config.mjs"
+      - "scripts/check/ai-team-runtime-smoke.mjs"
       - ".github/workflows/ai-team-config.yml"
   workflow_dispatch:
 
@@ -31,3 +35,5 @@ jobs:
           node-version: "22.22.2"
       - name: Validate AI Team policy and capability registry
         run: node scripts/check/validate-ai-team-config.mjs
+      - name: Run AI Team deterministic routing smoke tests
+        run: node scripts/check/ai-team-runtime-smoke.mjs
