@@ -1,0 +1,43 @@
+name: AI Team Read-only Activation
+
+on:
+  push:
+    branches:
+      - "feature/ai-team-control-plane"
+    paths:
+      - "ai-team/activation/**"
+      - ".github/workflows/ai-team-activation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  activate-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      OMNIROUTE_NO_UPDATE_NOTIFIER: "1"
+      OMNIROUTE_BASE_URL: "http://127.0.0.1:20128"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+
+      - name: Install OmniRoute release
+        run: npm install --global omniroute@3.8.51
+
+      - name: Start local OmniRoute gateway
+        run: omniroute serve --no-open --daemon --ready-timeout 120000
+
+      - name: Verify gateway is reachable
+        run: curl --fail --silent --show-error --max-time 15 http://127.0.0.1:20128/v1/models > /tmp/omniroute-models.json
+
+      - name: Run bounded read-only project job
+        run: node ai-team/activation/read-only-smoke.mjs
