@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "feature/ai-team-control-plane"
+      - "release/v3.8.51"
     paths:
       - "ai-team/activation/**"
       - ".github/workflows/ai-team-activation.yml"
