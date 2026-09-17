@@ -1,15 +1,13 @@
 name: AI Team Bharosa Controlled Test
 
 on:
-  push:
-    branches:
-      - "release/v3.8.51"
-    paths:
-      - "ai-team/src/automation-catalog.mjs"
-      - "ai-team/src/automation-runner.mjs"
-      - "ai-team/automation/run.mjs"
-      - ".github/workflows/ai-team-bharosa-controlled.yml"
   workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Bharosa branch or commit to audit
+        required: true
+        default: main
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +16,17 @@ jobs:
   bharosa-readonly-baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      BHAROSA_READ_TOKEN: ${{ secrets.BHAROSA_READ_TOKEN }}
     steps:
+      - name: Require private-repository read credential
+        shell: bash
+        run: |
+          if [ -z "$BHAROSA_READ_TOKEN" ]; then
+            echo "BHAROSA_READ_TOKEN is required because safeqr is a private repository."
+            exit 1
+          fi
+
       - name: Checkout AI Team control plane
         uses: actions/checkout@v4
         with:
@@ -28,8 +36,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rntlgopinath57/safeqr
-          ref: main
+          ref: ${{ inputs.target_ref }}
           path: target-project
+          token: ${{ secrets.BHAROSA_READ_TOKEN }}
           persist-credentials: false
 
       - name: Setup Node
@@ -40,5 +49,5 @@ jobs:
       - name: Run controlled Bharosa project audit
         env:
           AI_TEAM_TARGET_ROOT: target-project
-          AI_TEAM_TARGET_BRANCH: main
+          AI_TEAM_TARGET_BRANCH: ${{ inputs.target_ref }}
         run: node ai-team/automation/run.mjs bharosa-readonly-baseline
