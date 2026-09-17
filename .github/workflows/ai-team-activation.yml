@@ -34,7 +34,7 @@ jobs:
         run: npm install --global omniroute@3.8.50
 
       - name: Start local OmniRoute gateway
-        run: omniroute serve --no-open --daemon --ready-timeout 120000
+        run: omniroute serve --no-open --daemon
 
       - name: Verify gateway is reachable
         run: curl --fail --silent --show-error --max-time 15 http://127.0.0.1:20128/v1/models > /tmp/omniroute-models.json
