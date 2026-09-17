@@ -7,7 +7,7 @@ import { runProjectJob } from "../src/project-jobs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const REPOSITORY = process.env.GITHUB_REPOSITORY || "rntlgopinath57/OmniRoute";
-const BRANCH = process.env.GITHUB_REF_NAME || "feature/ai-team-control-plane";
+const BRANCH = process.env.GITHUB_REF_NAME || "release/v3.8.51";
 const LIVE_INFERENCE = process.env.AI_TEAM_LIVE_INFERENCE === "true";
 
 const MODELS = Object.freeze({
@@ -34,7 +34,8 @@ function resolveRepositoryPath(path) {
 }
 
 function inspectBuildOrder(text) {
-  const numberedSteps = [...text.matchAll(/^\s*(\d+)\.\s+(.+)$/gm)];
+  const section = text.match(/## Build order\s*\n([\s\S]*?)(?=\n##\s|$)/i)?.[1] ?? "";
+  const numberedSteps = [...section.matchAll(/^\s*(\d+)\.\s+(.+)$/gm)];
   const sequential = numberedSteps.every((match, index) => Number(match[1]) === index + 1);
   const step10 = numberedSteps[9]?.[2]?.trim().replace(/\.$/, "") ?? "";
 
