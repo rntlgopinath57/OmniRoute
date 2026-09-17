@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "defaults": {
+    "requireVerification": true,
+    "preferFreeSelfHosted": true,
+    "allowPaidFallback": false,
+    "browserMode": "cli-first",
+    "researchMode": "crawl4ai-first"
+  },
+  "routes": [
+    {
+      "id": "bharosa-security",
+      "match": ["bharosa", "firestore", "qr", "privacy", "security", "admin", "auth"],
+      "skills": ["google-skills"],
+      "tools": ["playwright-cli", "playwright-mcp"],
+      "verification": ["browser-flow", "auth-boundary", "privacy-regression"],
+      "risk": "high",
+      "humanApprovalBeforeMutation": true
+    },
+    {
+      "id": "web-research",
+      "match": ["research", "scan", "discover", "repo", "fabric", "instagram", "youtube", "website"],
+      "skills": ["google-skills", "anthropic-skills", "openai-plugins"],
+      "tools": ["crawl4ai", "playwright-cli"],
+      "verification": ["source-cross-check", "freshness-check"],
+      "risk": "medium"
+    },
+    {
+      "id": "coding",
+      "match": ["code", "fix", "refactor", "build", "feature", "test"],
+      "skills": ["anthropic-skills", "openai-plugins"],
+      "tools": ["playwright-cli"],
+      "verification": ["tests", "lint", "targeted-smoke"],
+      "risk": "medium"
+    },
+    {
+      "id": "multi-agent",
+      "match": ["agent", "workflow", "delegate", "orchestrate", "parallel", "retry"],
+      "skills": ["google-skills", "anthropic-skills", "openai-plugins"],
+      "tools": ["google-adk"],
+      "verification": ["workflow-eval", "retry-path", "failure-path"],
+      "risk": "medium"
+    },
+    {
+      "id": "monitoring-alerts",
+      "match": ["alert", "monitor", "schedule", "telegram", "github actions", "health"],
+      "skills": ["google-skills", "openai-plugins"],
+      "tools": ["crawl4ai", "playwright-cli"],
+      "verification": ["dry-run", "delivery-check", "failure-notification-check"],
+      "risk": "medium"
+    }
+  ]
+}
