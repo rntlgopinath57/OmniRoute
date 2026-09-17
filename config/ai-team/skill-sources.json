@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "google-skills",
+      "type": "agent-skills",
+      "repo": "https://github.com/rntlgopinath57/Google-skills",
+      "upstream": "https://github.com/google/skills",
+      "trust": "official-fork",
+      "useFor": ["firebase", "firestore", "google-cloud", "security", "iam", "monitoring", "agent-architecture"]
+    },
+    {
+      "id": "anthropic-skills",
+      "type": "agent-skills",
+      "repo": "https://github.com/rntlgopinath57/anthropic-skills",
+      "upstream": "https://github.com/anthropics/skills",
+      "trust": "official-fork",
+      "useFor": ["coding", "documents", "workflows", "skill-authoring", "claude-code"]
+    },
+    {
+      "id": "openai-plugins",
+      "type": "plugins-and-skills",
+      "repo": "https://github.com/rntlgopinath57/openai-plugins",
+      "upstream": "https://github.com/openai/plugins",
+      "trust": "official-fork",
+      "useFor": ["coding", "verification", "github", "ci", "agent-workflows"]
+    },
+    {
+      "id": "google-adk",
+      "type": "agent-orchestration",
+      "repo": "https://github.com/rntlgopinath57/google-adk-python",
+      "upstream": "https://github.com/google/adk-python",
+      "trust": "official-fork",
+      "useFor": ["multi-agent", "workflow-graphs", "retry", "state", "delegation", "human-approval"]
+    },
+    {
+      "id": "crawl4ai",
+      "type": "research-tool",
+      "repo": "https://github.com/rntlgopinath57/crawl4ai",
+      "upstream": "https://github.com/unclecode/crawl4ai",
+      "trust": "curated-community",
+      "useFor": ["web-research", "deep-crawl", "structured-extraction", "repo-scout", "fabric-watch"]
+    },
+    {
+      "id": "playwright-mcp",
+      "type": "browser-tool",
+      "repo": "https://github.com/rntlgopinath57/microsoft-playwright-mcp",
+      "upstream": "https://github.com/microsoft/playwright-mcp",
+      "trust": "official-fork",
+      "useFor": ["browser-verification", "exploratory-testing", "persistent-browser-state", "self-healing-tests"]
+    },
+    {
+      "id": "playwright-cli",
+      "type": "browser-tool",
+      "repo": "https://github.com/microsoft/playwright-cli",
+      "trust": "official-upstream",
+      "useFor": ["coding-agent-browser-tests", "token-efficient-browser-automation", "ci-verification"]
+    }
+  ]
+}
