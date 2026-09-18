@@ -30,7 +30,8 @@ const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),threa
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
-let lastSuccessfulModel='', lastSuccessfulTaskType='';
+let lastSuccessfulModel='', lastSuccessfulTaskType='', lastPresentation='default';
+let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
 
 function classify(t){
   const s=t.toLowerCase();
@@ -150,6 +151,78 @@ function clearWelcome(){
   const welcome=thread.querySelector('.threadWelcome');
   if(welcome)welcome.remove();
 }
+
+function cleanPresentationLine(value=''){
+  return String(value)
+    .replace(/^\s*#{1,6}\s*/,'')
+    .replace(/^\s*[-*•]\s+/,'')
+    .replace(/^\s*\d+[.)]\s+/,'')
+    .replace(/\*\*/g,'')
+    .replace(/\`/g,'')
+    .trim();
+}
+function appendStructuredText(container,text=''){
+  const lines=String(text).replace(/^\s*\`\`\`[a-z0-9_-]*\s*$/gmi,'').replace(/^\s*\`\`\`\s*$/gmi,'').split(/\r?\n/);
+  let list=null;
+  const closeList=()=>{list=null;};
+  for(const rawLine of lines){
+    const line=String(rawLine||'');
+    if(!line.trim()){closeList();continue}
+    const heading=line.match(/^\s*(#{1,4})\s+(.+)$/);
+    if(heading){
+      closeList();
+      const h=document.createElement(heading[1].length<=1?'h2':'h3');
+      h.textContent=cleanPresentationLine(heading[2]);
+      container.appendChild(h);
+      continue;
+    }
+    const bullet=line.match(/^\s*[-*•]\s+(.+)$/);
+    if(bullet){
+      if(!list||list.tagName!=='UL'){list=document.createElement('ul');container.appendChild(list)}
+      const li=document.createElement('li');li.textContent=cleanPresentationLine(bullet[1]);list.appendChild(li);continue;
+    }
+    const numbered=line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if(numbered){
+      if(!list||list.tagName!=='OL'){list=document.createElement('ol');container.appendChild(list)}
+      const li=document.createElement('li');li.textContent=cleanPresentationLine(numbered[1]);list.appendChild(li);continue;
+    }
+    closeList();
+    const p=document.createElement('p');p.textContent=cleanPresentationLine(line);container.appendChild(p);
+  }
+}
+function renderHandwrittenPages(body,text=''){
+  const rawText=String(text).trim();
+  let parts=rawText.split(/(?=^(?:#{1,6}\s*)?(?:\*\*)?\s*WEEK\s+\d+\b)/gmi).map(x=>x.trim()).filter(Boolean);
+  if(parts.length<2)parts=[rawText];
+  const wrap=document.createElement('div');wrap.className='handwrittenPages';
+  parts.forEach((part,index)=>{
+    const page=document.createElement('section');page.className='notePage';
+    const clip=document.createElement('div');clip.className='paperClip';
+    const num=document.createElement('div');num.className='notePageNo';num.textContent=String(index+1).padStart(2,'0');
+    const ink=document.createElement('div');ink.className='noteInk';
+    appendStructuredText(ink,part);
+    page.append(clip,num,ink);wrap.appendChild(page);
+  });
+  body.appendChild(wrap);
+}
+function applyPresentation(row,text,presentation){
+  if(!row)return;
+  const p=presentation&&presentation.format?presentation:{format:'default',label:'STANDARD',visual:false};
+  const body=row.querySelector('.messageText');
+  const bubble=row.querySelector('.messageBubble');
+  if(!body||!bubble)return;
+  if(p.format==='default'){body.textContent=text;return}
+  row.classList.add('presentationResult');
+  bubble.classList.add('presentationBubble','fmt-'+p.format);
+  body.classList.add('presentationBody');
+  body.textContent='';
+  const oldTag=bubble.querySelector('.presentationTag');if(oldTag)oldTag.remove();
+  const tag=document.createElement('div');tag.className='presentationTag';tag.textContent='FORMAT · '+String(p.label||p.format).toUpperCase();
+  bubble.insertBefore(tag,body);
+  if(p.format==='handwritten')renderHandwrittenPages(body,text);
+  else appendStructuredText(body,text);
+}
+
 function appendMessage(role,text,meta=''){
   clearWelcome();
   const row=document.createElement('div');
@@ -192,12 +265,15 @@ function startPending(text='Understanding your request…'){
 function updatePending(text){
   if(!pendingMessage)return;
   const el=pendingMessage.querySelector('.messageText');
-  if(el)el.textContent=text;
+  if(el&&(!presentation||presentation.format==='default'))el.textContent=text;
+  applyPresentation(pendingMessage,text,presentation);
   scrollThread();
 }
-function resolvePending(text,meta){
+function resolvePending(text,meta,presentation=currentPresentation){
   if(!pendingMessage){
     pendingMessage=appendMessage('assistant',text,meta);
+    applyPresentation(pendingMessage,text,presentation);
+    pendingMessage=null;
     return;
   }
   pendingMessage.classList.remove('pending','failed');
@@ -241,6 +317,7 @@ function openAnswer(ok=true){
 }
 function resetForRun(question,isRetry=false){
   currentQuestion=question;
+  currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
   completed=new Set(); lastTool=''; active=new Set(['you']); activeEdges.clear();
   if(!chatStarted){
@@ -273,6 +350,22 @@ async function handleEvent(evt){
   if(evt.type==='planner'){
     completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
   }
+
+  if(evt.type==='presentation'){
+    currentPresentation=evt.presentation||currentPresentation;
+    const label=String(currentPresentation.label||currentPresentation.format||'STANDARD').toUpperCase();
+    setState('FORMAT · '+label,'busy');
+    $('badge').textContent='FORMAT · '+label;
+    updatePending('Preparing '+label.toLowerCase()+' presentation…');
+    if(currentPresentation.visual){
+      lastWorker='designer';
+      selected=new Set(['designer']);
+      active=new Set(['designer']);
+      activeEdges=new Set(['router:designer']);
+      render(); kickNode('designer');
+    }
+    return;
+  }
   if(evt.type==='worker'){
     completed.add('planner');
     setStage('route'); setState('ROUTER · SELECTING','busy');
@@ -280,7 +373,8 @@ async function handleEvent(evt){
     completed.add('router');
     setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
-    lastWorker=roleForTask(evt.taskType);
+    currentPresentation=evt.presentation||currentPresentation;
+    lastWorker=currentPresentation&&currentPresentation.visual?'designer':roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
@@ -345,13 +439,17 @@ async function handleEvent(evt){
     clearFailedAttempt(currentQuestion);
     lastSuccessfulModel=String(evt.model||'');
     lastSuccessfulTaskType=String(evt.taskType||'');
+    currentPresentation=evt.presentation||currentPresentation;
+    lastPresentation=String((currentPresentation&&currentPresentation.format)||'default');
     answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); activeEdges=new Set(evt.review==='PASS'?['reviewer:you']:[]); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
-    $('badge').textContent='VALIDATED';
-    $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
+    const presentationLabel=currentPresentation&&currentPresentation.format&&currentPresentation.format!=='default' ? String(currentPresentation.label||currentPresentation.format).toUpperCase() : '';
+    $('badge').textContent=presentationLabel||'VALIDATED';
+    $('meta').textContent=String(evt.taskType||'general').toUpperCase()+' · '+friendlyModel(evt.model||'')+(presentationLabel?' · '+presentationLabel:'');
     resolvePending(
       evt.answer||'No answer returned.',
-      `${friendlyModel(evt.model||'AI model')} · ${evt.review==='PASS'?'independent review passed':evt.review==='FAST_PATH'?'fast path · reviewer skipped':'review timeout · answer returned'}`
+      friendlyModel(evt.model||'AI model')+' · '+(evt.review==='PASS'?'independent review passed':evt.review==='FAST_PATH'?'fast path · reviewer skipped':'review timeout · answer returned'),
+      currentPresentation
     );
     if(currentQuestion && evt.answer){
       conversation.push({role:'user',content:currentQuestion},{role:'assistant',content:evt.answer});
@@ -426,7 +524,8 @@ async function ask(questionOverride='',isRetry=false){
           question,
           history:conversation.slice(-6),
           preferredModel:lastSuccessfulModel,
-          previousTaskType:lastSuccessfulTaskType
+          previousTaskType:lastSuccessfulTaskType,
+          previousPresentation:lastPresentation
         }),
         signal:requestController.signal
       });
