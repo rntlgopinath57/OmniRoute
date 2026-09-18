@@ -94,7 +94,7 @@ async function callModel(
       throw new Error(
         response.status >= 500 || response.status === 429
           ? "The AI service is temporarily busy. Please retry."
-          : "The selected AI model rejected the request. OmniRoute will need a routing adjustment."
+          : "The selected AI model rejected the request. Relay will need a routing adjustment."
       );
     } catch (error) {
       if (error instanceof Error && !/^The AI service|^The selected AI model/.test(error.message)) {
@@ -104,7 +104,7 @@ async function callModel(
           await sleep(350 * attempt);
           continue;
         }
-        throw new Error("The selected AI provider did not respond in time. OmniRoute will switch providers on retry.");
+        throw new Error("The selected AI provider did not respond in time. Relay will switch providers on retry.");
       }
       throw error;
     }
@@ -113,7 +113,7 @@ async function callModel(
   if (!response || !response.ok) {
     throw new Error(
       lastNetworkError
-        ? "The selected AI provider did not respond in time. OmniRoute will switch providers on retry."
+        ? "The selected AI provider did not respond in time. Relay will switch providers on retry."
         : "The AI service is temporarily busy. Please retry."
     );
   }
@@ -177,30 +177,34 @@ export default async (request: Request) => {
 
         let answer = "";
         try {
-          if (actualWorkerModel === "gpt-5.6-luna") {
-            answer = await callModel(actualWorkerModel, workerMessages, 1500, 9000);
-          } else {
-            const primaryModel = actualWorkerModel;
-            const backupModel = "gpt-5.6-luna";
+          const primaryModel = actualWorkerModel;
+          const pool = Array.from(new Set([
+            primaryModel,
+            "gpt-5.6-luna",
+            "qwen/qwen3.5-397b-a17b",
+            "deepseek/deepseek-v4-flash",
+          ]));
 
-            const primary = callModel(primaryModel, workerMessages, 1600, 9500)
-              .then((value) => ({ answer: value, model: primaryModel }));
+          const attempts = pool.map((model, index) => (async () => {
+            if (index > 0) {
+              await sleep(index === 1 ? 2200 : index === 2 ? 3800 : 5200);
+              emit({ type: "hedge", model });
+            }
+            const value = await callModel(
+              model,
+              workerMessages,
+              model.startsWith("gpt-") ? 1400 : 1200,
+              model === primaryModel ? 10000 : 8500,
+            );
+            return { answer: value, model };
+          })());
 
-            const backup = (async () => {
-              await sleep(3500);
-              emit({ type: "hedge", model: backupModel });
-              const value = await callModel(backupModel, workerMessages, 1400, 8000);
-              return { answer: value, model: backupModel };
-            })();
-
-            const winner = await Promise.any([primary, backup]);
-            answer = winner.answer;
-            actualWorkerModel = winner.model;
-          }
+          const winner = await Promise.any(attempts);
+          answer = winner.answer;
+          actualWorkerModel = winner.model;
+          emit({ type: "worker_selected", model: actualWorkerModel });
         } catch (workerError) {
-          actualWorkerModel = "gpt-5.6-luna";
-          emit({ type: "fallback", model: actualWorkerModel });
-          answer = await callModel(actualWorkerModel, workerMessages, 1400, 8000);
+          throw new Error("Relay could not get a response from any available AI provider. Please retry in a moment.");
         }
 
         const actualReviewerModel = reviewerFor(actualWorkerModel);
