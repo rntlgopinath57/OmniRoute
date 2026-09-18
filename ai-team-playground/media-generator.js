@@ -20,6 +20,13 @@ const downloadEl=$('mediaDownload');
 let mode='image';
 let currentObjectUrl='';
 
+function mountPanelAtRoot(element){
+  if(element && element.parentElement!==document.body){
+    document.body.appendChild(element);
+  }
+}
+mountPanelAtRoot(panel);
+
 function sessionKey(){
   return sessionStorage.getItem('relay_gemini_key')||'';
 }
@@ -29,17 +36,23 @@ function rememberKey(){
   else sessionStorage.removeItem('relay_gemini_key');
 }
 function openPanel(nextMode='image',prompt=''){
+  mountPanelAtRoot(panel);
   setMode(nextMode);
   if(prompt)promptEl.value=prompt;
   const key=sessionKey();
   if(key&&!apiKeyEl.value)apiKeyEl.value=key;
   panel.classList.add('open');
   panel.setAttribute('aria-hidden','false');
-  setTimeout(()=>promptEl.focus(),80);
+  document.body.classList.add('toolModalOpen');
+  panel.scrollTop=0;
+  const card=panel.querySelector('.mediaGeneratorCard');
+  if(card)card.scrollTop=0;
+  setTimeout(()=>promptEl.focus({preventScroll:true}),80);
 }
 function closePanel(){
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden','true');
+  document.body.classList.remove('toolModalOpen');
 }
 function setMode(next){
   mode=next==='video'?'video':'image';
