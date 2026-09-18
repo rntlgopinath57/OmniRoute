@@ -18,7 +18,7 @@ function workerFor(taskType: string, question: string) {
 
   if ((taskType === "coding" || taskType === "automation") && heavy) return "gpt-5.6-sol";
   if (taskType === "coding" || taskType === "automation") return "gpt-5.6-luna";
-  if (taskType === "research" || taskType === "design" || taskType === "reasoning") return "gemini-3.5-flash";
+  if (taskType === "research" || taskType === "design" || taskType === "reasoning") return "gemini-3.5-flash-lite";
   return "gpt-5.6-luna";
 }
 
@@ -674,6 +674,7 @@ export default async (request: Request) => {
         const candidates = longForm
           ? Array.from(new Set([
               primaryModel,
+              "gemini-3.5-flash-lite",
               "gemini-3.5-flash",
               "claude-haiku-4-5",
               "deepseek/deepseek-v4-flash",
