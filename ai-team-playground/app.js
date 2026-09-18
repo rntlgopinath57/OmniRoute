@@ -62,7 +62,7 @@ function draw(){
   for(const [id,p] of Object.entries(POS)){
     const n=document.createElement('div'); n.id=`n-${id}`; n.className=`node ${id==='you'?'you ':''}`;
     n.style.left=`${p[0]}%`; n.style.top=`${p[1]}%`;
-    n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="core"><span>${id==='you'?'◉':id==='reviewer'?'✓':'✦'}</span></div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
+    n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core"><span>${id==='you'?'◉':id==='reviewer'?'✓':'✦'}</span></div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
     nodes.appendChild(n);
   }
   render();
@@ -87,20 +87,23 @@ function render(){
     n.classList.toggle('active',active.has(id));
     n.classList.toggle('answered',answered&&id==='you');
     n.classList.toggle('listening',listening&&id==='you');
+    n.classList.toggle('energized',busy&&selected.has(id));
     if(FAMILY.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id));
   }
   go.disabled=busy||!q.value.trim();
   mic.classList.toggle('listening',listening);
 }
-function star(a,b){
-  const A=POS[a],B=POS[b],d=document.createElement('div'); d.className='star';
-  d.style.setProperty('--x1',`${A[0]}%`); d.style.setProperty('--y1',`${A[1]}%`);
-  d.style.setProperty('--x2',`${B[0]}%`); d.style.setProperty('--y2',`${B[1]}%`);
-  d.innerHTML='<span></span>'; stars.appendChild(d); setTimeout(()=>d.remove(),900);
+function kickNode(id){
+  const n=$(`n-${id}`);
+  if(!n)return;
+  n.classList.remove('kick');
+  void n.offsetWidth;
+  n.classList.add('kick');
+  setTimeout(()=>n.classList.remove('kick'),520);
 }
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function travel(a,b,ms=300){
-  active=new Set([b]); activeEdges=new Set([`${a}:${b}`]); star(a,b); render(); await wait(ms);
+  active=new Set([b]); activeEdges=new Set([`${a}:${b}`]); render(); kickNode(b); await wait(ms);
 }
 function openAnswer(ok=true){
   answer.classList.add('open'); workspace.classList.add('open');
@@ -128,21 +131,21 @@ async function handleEvent(evt){
   }
   if(evt.type==='worker'){
     setStage('route'); setState('ROUTING','busy');
-    active=new Set(['router']); activeEdges=new Set(['planner:router']); star('planner','router'); render(); await wait(280);
+    active=new Set(['router']); activeEdges=new Set(['planner:router']); render(); kickNode('router'); await wait(280);
     setStage('solve'); setState('SOLVING','busy');
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
-    active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); star('router',lastWorker); render(); return;
+    active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
   }
   if(evt.type==='reviewer'){
     setStage('verify'); setState('VERIFYING','busy');
-    active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); star(lastWorker,'reviewer'); render(); return;
+    active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
   if(evt.type==='retry'){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; return;
   }
   if(evt.type==='done'){
-    answered=true; busy=false; setStage('verify'); star('reviewer','you'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render();
+    answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you');
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
