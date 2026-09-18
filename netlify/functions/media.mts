@@ -1,8 +1,10 @@
+import { envGet } from "../../relay-runtime/env.mts";
+
 const googleBase = "https://generativelanguage.googleapis.com";
 
 function getKey(body: any) {
   const provided = typeof body?.apiKey === "string" ? body.apiKey.trim() : "";
-  return provided || Netlify.env.get("GEMINI_API_KEY") || "";
+  return provided || envGet("GEMINI_API_KEY") || "";
 }
 
 async function googleJson(url: string, key: string, init?: RequestInit) {
@@ -42,7 +44,7 @@ export default async (request: Request) => {
   if (action === "capabilities") {
     return Response.json({
       ok: true,
-      serverGeminiConfigured: Boolean(Netlify.env.get("GEMINI_API_KEY")),
+      serverGeminiConfigured: Boolean(envGet("GEMINI_API_KEY")),
       imageGeneration: true,
       videoGeneration: true,
       imageModel: "gemini-3.1-flash-image",
