@@ -1,6 +1,6 @@
 function classify(text: string) {
   const q = text.toLowerCase();
-  if (/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
+  if (/\b(code|coding|coder|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
   if (/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(q)) return "automation";
   if (/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market)\b/.test(q)) return "research";
   if (/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(q)) return "design";
@@ -22,7 +22,12 @@ function reviewerFor(worker: string) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function callModel(model: string, messages: Array<{ role: string; content: string }>, maxTokens = 1700) {
+async function callModel(
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+  maxTokens = 1700,
+  timeoutMs = 12000,
+) {
   const baseUrl = Netlify.env.get("OPENAI_BASE_URL");
   const apiKey = Netlify.env.get("OPENAI_API_KEY");
 
@@ -45,7 +50,7 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   for (let attempt = 1; attempt <= 1; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         response = await fetch(url, {
           method: "POST",
@@ -167,6 +172,7 @@ export default async (request: Request) => {
         emit({ type: "reviewer", model: actualReviewerModel });
 
         let review = "";
+        let reviewStatus: "PASS" | "FAIL" | "SKIPPED" = "SKIPPED";
         try {
           review = await callModel(
             actualReviewerModel,
@@ -179,46 +185,50 @@ export default async (request: Request) => {
               ...history,
               { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
             ],
-            260,
+            220,
+            4500,
           );
-        } catch {
-          const fallbackReviewer = actualReviewerModel === "gpt-5.6-luna"
-            ? "deepseek/deepseek-v4-flash"
-            : "gpt-5.6-luna";
-          emit({ type: "reviewer", model: fallbackReviewer });
-          review = await callModel(
-            fallbackReviewer,
-            [
-              {
-                role: "system",
-                content:
-                  "You are an independent reviewer. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
-              },
-              ...history,
-              { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
-            ],
-            260,
-          );
+          reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")
+            ? "PASS"
+            : "FAIL";
+        } catch (reviewError) {
+          console.warn("Reviewer unavailable; returning worker answer", {
+            model: actualReviewerModel,
+            error: reviewError instanceof Error ? reviewError.message : String(reviewError),
+          });
+          emit({ type: "review_skipped", reason: "timeout_or_provider_error" });
+          reviewStatus = "SKIPPED";
         }
 
-        if (!review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")) {
+        if (reviewStatus === "FAIL") {
           emit({ type: "retry" });
-          answer = await callModel(actualWorkerModel, [
-            {
-              role: "system",
-              content:
-                "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful.",
-            },
-            ...history,
-            { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
-          ]);
-          emit({ type: "reviewer", model: actualReviewerModel });
+          try {
+            answer = await callModel(
+              actualWorkerModel,
+              [
+                {
+                  role: "system",
+                  content:
+                    "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful.",
+                },
+                ...history,
+                { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
+              ],
+              1200,
+              8000,
+            );
+          } catch (retryError) {
+            console.warn("Refinement unavailable; returning first worker answer", {
+              error: retryError instanceof Error ? retryError.message : String(retryError),
+            });
+            reviewStatus = "SKIPPED";
+          }
         }
 
         emit({
           type: "done",
           answer,
-          review: "PASS",
+          review: reviewStatus,
           model: actualWorkerModel,
           reviewer: actualReviewerModel,
           taskType,
