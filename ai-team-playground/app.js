@@ -307,6 +307,12 @@ function isVideoEditIntent(text=''){
   const s=text.toLowerCase();
   return /\b(video|clip|footage)\b/.test(s) && /\b(edit|trim|cut|crop|resize|reframe|mute|remove audio|aspect|convert)\b/.test(s);
 }
+function mediaIntentType(text=''){
+  const s=text.toLowerCase();
+  if(/\b(generate|create|make|render)\b/.test(s) && /\b(video|clip|animation|reel)\b/.test(s))return 'video';
+  if(/\b(generate|create|make|draw|render)\b/.test(s) && /\b(image|picture|photo|poster|art|logo)\b/.test(s))return 'image';
+  return '';
+}
 function openVideoEditorForPrompt(question){
   if(!window.RelayVideoEditor?.openFromPrompt)return false;
   if(!chatStarted){chatStarted=true;openAnswer(true)}
@@ -326,6 +332,20 @@ async function ask(questionOverride='',isRetry=false){
   const question=(questionOverride||q.value).trim();
   if(!question||busy)return;
   if(!isRetry&&isVideoEditIntent(question)&&openVideoEditorForPrompt(question))return;
+  const mediaType=!isRetry?mediaIntentType(question):'';
+  if(mediaType&&window.RelayMediaGenerator?.openFromPrompt){
+    if(!chatStarted){chatStarted=true;openAnswer(true)}
+    appendMessage('user',question);
+    appendMessage('assistant',`${mediaType==='video'?'Video':'Image'} generator ready. Review the prompt, then press Generate.`);
+    $('badge').textContent='MEDIA TOOL';
+    $('meta').textContent=mediaType==='video'?'VEO 3.1':'NANO BANANA 2';
+    setState(mediaType==='video'?'VIDEO GENERATOR':'IMAGE GENERATOR','done');
+    q.value=''; resizeInput();
+    followQ.value=''; resizeFollow();
+    window.RelayMediaGenerator.openFromPrompt(mediaType,question);
+    render();
+    return;
+  }
   q.value=question;
   resizeInput();
   if(listening&&recognition){try{recognition.stop()}catch{}}
