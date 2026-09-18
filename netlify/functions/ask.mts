@@ -388,7 +388,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = envGet("OPENAI_BASE_URL");
+  const baseUrl = envGet("OPENAI_BASE_URL") || "https://api.openai.com";
   const apiKey = envGet("OPENAI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenAI gateway is unavailable.");
 
@@ -418,7 +418,7 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
 }
 
 async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = envGet("ANTHROPIC_BASE_URL");
+  const baseUrl = envGet("ANTHROPIC_BASE_URL") || "https://api.anthropic.com";
   const apiKey = envGet("ANTHROPIC_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Anthropic gateway is unavailable.");
 
@@ -458,7 +458,7 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
 }
 
 async function callGemini(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL");
+  const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com";
   const apiKey = envGet("GEMINI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Gemini gateway is unavailable.");
 
@@ -498,7 +498,7 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
 }
 
 async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = envGet("OPENROUTER_BASE_URL");
+  const baseUrl = envGet("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1";
   const apiKey = envGet("OPENROUTER_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenRouter gateway is unavailable.");
 
