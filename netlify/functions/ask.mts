@@ -1,3 +1,5 @@
+import { envGet } from "../../relay-runtime/env.mts";
+
 function classify(text: string) {
   const q = text.toLowerCase();
   if (/\b(code|coding|coder|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
@@ -114,7 +116,7 @@ async function githubRepoContext(text: string) {
   const repos = mentionedRepos(text);
   if (!repos.length) return { context: "", repos: [], inaccessible: [] as string[] };
 
-  const token = Netlify.env.get("RELAY_GITHUB_TOKEN") || Netlify.env.get("GITHUB_TOKEN") || "";
+  const token = envGet("RELAY_GITHUB_TOKEN") || envGet("GITHUB_TOKEN") || "";
   const headers: Record<string, string> = {
     "Accept": "application/vnd.github+json",
     "User-Agent": "relay-ai-team",
@@ -386,8 +388,8 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
 }
 
 async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("OPENAI_BASE_URL");
-  const apiKey = Netlify.env.get("OPENAI_API_KEY");
+  const baseUrl = envGet("OPENAI_BASE_URL");
+  const apiKey = envGet("OPENAI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenAI gateway is unavailable.");
 
   const response = await fetchWithTimeout(
@@ -416,8 +418,8 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
 }
 
 async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("ANTHROPIC_BASE_URL");
-  const apiKey = Netlify.env.get("ANTHROPIC_API_KEY");
+  const baseUrl = envGet("ANTHROPIC_BASE_URL");
+  const apiKey = envGet("ANTHROPIC_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Anthropic gateway is unavailable.");
 
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
@@ -456,8 +458,8 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
 }
 
 async function callGemini(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("GOOGLE_GEMINI_BASE_URL");
-  const apiKey = Netlify.env.get("GEMINI_API_KEY");
+  const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL");
+  const apiKey = envGet("GEMINI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Gemini gateway is unavailable.");
 
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
@@ -496,8 +498,8 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
 }
 
 async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("OPENROUTER_BASE_URL");
-  const apiKey = Netlify.env.get("OPENROUTER_API_KEY");
+  const baseUrl = envGet("OPENROUTER_BASE_URL");
+  const apiKey = envGet("OPENROUTER_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenRouter gateway is unavailable.");
 
   const response = await fetchWithTimeout(
