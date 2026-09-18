@@ -1,32 +1,35 @@
 const POS={
-  you:[8,78],planner:[8,57],router:[9,36],
-  qwen:[20,18],openai:[32,10],gemini:[45,16],claude:[58,9],
-  deepseek:[70,16],grok:[82,12],mistral:[92,30],kimi:[32,4],perplexity:[68,4],
-  reviewer:[92,72]
+  you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
+  researcher:[50,45],analyst:[79,43],coder:[28,64],builder:[57,64],designer:[82,63],
+  reviewer:[70,82]
 };
 const INFO={
-  you:['YOU','Command center'],planner:['PLANNER','Understands intent'],router:['ROUTER','Selects specialist'],
-  qwen:['QWEN','Code + reasoning'],openai:['OPENAI','General + coding'],gemini:['GEMINI','Research + design'],
-  claude:['CLAUDE','Review + reasoning'],deepseek:['DEEPSEEK','Reasoning + code'],grok:['GROK','Critic'],
-  mistral:['MISTRAL','Fast generalist'],kimi:['KIMI','Long context'],perplexity:['PERPLEXITY','Research'],
+  you:['YOU','Command center'],
+  planner:['PLANNER','Understands intent'],
+  router:['ROUTER','Selects route'],
+  github:['GITHUB','Repository tool'],
+  researcher:['RESEARCHER','Research specialist'],
+  analyst:['ANALYST','Reasoning specialist'],
+  coder:['CODER','Code specialist'],
+  builder:['AUTOMATOR','Workflow specialist'],
+  designer:['DESIGNER','Visual specialist'],
   reviewer:['REVIEWER','Independent validation']
 };
-const FAMILY=['qwen','openai','gemini','claude','deepseek','grok','mistral','kimi','perplexity'];
+const SPECIALISTS=['researcher','analyst','coder','builder','designer'];
 const VISUAL_ROUTES={
-  coding:['openai','qwen','claude'],
-  research:['gemini','perplexity','claude'],
-  automation:['openai','deepseek','qwen'],
-  design:['gemini','claude','openai'],
-  reasoning:['deepseek','claude','openai'],
-  general:['openai','claude','gemini']
+  coding:['coder'],research:['researcher'],automation:['builder'],
+  design:['designer'],reasoning:['analyst'],general:['analyst']
 };
+function roleForTask(type='general'){
+  return ({coding:'coder',research:'researcher',automation:'builder',design:'designer',reasoning:'analyst',general:'analyst'})[type]||'analyst';
+}
 const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
 
-let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
-let lastWorker='openai', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
+let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set();
+let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 let lastSuccessfulModel='', lastSuccessfulTaskType='';
 
 function classify(t){
@@ -38,24 +41,12 @@ function classify(t){
   if(/\b(compare|comparison|versus|vs\.?|analyse|analyze|reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';
   return'general';
 }
-function nodeForModel(model=''){
-  const m=model.toLowerCase();
-  if(m.includes('gemini')||m.includes('google'))return'gemini';
-  if(m.includes('claude')||m.includes('anthropic'))return'claude';
-  if(m.includes('deepseek'))return'deepseek';
-  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
-  if(m.includes('grok')||m.includes('xai'))return'grok';
-  if(m.includes('mistral'))return'mistral';
-  if(m.includes('kimi')||m.includes('moonshot'))return'kimi';
-  if(m.includes('perplexity')||m.includes('sonar'))return'perplexity';
-  return'openai';
-}
 function friendlyModel(model=''){
   return model.replace(/^.*\//,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 }
 function draw(){
   edges.innerHTML=''; nodes.innerHTML='';
-  const links=[['you','planner'],['planner','router'],...FAMILY.map(x=>['router',x]),...FAMILY.map(x=>[x,'reviewer']),['reviewer','you']];
+  const links=[['you','planner'],['planner','router'],['router','github'],...SPECIALISTS.map(x=>['router',x]),...SPECIALISTS.map(x=>['github',x]),...SPECIALISTS.map(x=>[x,'reviewer']),['reviewer','you']];
   for(const [a,b] of links){
     const A=POS[a],B=POS[b],d=`M ${A[0]} ${A[1]} C ${A[0]} ${(A[1]+B[1])/2}, ${B[0]} ${(A[1]+B[1])/2}, ${B[0]} ${B[1]}`;
     const base=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -72,14 +63,28 @@ function draw(){
       ? '<span class="youMark">◉</span>'
       : id==='reviewer'
         ? '<span class="reviewMark">✓</span>'
-        : '<svg class="seismo" viewBox="0 0 42 20" aria-hidden="true"><polyline points="0,10 5,10 8,6 11,14 14,9 17,10 20,3 23,17 26,8 29,11 32,6 35,13 38,10 42,10"></polyline></svg>';
+        : id==='github'
+          ? '<span class="toolMark">⌘</span>'
+          : '<span class="agentMark">✦</span>';
     n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core">${mark}</div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
     nodes.appendChild(n);
   });
   render();
 }
+function updateRoleModel(role,model=''){
+  const n=$(`n-${role}`);
+  const small=n?.querySelector('small');
+  if(small&&model)small.textContent=friendlyModel(model);
+}
 function setStage(name){
   canvas.dataset.stage=name;
+  const order=['understand','route','tool','solve','verify','done'];
+  const current=order.indexOf(name);
+  document.querySelectorAll('#executionTrace [data-stage]').forEach(el=>{
+    const i=order.indexOf(el.dataset.stage);
+    el.classList.toggle('current',i===current);
+    el.classList.toggle('complete',current>=0&&i<current);
+  });
 }
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
@@ -89,6 +94,7 @@ function setState(text,kind=''){
   if(processText)processText.textContent=text;
   if(processRail)processRail.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
+  workspace.classList.toggle('working',kind==='busy'||kind==='listening');
 }
 function render(){
   document.querySelectorAll('.edge,.edgeFlow').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
@@ -99,7 +105,8 @@ function render(){
     n.classList.toggle('answered',answered&&id==='you');
     n.classList.toggle('listening',listening&&id==='you');
     n.classList.toggle('energized',busy&&selected.has(id));
-    if(FAMILY.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id));
+    n.classList.toggle('completed',completed.has(id));
+    if(SPECIALISTS.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id));
   }
   go.disabled=busy||!q.value.trim();
   followGo.disabled=busy||!followQ.value.trim();
@@ -235,7 +242,7 @@ function openAnswer(ok=true){
 function resetForRun(question,isRetry=false){
   currentQuestion=question;
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
-  active=new Set(['you']); activeEdges.clear();
+  completed=new Set(); lastTool=''; active=new Set(['you']); activeEdges.clear();
   if(!chatStarted){
     chatStarted=true;
     openAnswer(true);
@@ -264,20 +271,25 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
+    completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
   }
   if(evt.type==='worker'){
+    completed.add('planner');
     setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); activeEdges=new Set(['planner:router']); render(); kickNode('router'); await wait(280);
+    completed.add('router');
     setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
-    lastWorker=nodeForModel(evt.model);
-    selected.add(lastWorker);
+    lastWorker=roleForTask(evt.taskType);
+    selected=new Set([lastWorker]);
+    updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
   }
   if(evt.type==='tool'&&evt.tool==='github'){
     if(evt.status==='complete'){
       const repos=Array.isArray(evt.repos)?evt.repos:[];
+      lastTool='github'; completed.add('router'); setStage('tool');
+      active=new Set(['github']); activeEdges=new Set(['router:github']); render(); kickNode('github');
       setState('GITHUB · READING REPOS','busy');
       updatePending(`Reading GitHub repository evidence${repos.length?': '+repos.join(', '):'…'}`);
     }else{
@@ -292,30 +304,30 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='worker_selected'){
-    lastWorker=nodeForModel(evt.model);
-    selected.add(lastWorker);
+    if(lastTool)completed.add(lastTool);
+    updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]);
-    activeEdges=new Set([`router:${lastWorker}`]);
+    activeEdges=new Set([`${lastTool||'router'}:${lastWorker}`]);
+    setStage('solve');
     setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
-    updatePending(`${friendlyModel(evt.model)} responded first — preparing the answer…`);
+    updatePending(`${friendlyModel(evt.model)} responded — preparing the answer…`);
     render(); kickNode(lastWorker); return;
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
     updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
-    lastWorker=nodeForModel(evt.model);
-    selected.add(lastWorker);
+    updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]);
-    activeEdges=new Set([`router:${lastWorker}`]);
+    activeEdges=new Set([`${lastTool||'router'}:${lastWorker}`]);
     render(); kickNode(lastWorker); return;
   }
   if(evt.type==='reviewer'){
-    setStage('verify'); setState('REVIEWER · VERIFYING','busy');
+    completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
   if(evt.type==='fast_path'){
-    setState('FINALIZING','busy');
+    completed.add(lastWorker); setState('FINALIZING','busy');
     $('badge').textContent='FAST PATH';
     updatePending('Answer ready — no extra review needed for this request…');
     return;
@@ -333,7 +345,7 @@ async function handleEvent(evt){
     clearFailedAttempt(currentQuestion);
     lastSuccessfulModel=String(evt.model||'');
     lastSuccessfulTaskType=String(evt.taskType||'');
-    answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you'); validatedBurst();
+    answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); activeEdges=new Set(evt.review==='PASS'?['reviewer:you']:[]); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
