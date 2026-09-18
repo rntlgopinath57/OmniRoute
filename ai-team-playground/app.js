@@ -265,8 +265,7 @@ function startPending(text='Understanding your request…'){
 function updatePending(text){
   if(!pendingMessage)return;
   const el=pendingMessage.querySelector('.messageText');
-  if(el&&(!presentation||presentation.format==='default'))el.textContent=text;
-  applyPresentation(pendingMessage,text,presentation);
+  if(el)el.textContent=text;
   scrollThread();
 }
 function resolvePending(text,meta,presentation=currentPresentation){
@@ -277,10 +276,9 @@ function resolvePending(text,meta,presentation=currentPresentation){
     return;
   }
   pendingMessage.classList.remove('pending','failed');
-  const el=pendingMessage.querySelector('.messageText');
-  if(el)el.textContent=text;
   const dots=pendingMessage.querySelector('.thinkingDots');
   if(dots)dots.remove();
+  applyPresentation(pendingMessage,text,presentation);
   let m=pendingMessage.querySelector('.messageMeta');
   if(!m){
     m=document.createElement('div');
