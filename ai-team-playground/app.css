@@ -2459,3 +2459,257 @@ header{
     margin-right:auto!important;
   }
 }
+
+
+/* Relay progressive disclosure v22 */
+/* Default experience: conversation first. Execution graph is opt-in detail. */
+#workspace,
+#workspace.open,
+#workspace.working{
+  display:block!important;
+  position:relative!important;
+  height:calc(100dvh - 68px)!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(circle at 50% -10%,rgba(65,123,164,.08),transparent 34%),
+    linear-gradient(180deg,#050b12,#02060a 84%)!important;
+}
+
+/* Conversation owns the page. */
+#workspace.open #answer,
+#workspace.working #answer,
+#answer,
+#answer.open{
+  position:relative!important;
+  z-index:10!important;
+  width:100%!important;
+  height:100%!important;
+  margin:0!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+  opacity:1!important;
+  filter:none!important;
+  transform:none!important;
+  display:flex!important;
+  flex-direction:column!important;
+}
+
+/* Compact run status replaces permanent control-room chrome. */
+.runStrip{
+  flex:0 0 auto;
+  width:min(980px,calc(100% - 48px));
+  min-height:36px;
+  margin:14px auto 0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:7px 10px 7px 12px;
+  border:1px solid rgba(129,166,194,.10);
+  border-radius:12px;
+  background:rgba(7,13,20,.52);
+  backdrop-filter:blur(12px);
+  position:relative;
+  z-index:24;
+}
+.runStripStatus{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#8194a6;
+  font-size:9px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.runStripStatus i{
+  flex:0 0 auto;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#677686;
+}
+.runStrip[data-mode="busy"] .runStripStatus i,
+.runStrip[data-mode="listening"] .runStripStatus i{
+  background:var(--cyan);
+  box-shadow:0 0 10px rgba(113,239,255,.72);
+  animation:pulse .9s infinite;
+}
+.runStrip[data-mode="done"] .runStripStatus i{
+  background:var(--green);
+  box-shadow:0 0 9px rgba(82,242,178,.6);
+}
+.runStrip[data-mode="error"] .runStripStatus i{
+  background:var(--red);
+  box-shadow:0 0 9px rgba(255,117,137,.55);
+}
+#runStripText{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.runToggle{
+  flex:0 0 auto;
+  height:26px;
+  padding:0 9px;
+  border:1px solid rgba(113,239,255,.12);
+  border-radius:8px;
+  background:rgba(113,239,255,.025);
+  color:#8da9bb;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.runToggle:hover{
+  border-color:rgba(113,239,255,.28);
+  color:#c8f8ff;
+  background:rgba(113,239,255,.055);
+}
+
+/* Main content is centered and calm. */
+#workspace.open .thread,
+#workspace.working .thread,
+.thread{
+  width:min(980px,calc(100% - 48px))!important;
+  margin:0 auto!important;
+  padding:20px 0 18px!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  position:relative;
+  z-index:20;
+}
+#workspace.open .toolDock,
+#workspace.working .toolDock,
+#workspace.open .followup,
+#workspace.working .followup,
+.toolDock,
+.followup{
+  width:min(980px,calc(100% - 48px))!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  position:relative;
+  z-index:24;
+}
+
+/* Make utilities supporting controls instead of headline UI. */
+.processWave{display:none!important}
+.processRail{
+  min-height:32px!important;
+}
+.toolAction{
+  height:28px!important;
+  padding:0 9px!important;
+  border-color:rgba(113,239,255,.10)!important;
+  background:rgba(113,239,255,.02)!important;
+  color:#7899ad!important;
+}
+.toolAction:hover{
+  color:#bceef5!important;
+  border-color:rgba(113,239,255,.25)!important;
+  background:rgba(113,239,255,.05)!important;
+}
+
+/* The graph is hidden until the user asks to inspect the run. */
+#workspace #canvas{
+  position:absolute!important;
+  z-index:40!important;
+  top:12px!important;
+  right:18px!important;
+  bottom:12px!important;
+  left:auto!important;
+  width:min(430px,calc(100vw - 36px))!important;
+  height:auto!important;
+  min-height:0!important;
+  border:1px solid rgba(113,239,255,.12)!important;
+  border-radius:18px!important;
+  background:
+    radial-gradient(circle at 52% 40%,rgba(34,102,134,.16),transparent 34%),
+    linear-gradient(180deg,rgba(6,16,25,.985),rgba(3,8,13,.99))!important;
+  box-shadow:0 24px 80px rgba(0,0,0,.52),inset 0 1px rgba(255,255,255,.02)!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  transform:translateX(22px) scale(.985)!important;
+  filter:none!important;
+  pointer-events:none!important;
+  transition:opacity .24s ease,transform .28s cubic-bezier(.2,.8,.2,1),visibility .24s!important;
+  -webkit-mask-image:none!important;
+  mask-image:none!important;
+  overflow:hidden!important;
+}
+#workspace.show-run #canvas{
+  opacity:1!important;
+  visibility:visible!important;
+  transform:none!important;
+  pointer-events:auto!important;
+}
+
+/* Graph remains legible when inspected, but does not scream. */
+#workspace.show-run .node{
+  opacity:.68!important;
+}
+#workspace.show-run .node.dim{
+  opacity:.30!important;
+}
+#workspace.show-run .node.active{
+  opacity:1!important;
+}
+#workspace.show-run .edge{
+  stroke:rgba(147,180,204,.22)!important;
+}
+#workspace.show-run .edge.on{
+  stroke:rgba(145,247,255,.90)!important;
+  filter:drop-shadow(0 0 5px rgba(113,239,255,.48))!important;
+}
+#workspace.show-run .handoffHead{
+  opacity:1!important;
+  transform:none!important;
+}
+#workspace.show-run .executionTrace{
+  opacity:1!important;
+}
+
+/* No nested vertical scrolling inside answer cards. */
+.presentationBody,
+.presentationExpanded .presentationBody,
+.handwrittenIntro{
+  max-height:none!important;
+  overflow-y:visible!important;
+}
+.artifactTableWrap{
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+}
+
+/* Completed answers should look like content, not dashboards. */
+.messageRow.assistant .messageBubble{
+  max-width:92%!important;
+}
+.messageRow.user .messageBubble{
+  max-width:74%!important;
+}
+.messageBubble{
+  box-shadow:0 10px 32px rgba(0,0,0,.10)!important;
+}
+
+@media(max-width:900px){
+  .runStrip,
+  .thread,
+  .toolDock,
+  .followup{
+    width:calc(100% - 16px)!important;
+  }
+  #workspace #canvas{
+    top:8px!important;
+    right:8px!important;
+    bottom:8px!important;
+    width:calc(100% - 16px)!important;
+  }
+  .runStripStatus{
+    font-size:8px;
+  }
+}
