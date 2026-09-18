@@ -42,10 +42,10 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   let response: Response | null = null;
   let lastNetworkError = "";
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 1; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 14000);
+      const timeout = setTimeout(() => controller.abort(), 12000);
       try {
         response = await fetch(url, {
           method: "POST",
@@ -62,7 +62,7 @@ async function callModel(model: string, messages: Array<{ role: string; content:
 
       if (response.ok) break;
 
-      if ([429, 502, 503, 504].includes(response.status) && attempt < 2) {
+      if ([429, 502, 503, 504].includes(response.status) && attempt < 1) {
         console.warn("AI Gateway transient response", { model, status: response.status, attempt });
         await sleep(350 * attempt);
         continue;
@@ -79,7 +79,7 @@ async function callModel(model: string, messages: Array<{ role: string; content:
       if (error instanceof Error && !/^The AI service|^The selected AI model/.test(error.message)) {
         lastNetworkError = error.message;
         console.warn("AI Gateway network retry", { model, attempt, error: lastNetworkError });
-        if (attempt < 2) {
+        if (attempt < 1) {
           await sleep(350 * attempt);
           continue;
         }
@@ -203,7 +203,7 @@ export default async (request: Request) => {
 
         if (!review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")) {
           emit({ type: "retry" });
-          answer = await callModel(workerModel, [
+          answer = await callModel(actualWorkerModel, [
             {
               role: "system",
               content:
