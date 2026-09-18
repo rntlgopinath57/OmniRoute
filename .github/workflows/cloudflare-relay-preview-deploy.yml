@@ -183,6 +183,15 @@ jobs:
           grep -q 'function initProviderRoster' ai-team-playground/app.js
           grep -q 'Real provider roster v31' ai-team-playground/app.css
 
+      - name: Verify provider-aware routing
+        run: |
+          grep -q 'function modelConfigured' netlify/functions/ask.mts
+          grep -q 'function resolveWorkerModel' netlify/functions/ask.mts
+          grep -q 'function resolveReviewerModel' netlify/functions/ask.mts
+          grep -q 'configuredCandidates = candidates.filter' netlify/functions/ask.mts
+          grep -q 'no_independent_provider' netlify/functions/ask.mts
+          ! grep -q 'Check Netlify usage/billing' netlify/functions/ask.mts
+
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
         run: |
