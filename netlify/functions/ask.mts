@@ -20,6 +20,23 @@ function workerFor(taskType: string, question: string) {
   return "gpt-5.6-luna";
 }
 
+function isFollowUp(question: string, history: Array<{ role: string; content: string }>) {
+  if (!history.length) return false;
+  const q = question.trim().toLowerCase();
+  if (q.length > 220) return false;
+  return /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|evaluate|compare|tell me more|what about|and |also |then |now )/.test(q)
+    || /\b(that|this|it|them|those|same|above|previous)\b/.test(q);
+}
+
+function allowedStickyModel(model: string) {
+  return new Set([
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "claude-haiku-4-5",
+    "gemini-3.5-flash",
+  ]).has(model);
+}
+
 function reviewerFor(worker: string) {
   return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
 }
@@ -235,9 +252,13 @@ export default async (request: Request) => {
 
   let question = "";
   let history: Array<{ role: "user" | "assistant"; content: string }> = [];
+  let preferredModel = "";
+  let previousTaskType = "";
   try {
     const body = await request.json();
     question = typeof body?.question === "string" ? body.question.trim() : "";
+    preferredModel = typeof body?.preferredModel === "string" ? body.preferredModel.trim() : "";
+    previousTaskType = typeof body?.previousTaskType === "string" ? body.previousTaskType.trim() : "";
     if (Array.isArray(body?.history)) {
       history = body.history
         .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string")
@@ -258,8 +279,20 @@ export default async (request: Request) => {
         controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
 
       try {
-        const taskType = classify(question);
-        const workerModel = workerFor(taskType, question);
+        const recentUserContext = history
+          .filter((m) => m.role === "user")
+          .slice(-2)
+          .map((m) => m.content)
+          .join(" ");
+        const contextualQuestion = recentUserContext ? `${recentUserContext} ${question}` : question;
+        const followUp = isFollowUp(question, history);
+        const taskType = followUp && previousTaskType
+          ? previousTaskType
+          : classify(contextualQuestion);
+        const stickyModel = followUp && allowedStickyModel(preferredModel)
+          ? preferredModel
+          : "";
+        const workerModel = stickyModel || workerFor(taskType, contextualQuestion);
         const reviewerModel = reviewerFor(workerModel);
 
         emit({ type: "planner", taskType });
@@ -267,7 +300,7 @@ export default async (request: Request) => {
         emit({ type: "worker", taskType, model: workerModel });
 
         let actualWorkerModel = workerModel;
-        const contextNote = disambiguationContext(question);
+        const contextNote = disambiguationContext(contextualQuestion);
         const workerMessages = [
           {
             role: "system",
