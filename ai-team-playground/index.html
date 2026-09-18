@@ -1,11 +1,155 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#05070a"><title>AI Team</title><link rel="stylesheet" href="./app.css"><script src="https://js.puter.com/v2/"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070a">
+<title>Relay AI Team</title>
+<link rel="stylesheet" href="./app.css?v=23">
 </head>
 <body>
-<main class="shell"><header><b><i>✦</i> AI TEAM</b><div class="state"><span></span><em id="stateText">READY</em></div></header>
-<section id="workspace"><div id="canvas"><svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div id="stars"></div><div id="nodes"></div><div class="ask"><div><textarea id="q" rows="1" placeholder="Ask your AI Team anything…"></textarea><button id="go">➜</button></div><small>2 specialists → independent reviewer → one validated answer</small></div></div>
-<aside id="answer"><div class="aHead"><span id="tick">✓</span><div><b>AI Team response</b><small id="meta">waiting</small></div><em id="badge">VALIDATED</em></div><div id="body">Your reviewed answer will appear here.</div><div id="agents"></div></aside></section></main>
-<script src="./app.js"></script>
-</body></html>
+<main class="shell">
+  <header>
+    <div class="brand"><span class="brandMark"><i></i><i></i><i></i></span><div><b>RELAY</b><small>AI TEAM</small></div></div>
+    <div class="headRight">
+      <div class="liveChip"><span></span> LIVE ROUTING</div>
+      <div class="state"><span></span><em id="stateText">READY</em></div>
+    </div>
+  </header>
+
+  <section id="workspace">
+    <div id="canvas">
+      <div class="ambient a1"></div><div class="ambient a2"></div><div class="ambient a3"></div>
+      <div class="neuralField" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="scanBeam" aria-hidden="true"></div>
+      <div id="burstLayer" aria-hidden="true"></div>
+      <svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      <div id="nodes"></div>
+
+      <div class="handoffHead">
+        <div><b>AGENT HAND-OFF</b><small>Live execution graph</small></div>
+        <span>LIVE</span>
+      </div>
+      <div id="executionTrace" class="executionTrace" aria-label="Execution trace">
+        <span data-stage="understand">PLANNER</span><i>→</i>
+        <span data-stage="route">ROUTER</span><i>→</i>
+        <span data-stage="tool">TOOL</span><i>→</i>
+        <span data-stage="solve">SPECIALIST</span><i>→</i>
+        <span data-stage="render">DESIGN</span><i>→</i>
+        <span data-stage="verify">REVIEWER</span><i>→</i>
+        <span data-stage="done">DONE</span>
+      </div>
+
+      <div class="ask">
+        <div class="inputShell">
+          <button id="mic" class="mic" aria-label="Voice input"><span class="micIcon">●</span><span class="wave"><i></i><i></i><i></i></span></button>
+          <textarea id="q" rows="1" placeholder="Ask your AI Team anything…"></textarea>
+          <button id="go" class="send" aria-label="Send">➜</button>
+        </div>
+        <div class="askMeta"><span id="listenText">Type or speak</span><span>Planner → specialist → independent reviewer</span></div>
+      </div>
+    </div>
+
+    <aside id="answer">
+      <div class="aHead">
+        <span id="tick">◉</span>
+        <div><b>AI Team conversation</b><small id="meta">READY</small></div>
+        <span id="badge" class="badge">LIVE</span>
+      </div>
+      <div id="runStrip" class="runStrip" data-mode="ready">
+        <div class="runStripStatus">
+          <i aria-hidden="true"></i>
+          <span id="runStripText">Ready</span>
+        </div>
+        <button id="runToggle" class="runToggle" type="button" aria-expanded="false" aria-controls="canvas">
+          View run
+        </button>
+      </div>
+      <div id="thread" class="thread" aria-live="polite">
+        <div class="threadWelcome">
+          <b>Start a conversation with your AI Team</b>
+          <span>Your prompt and every reviewed answer will stay here as one continuous conversation.</span>
+        </div>
+      </div>
+      <div id="toolDock" class="toolDock">
+        <div id="processRail" class="processRail" data-mode="ready">
+          <span class="processName"><i></i><b id="processText">READY</b></span>
+          <svg class="processWave" viewBox="0 0 320 26" preserveAspectRatio="none" aria-hidden="true">
+            <polyline points="0,13 20,13 26,9 32,17 38,12 46,13 54,5 62,21 70,10 78,14 90,8 98,18 108,13 126,13 132,7 138,19 146,11 154,14 168,4 180,22 190,9 200,15 214,11 224,16 236,13 248,13 258,6 270,20 280,10 290,15 300,12 320,13"></polyline>
+          </svg>
+          <div class="toolActions">
+            <button id="imageGenBtn" class="toolAction" type="button">GENERATE IMAGE</button>
+            <button id="videoGenBtn" class="toolAction" type="button">GENERATE VIDEO</button>
+            <button id="videoEditBtn" class="toolAction" type="button">EDIT VIDEO</button>
+          </div>
+        </div>
+      </div>
+      <div class="followup">
+        <button id="followMic" class="followMic" aria-label="Voice follow-up"><span class="micIcon">●</span><span class="wave"><i></i><i></i><i></i></span></button>
+        <textarea id="followQ" rows="1" placeholder="Ask Relay anything…"></textarea>
+        <button id="followGo" class="followSend" aria-label="Send follow-up">➜</button>
+      </div>
+
+      <section id="videoEditorPanel" class="videoEditorPanel" aria-hidden="true">
+        <div class="videoEditorCard" role="dialog" aria-modal="true" aria-labelledby="videoEditorTitle">
+          <div class="videoEditorHead">
+            <div><b id="videoEditorTitle">Local video editor</b><span>Trim, reframe and mute without uploading the source file.</span></div>
+            <button id="videoEditorClose" type="button" aria-label="Close video editor">×</button>
+          </div>
+          <input id="videoFileInput" type="file" accept="video/*" hidden>
+          <label class="videoDrop" for="videoFileInput"><b>Choose a video</b><span id="videoFileName">MP4, MOV or WebM</span></label>
+          <div class="videoEditGrid">
+            <label>Start (seconds)<input id="videoStart" type="number" min="0" step="0.1" value="0"></label>
+            <label>Duration (seconds)<input id="videoDuration" type="number" min="0" step="0.1" placeholder="Full video"></label>
+            <label>Aspect ratio<select id="videoAspect"><option value="original">Original</option><option value="9:16">9:16 vertical</option><option value="16:9">16:9 landscape</option><option value="1:1">1:1 square</option></select></label>
+            <label class="videoCheck"><input id="videoMute" type="checkbox"><span>Mute audio</span></label>
+          </div>
+          <div class="videoEditorActions">
+            <button id="videoProcessBtn" type="button">PROCESS VIDEO</button>
+            <span id="videoProgress">Ready</span>
+            <a id="videoDownload" hidden>Save edited video</a>
+          </div>
+          <video id="videoPreview" class="videoPreview" controls playsinline hidden></video>
+        </div>
+      </section>
+    
+      <section id="mediaGeneratorPanel" class="videoEditorPanel mediaGeneratorPanel" aria-hidden="true">
+        <div class="videoEditorCard mediaGeneratorCard" role="dialog" aria-modal="true" aria-labelledby="mediaGeneratorTitle">
+          <div class="videoEditorHead">
+            <div><b id="mediaGeneratorTitle">Generate with Relay</b><span>Images with Nano Banana 2 · videos with Veo 3.1.</span></div>
+            <button id="mediaGeneratorClose" type="button" aria-label="Close generator">×</button>
+          </div>
+          <div class="mediaTabs">
+            <button id="mediaImageTab" class="mediaTab active" type="button">IMAGE</button>
+            <button id="mediaVideoTab" class="mediaTab" type="button">VIDEO</button>
+          </div>
+          <label class="mediaPromptLabel">Prompt
+            <textarea id="mediaPrompt" rows="5" placeholder="Describe exactly what Relay should create…"></textarea>
+          </label>
+          <div id="mediaVideoOptions" class="videoEditGrid" hidden>
+            <label>Aspect ratio<select id="mediaAspect"><option value="16:9">16:9 landscape</option><option value="9:16">9:16 vertical</option></select></label>
+            <label>Length<select id="mediaDuration"><option value="8">8 seconds</option><option value="6">6 seconds</option><option value="4">4 seconds</option></select></label>
+            <label>Resolution<select id="mediaResolution"><option value="720p">720p</option><option value="1080p">1080p</option><option value="4k">4K</option></select></label>
+          </div>
+          <div class="mediaKeyRow">
+            <label>Gemini API key
+              <input id="mediaApiKey" type="password" autocomplete="off" placeholder="Only needed if Relay server has no Gemini key">
+            </label>
+            <small>Used only for this browser session when required.</small>
+          </div>
+          <div class="videoEditorActions">
+            <button id="mediaGenerateBtn" type="button">GENERATE</button>
+            <span id="mediaProgress">Ready</span>
+            <a id="mediaDownload" hidden>Save result</a>
+          </div>
+          <div id="mediaOutput" class="mediaOutput"></div>
+        </div>
+      </section>
+    </aside>
+  </section>
+</main>
+<script src="./app.js?v=31"></script>
+<script type="module" src="./video-editor.js?v=3"></script>
+<script type="module" src="./media-generator.js?v=5"></script>
+</body>
+</html>
