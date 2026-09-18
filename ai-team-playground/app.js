@@ -170,9 +170,19 @@ function render(){
 }
 function animateAmbientFlight(fromId,toId){
   if(!handoffFx||!workspace||!fromId||!toId||fromId===toId)return;
-  const from=document.querySelector(`[data-ambient-node="${fromId}"] .railCore`);
-  const to=document.querySelector(`[data-ambient-node="${toId}"] .railCore`);
+
+  const sourceNode=document.querySelector(`[data-ambient-node="${fromId}"]`);
+  const destinationNode=document.querySelector(`[data-ambient-node="${toId}"]`);
+  const from=sourceNode?.querySelector('.railCore');
+  const to=destinationNode?.querySelector('.railCore');
   if(!from||!to)return;
+
+  // Only real handoffs animate: source = sending, destination = receiving.
+  document.querySelectorAll('.railNode.sending,.railNode.receiving').forEach(node=>{
+    node.classList.remove('sending','receiving');
+  });
+  sourceNode.classList.add('sending');
+  destinationNode.classList.add('receiving');
 
   const wr=workspace.getBoundingClientRect();
   const a=from.getBoundingClientRect();
@@ -187,6 +197,8 @@ function animateAmbientFlight(fromId,toId){
 
   const flight=document.createElement('div');
   flight.className='ambientFlight';
+  flight.dataset.from=fromId;
+  flight.dataset.to=toId;
   flight.style.left=x1+'px';
   flight.style.top=y1+'px';
   flight.style.width=Math.max(24,distance)+'px';
@@ -194,14 +206,11 @@ function animateAmbientFlight(fromId,toId){
   flight.innerHTML='<span class="flightLine"></span><i class="flightPacket"></i><b class="flightTail"></b>';
   handoffFx.appendChild(flight);
 
-  const destination=document.querySelector(`[data-ambient-node="${toId}"]`);
-  if(destination){
-    destination.classList.remove('impact');
-    void destination.offsetWidth;
-    destination.classList.add('impact');
-    setTimeout(()=>destination.classList.remove('impact'),900);
-  }
-  setTimeout(()=>flight.remove(),1050);
+  setTimeout(()=>{
+    sourceNode.classList.remove('sending');
+    destinationNode.classList.remove('receiving');
+  },780);
+  setTimeout(()=>flight.remove(),900);
 }
 
 function burstAt(id,kind='route'){

@@ -128,9 +128,11 @@ jobs:
         run: |
           grep -q 'id="handoffFx"' ai-team-playground/index.html
           grep -q 'function animateAmbientFlight' ai-team-playground/app.js
-          grep -q 'ambientPacket' ai-team-playground/app.css
-          grep -q 'railImpactCore' ai-team-playground/app.css
-          grep -q 'Relay immersive rail animation v29' ai-team-playground/app.css
+          grep -q 'function animateAmbientFlight' ai-team-playground/app.js
+          grep -q "classList.add('sending')" ai-team-playground/app.js
+          grep -q "classList.add('receiving')" ai-team-playground/app.js
+          grep -q 'Relay truthful data-flow animation v30' ai-team-playground/app.css
+          grep -q '.fxStreak,.fxField{display:none!important}' ai-team-playground/app.css
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
