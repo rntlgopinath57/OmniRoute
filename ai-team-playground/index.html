@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070a">
 <title>Relay AI Team</title>
-<link rel="stylesheet" href="./app.css?v=14">
+<link rel="stylesheet" href="./app.css?v=15">
 </head>
 <body>
 <main class="shell">
@@ -25,6 +25,19 @@
       <div id="burstLayer" aria-hidden="true"></div>
       <svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       <div id="nodes"></div>
+
+      <div class="handoffHead">
+        <div><b>AGENT HAND-OFF</b><small>Live execution graph</small></div>
+        <span>LIVE</span>
+      </div>
+      <div id="executionTrace" class="executionTrace" aria-label="Execution trace">
+        <span data-stage="understand">PLANNER</span><i>→</i>
+        <span data-stage="route">ROUTER</span><i>→</i>
+        <span data-stage="tool">TOOL</span><i>→</i>
+        <span data-stage="solve">SPECIALIST</span><i>→</i>
+        <span data-stage="verify">REVIEWER</span><i>→</i>
+        <span data-stage="done">DONE</span>
+      </div>
 
       <div class="ask">
         <div class="inputShell">
@@ -125,7 +138,7 @@
     </aside>
   </section>
 </main>
-<script src="./app.js?v=20"></script>
+<script src="./app.js?v=21"></script>
 <script type="module" src="./video-editor.js?v=1"></script>
 <script type="module" src="./media-generator.js?v=1"></script>
 </body>
