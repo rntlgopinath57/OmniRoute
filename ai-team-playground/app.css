@@ -336,3 +336,220 @@ body{overflow:hidden}
   .threadWelcome{padding-left:12px;padding-right:12px}
   .messageText{font-size:13px}
 }
+
+/* Airy centered chat v11 */
+#workspace,#workspace.open{
+  display:block;
+  position:relative;
+  height:calc(100dvh - 68px);
+  min-height:calc(100dvh - 68px);
+  overflow:hidden;
+}
+
+/* Keep the AI-team graph as ambience, not a wall */
+#canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  min-height:0;
+  z-index:0;
+  opacity:.42;
+  filter:saturate(.9) brightness(.8);
+  pointer-events:none;
+}
+#canvas[data-mode="busy"],
+#canvas[data-mode="listening"]{
+  opacity:.68;
+  filter:saturate(1.08) brightness(.96);
+}
+#canvas[data-mode="done"]{
+  opacity:.52;
+  filter:saturate(.96) brightness(.9);
+}
+#workspace .ask{display:none!important}
+
+/* Remove the giant dark card entirely */
+#answer,
+#answer.open{
+  position:relative;
+  z-index:20;
+  width:100%;
+  height:100%;
+  max-height:none;
+  margin:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+  box-shadow:none;
+  transform:none!important;
+  opacity:1!important;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  animation:none!important;
+}
+#answer:before{display:none!important}
+
+/* Small floating conversation status instead of a full-width header bar */
+.aHead{
+  flex:0 0 auto;
+  width:min(760px,calc(100vw - 36px));
+  min-height:52px;
+  margin:14px auto 8px;
+  padding:10px 14px;
+  border:1px solid rgba(175,208,238,.10);
+  border-radius:16px;
+  background:rgba(5,10,17,.55);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  box-shadow:0 10px 32px rgba(0,0,0,.16);
+}
+.aHead>span{width:24px;height:24px}
+.aHead b{font-size:12px}
+.aHead small{font-size:7px;margin-top:3px}
+.aHead .badge{font-size:7px;padding:5px 8px}
+
+/* Conversation itself floats in the center */
+.thread{
+  flex:1;
+  min-height:0;
+  width:min(820px,calc(100vw - 32px));
+  margin:0 auto;
+  padding:12px 0 18px;
+  background:transparent;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.thread::-webkit-scrollbar{width:6px}
+.thread::-webkit-scrollbar-thumb{background:rgba(120,150,180,.15);border-radius:99px}
+
+.threadWelcome{
+  min-height:100%;
+  padding:38px 24px 100px;
+  justify-content:center;
+}
+.threadWelcome b{
+  font-size:17px;
+  color:#e4edf6;
+}
+.threadWelcome span{
+  font-size:11.5px;
+  max-width:430px;
+  color:#76869a;
+}
+
+.messageRow{margin:0 0 14px}
+.messageBubble{
+  border:1px solid rgba(255,255,255,.055);
+  background:rgba(6,11,18,.58);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  box-shadow:0 10px 26px rgba(0,0,0,.12);
+  border-radius:16px;
+  padding:14px 16px;
+}
+.messageRow.assistant .messageBubble{
+  max-width:92%;
+  border-bottom-left-radius:7px;
+}
+.messageRow.user .messageBubble{
+  max-width:74%;
+  background:linear-gradient(145deg,rgba(113,239,255,.11),rgba(71,104,153,.08));
+  border-color:rgba(113,239,255,.14);
+  border-bottom-right-radius:7px;
+}
+.messageText{
+  font-size:13.25px;
+  line-height:1.68;
+}
+.messageMeta{
+  margin-top:9px;
+  padding-top:7px;
+  opacity:.78;
+}
+
+/* The composer is the only strong foreground surface */
+.followup{
+  flex:0 0 auto;
+  width:min(760px,calc(100vw - 36px));
+  margin:0 auto 16px;
+  padding:7px;
+  gap:7px;
+  border:1px solid rgba(113,239,255,.18);
+  border-radius:17px;
+  background:rgba(5,10,17,.78);
+  backdrop-filter:blur(22px) saturate(1.12);
+  -webkit-backdrop-filter:blur(22px) saturate(1.12);
+  box-shadow:0 18px 44px rgba(0,0,0,.32),0 0 24px rgba(113,239,255,.025);
+}
+.followup:focus-within{
+  border-color:rgba(113,239,255,.42);
+  box-shadow:0 18px 44px rgba(0,0,0,.34),0 0 34px rgba(113,239,255,.06);
+}
+.followup textarea{
+  min-height:46px;
+  max-height:108px;
+  border:0;
+  background:transparent;
+  padding:11px 8px;
+  box-shadow:none!important;
+  font-size:13px;
+}
+.followMic,.followSend{
+  width:46px;
+  height:46px;
+  flex-basis:46px;
+  border-radius:13px;
+}
+
+/* Make the active routing path readable behind the chat */
+#canvas .node{opacity:.34}
+#canvas .node.active{opacity:1}
+#canvas .node.energized{opacity:.62}
+#canvas .node.dim{opacity:.08}
+#canvas .edge{opacity:.45}
+#canvas .edgeFlow.on{opacity:1}
+
+/* Avoid the Netlify badge visually fighting the composer */
+@media(min-width:901px){
+  #answer{padding-right:0}
+}
+
+@media(max-width:900px){
+  #answer,#answer.open{
+    position:relative;
+    width:100%;
+    height:100%;
+    margin:0;
+    border-radius:0;
+  }
+  .aHead{
+    width:calc(100vw - 20px);
+    margin:8px auto 5px;
+    min-height:48px;
+    padding:9px 11px;
+  }
+  .thread{
+    width:calc(100vw - 18px);
+    padding:8px 0 12px;
+  }
+  .messageRow.assistant .messageBubble{max-width:95%}
+  .messageRow.user .messageBubble{max-width:86%}
+  .followup{
+    width:calc(100vw - 20px);
+    margin:0 auto 8px;
+  }
+  #canvas{opacity:.32}
+  #canvas[data-mode="busy"],#canvas[data-mode="listening"]{opacity:.54}
+}
+
+@media(max-width:560px){
+  .aHead .badge{display:none}
+  .threadWelcome{padding:24px 14px 80px}
+  .messageBubble{padding:12px 13px}
+  .messageText{font-size:13px}
+}
