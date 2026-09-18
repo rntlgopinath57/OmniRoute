@@ -268,8 +268,17 @@ async function handleEvent(evt){
   }
   if(evt.type==='hedge'){
     setState('ACCELERATING','busy');
-    updatePending(`Relay opened a faster backup path with ${friendlyModel(evt.model)}…`);
+    updatePending(`Relay opened another provider path with ${friendlyModel(evt.model)}…`);
     return;
+  }
+  if(evt.type==='worker_selected'){
+    lastWorker=nodeForModel(evt.model);
+    selected.add(lastWorker);
+    active=new Set([lastWorker]);
+    activeEdges=new Set([`router:${lastWorker}`]);
+    setState('SOLVING','busy');
+    updatePending(`${friendlyModel(evt.model)} responded first — preparing the answer…`);
+    render(); kickNode(lastWorker); return;
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
@@ -372,7 +381,7 @@ async function ask(questionOverride='',isRetry=false){
       throw new Error('This static preview cannot execute the secure AI backend. Open the deployed Relay URL for live answers.');
     }
     const requestController=new AbortController();
-    const requestTimeout=setTimeout(()=>requestController.abort(),22000);
+    const requestTimeout=setTimeout(()=>requestController.abort(),28000);
     let response;
     try{
       response=await fetch('/api/ask',{
@@ -401,7 +410,7 @@ async function ask(questionOverride='',isRetry=false){
     if(buffer.trim())await handleEvent(JSON.parse(buffer));
   }catch(e){
     const message=e?.name==='AbortError'
-      ? 'Relay took too long on this route. Please retry — the next run will use the faster fallback path.'
+      ? 'Relay could not get a provider response within 28 seconds. Please retry in a moment.'
       : (e?.message||String(e));
     finishError(message);
   }finally{
