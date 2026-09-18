@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "relay-ai-team",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-09-18",
+  "assets": {
+    "directory": "./ai-team-playground",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}
