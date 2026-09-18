@@ -78,12 +78,7 @@ function draw(){
   render();
 }
 function setStage(name){
-  const order=['understand','route','solve','verify'];
-  const idx=order.indexOf(name);
-  document.querySelectorAll('.stage').forEach((el,i)=>{
-    el.classList.toggle('active',i===idx);
-    el.classList.toggle('done',i<idx || (answered && i<=idx));
-  });
+  canvas.dataset.stage=name;
 }
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
