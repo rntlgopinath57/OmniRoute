@@ -553,3 +553,274 @@ body{overflow:hidden}
   .messageBubble{padding:12px 13px}
   .messageText{font-size:13px}
 }
+
+/* Relay command-center polish v12 */
+.aHead{display:none!important}
+.thread{
+  width:min(900px,calc(100vw - 48px));
+  padding:28px 0 12px;
+}
+.threadWelcome{padding-top:16vh}
+.threadWelcome b{font-size:20px;letter-spacing:-.02em}
+.threadWelcome span{font-size:12px;max-width:520px}
+.messageRow{margin-bottom:18px}
+.messageRow.assistant .messageBubble{max-width:78%}
+.messageRow.user .messageBubble{max-width:68%}
+.messageBubble{
+  border-color:rgba(255,255,255,.07);
+  background:rgba(5,11,18,.68);
+  box-shadow:0 16px 44px rgba(0,0,0,.16);
+}
+.messageRow.user .messageBubble{
+  background:linear-gradient(145deg,rgba(58,153,188,.20),rgba(30,72,106,.16));
+  border-color:rgba(113,239,255,.23);
+}
+.messageText{font-size:14px;line-height:1.65}
+.messageLabel{font-size:8px}
+.messageMeta{font-size:8px}
+
+.toolDock{
+  flex:0 0 auto;
+  width:min(900px,calc(100vw - 48px));
+  margin:0 auto 8px;
+}
+.processRail{
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 4px 0 10px;
+  color:#688097;
+}
+.processName{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:104px;
+}
+.processName i{
+  width:7px;height:7px;border-radius:50%;
+  background:#5d6b79;
+}
+.processName b{
+  font-size:8px;
+  letter-spacing:.14em;
+}
+.processWave{
+  flex:1;
+  height:25px;
+  overflow:visible;
+}
+.processWave polyline{
+  fill:none;
+  stroke:rgba(113,239,255,.18);
+  stroke-width:1.15;
+  vector-effect:non-scaling-stroke;
+}
+.processRail[data-mode="busy"] .processName i,
+.processRail[data-mode="listening"] .processName i{
+  background:var(--cyan);
+  box-shadow:0 0 10px rgba(113,239,255,.7);
+}
+.processRail[data-mode="busy"] .processWave polyline,
+.processRail[data-mode="listening"] .processWave polyline{
+  stroke:rgba(113,239,255,.9);
+  stroke-dasharray:20 5;
+  animation:seismoTrack .48s linear infinite;
+  filter:drop-shadow(0 0 4px rgba(113,239,255,.35));
+}
+.processRail[data-mode="done"] .processName i{
+  background:var(--green);
+  box-shadow:0 0 10px rgba(82,242,178,.65);
+}
+.processRail[data-mode="done"] .processWave polyline{stroke:rgba(82,242,178,.55)}
+.toolAction{
+  height:30px;
+  padding:0 11px;
+  border:1px solid rgba(113,239,255,.18);
+  border-radius:10px;
+  background:rgba(113,239,255,.055);
+  color:#9fefff;
+  font-size:8px;
+  letter-spacing:.1em;
+  font-weight:800;
+}
+.toolAction:hover{
+  border-color:rgba(113,239,255,.42);
+  background:rgba(113,239,255,.1);
+}
+.followup{
+  width:min(900px,calc(100vw - 48px));
+  margin:0 auto 14px;
+  border-radius:18px;
+}
+
+.seismo{
+  width:30px;height:18px;
+  z-index:2;
+  overflow:visible;
+}
+.seismo polyline{
+  fill:none;
+  stroke:#7d8a9a;
+  stroke-width:1.6;
+  vector-effect:non-scaling-stroke;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.node.active .seismo polyline{
+  stroke:var(--cyan);
+  stroke-width:1.9;
+  stroke-dasharray:10 3;
+  animation:seismoNode .34s linear infinite;
+  filter:drop-shadow(0 0 5px rgba(113,239,255,.85));
+}
+.node.energized .seismo polyline{
+  stroke:rgba(113,239,255,.55);
+}
+@keyframes seismoNode{to{stroke-dashoffset:-13}}
+@keyframes seismoTrack{to{stroke-dashoffset:-25}}
+
+#canvas .node{opacity:.25}
+#canvas .node.active{opacity:1;filter:none}
+#canvas .node.energized{opacity:.54}
+#canvas .node.dim{opacity:.045}
+#canvas .edge{opacity:.28}
+#canvas .edge.on{opacity:.88}
+#canvas .edgeFlow.on{opacity:1}
+#canvas[data-mode="busy"]{opacity:.72}
+#canvas[data-mode="done"]{opacity:.48}
+
+.videoEditorPanel{
+  position:fixed;
+  inset:68px 0 0;
+  z-index:90;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:22px;
+  background:rgba(1,4,8,.66);
+  backdrop-filter:blur(18px);
+}
+.videoEditorPanel.open{display:flex}
+.videoEditorCard{
+  width:min(720px,96vw);
+  max-height:calc(100dvh - 110px);
+  overflow:auto;
+  border:1px solid rgba(113,239,255,.18);
+  border-radius:22px;
+  background:linear-gradient(180deg,rgba(7,14,23,.98),rgba(4,8,14,.98));
+  box-shadow:0 34px 90px rgba(0,0,0,.52),0 0 46px rgba(113,239,255,.045);
+  padding:18px;
+}
+.videoEditorHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:16px;
+}
+.videoEditorHead>div{display:flex;flex-direction:column;gap:5px}
+.videoEditorHead b{font-size:15px}
+.videoEditorHead span{font-size:10px;color:#718197}
+#videoEditorClose{
+  width:34px;height:34px;border-radius:10px;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  font-size:20px;color:#9aabba;
+}
+.videoDrop{
+  min-height:82px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  border:1px dashed rgba(113,239,255,.25);
+  border-radius:16px;
+  background:rgba(113,239,255,.035);
+  cursor:pointer;
+}
+.videoDrop b{font-size:12px}
+.videoDrop span{font-size:10px;color:#6f8195}
+.videoEditGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:14px 0;
+}
+.videoEditGrid label{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  color:#76879a;
+  font-size:9px;
+  letter-spacing:.04em;
+}
+.videoEditGrid input,.videoEditGrid select{
+  width:100%;
+  height:40px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:11px;
+  background:#07101a;
+  color:#edf8ff;
+  padding:0 11px;
+  outline:0;
+}
+.videoCheck{
+  flex-direction:row!important;
+  align-items:center;
+  align-self:end;
+  height:40px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:11px;
+  background:#07101a;
+}
+.videoCheck input{width:auto;height:auto}
+.videoEditorActions{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+#videoProcessBtn{
+  height:40px;
+  padding:0 16px;
+  border-radius:11px;
+  border:1px solid rgba(113,239,255,.28);
+  background:linear-gradient(145deg,rgba(113,239,255,.16),rgba(156,134,255,.10));
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.09em;
+}
+#videoProgress{font-size:10px;color:#718397}
+#videoDownload{
+  margin-left:auto;
+  color:#a8ffe0;
+  font-size:10px;
+  font-weight:800;
+  text-decoration:none;
+}
+.videoPreview{
+  width:100%;
+  max-height:360px;
+  margin-top:16px;
+  border-radius:14px;
+  background:#000;
+}
+@media(max-width:900px){
+  .thread,.toolDock,.followup{width:calc(100vw - 20px)}
+  .thread{padding-top:16px}
+  .messageRow.assistant .messageBubble{max-width:92%}
+  .messageRow.user .messageBubble{max-width:84%}
+  .processName{min-width:88px}
+  .toolAction{padding:0 8px}
+  .videoEditorPanel{inset:68px 0 0;padding:10px}
+}
+@media(max-width:560px){
+  .processWave{display:none}
+  .processRail{justify-content:space-between}
+  .videoEditGrid{grid-template-columns:1fr}
+  .messageText{font-size:13px}
+}
