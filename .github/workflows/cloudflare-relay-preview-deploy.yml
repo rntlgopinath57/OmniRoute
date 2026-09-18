@@ -123,6 +123,12 @@ jobs:
           echo "$response" | grep -q '"type":"done"'
           echo "$response" | grep -q 'CLOUDFLARE_RELAY_OK'
 
+      - name: Verify static security header configuration
+        run: |
+          grep -q 'X-Content-Type-Options: nosniff' ai-team-playground/_headers
+          grep -q 'Referrer-Policy: strict-origin-when-cross-origin' ai-team-playground/_headers
+          grep -q 'X-Frame-Options: SAMEORIGIN' ai-team-playground/_headers
+
       - name: Verify Cloudflare security header parity
         if: steps.deploy.outputs.url != ''
         run: |
@@ -167,6 +173,15 @@ jobs:
           grep -q "classList.add('receiving')" ai-team-playground/app.js
           grep -q 'Relay truthful data-flow animation v30' ai-team-playground/app.css
           grep -q '.fxStreak,.fxField{display:none!important}' ai-team-playground/app.css
+
+      - name: Verify real provider roster
+        run: |
+          grep -q 'data-provider-node="gemini"' ai-team-playground/index.html
+          grep -q 'data-provider-node="qwen"' ai-team-playground/index.html
+          grep -q 'data-provider-node="grok"' ai-team-playground/index.html
+          grep -q 'function providerNodeForModel' ai-team-playground/app.js
+          grep -q 'function initProviderRoster' ai-team-playground/app.js
+          grep -q 'Real provider roster v31' ai-team-playground/app.css
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''

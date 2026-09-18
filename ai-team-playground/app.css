@@ -3710,3 +3710,33 @@ header{
   90%{opacity:.80}
   100%{left:calc(100% - 66px);opacity:.10}
 }
+
+
+/* Real provider roster v31 */
+@media(min-width:1200px){
+  .providerRail .railNode{width:132px}
+  .providerRail .railNode.offline{
+    opacity:.27!important;
+    filter:saturate(.35)!important;
+  }
+  .providerRail .railNode.offline .railCore{
+    border-style:dashed!important;
+    box-shadow:none!important;
+  }
+  .providerRail .railNode.available{
+    opacity:.66!important;
+  }
+  .providerRail .railNode.available .railCore{
+    border-color:rgba(82,242,178,.22);
+    box-shadow:0 0 12px rgba(82,242,178,.07),inset 0 0 14px rgba(82,242,178,.03);
+  }
+  .providerRail .railNode.active,
+  .providerRail .railNode.sending,
+  .providerRail .railNode.receiving{
+    opacity:1!important;
+    filter:none!important;
+  }
+  .providerRail .railNode.active b{
+    color:#d9fcff!important;
+  }
+}

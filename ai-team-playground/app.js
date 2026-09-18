@@ -34,6 +34,8 @@ let busy=false, answered=false, listening=false, active=new Set(), selected=new 
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 let lastSuccessfulModel='', lastSuccessfulTaskType='', lastPresentation='default';
 let ambientLastNode='you';
+let activeProviderNode='';
+let completedProviders=new Set();
 let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
 
 function classify(t){
@@ -47,6 +49,21 @@ function classify(t){
 }
 function friendlyModel(model=''){
   return model.replace(/^.*\//,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function providerNodeForModel(model=''){
+  const m=String(model||'').toLowerCase();
+  if(m.includes('gemini')||m.includes('google'))return'gemini';
+  if(m.includes('claude')||m.includes('anthropic'))return'claude';
+  if(m.includes('deepseek'))return'deepseek';
+  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
+  if(m.includes('grok')||m.includes('xai'))return'grok';
+  if(m.includes('gpt')||m.includes('openai'))return'openai';
+  return'';
+}
+function setActiveProvider(model=''){
+  const next=providerNodeForModel(model);
+  if(activeProviderNode&&activeProviderNode!==next)completedProviders.add(activeProviderNode);
+  activeProviderNode=next;
 }
 function draw(){
   edges.innerHTML=''; nodes.innerHTML='';
@@ -82,6 +99,10 @@ function updateRoleModel(role,model=''){
 
   const ambient=document.querySelector(`[data-ambient-node="${role}"] small`);
   if(ambient&&model)ambient.textContent=friendlyModel(model);
+
+  const provider=providerNodeForModel(model);
+  const providerSmall=provider?document.querySelector(`[data-provider-node="${provider}"] small`):null;
+  if(providerSmall&&model)providerSmall.textContent=friendlyModel(model);
 }
 function setStage(name){
   canvas.dataset.stage=name;
@@ -162,7 +183,15 @@ function render(){
     node.classList.toggle('listening',listening&&id==='you');
   });
 
-  const ambientActive=[...active].find(id=>document.querySelector(`[data-ambient-node="${id}"]`));
+  document.querySelectorAll('[data-provider-node]').forEach(node=>{
+    const id=node.dataset.providerNode;
+    node.classList.toggle('active',busy&&id===activeProviderNode);
+    node.classList.toggle('completed',completedProviders.has(id));
+    node.classList.toggle('energized',busy&&id===activeProviderNode);
+  });
+
+  const logicalAmbient=[...active].find(id=>document.querySelector(`[data-ambient-node="${id}"]`));
+  const ambientActive=(busy&&activeProviderNode)||logicalAmbient;
   if(ambientActive && ambientActive!==ambientLastNode && (busy||answered)){
     animateAmbientFlight(ambientLastNode,ambientActive);
     ambientLastNode=ambientActive;
@@ -171,8 +200,8 @@ function render(){
 function animateAmbientFlight(fromId,toId){
   if(!handoffFx||!workspace||!fromId||!toId||fromId===toId)return;
 
-  const sourceNode=document.querySelector(`[data-ambient-node="${fromId}"]`);
-  const destinationNode=document.querySelector(`[data-ambient-node="${toId}"]`);
+  const sourceNode=document.querySelector(`[data-ambient-node="${fromId}"],[data-provider-node="${fromId}"]`);
+  const destinationNode=document.querySelector(`[data-ambient-node="${toId}"],[data-provider-node="${toId}"]`);
   const from=sourceNode?.querySelector('.railCore');
   const to=destinationNode?.querySelector('.railCore');
   if(!from||!to)return;
@@ -495,6 +524,9 @@ function openAnswer(ok=true){
   $('tick').classList.toggle('bad',!ok);
 }
 function resetForRun(question,isRetry=false){
+  activeProviderNode='';
+  completedProviders=new Set();
+  ambientLastNode='you';
   currentQuestion=question;
   currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
@@ -544,11 +576,13 @@ async function handleEvent(evt){
     active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
     completed.add('router');
     setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
+    setActiveProvider(evt.model);
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
     currentPresentation=evt.presentation||currentPresentation;
     lastWorker=roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
+    setActiveProvider(evt.model);
     active=new Set([lastWorker]); setFlowEdge(`router:${lastWorker}`); render(); kickNode(lastWorker); return;
   }
   if(evt.type==='tool'&&evt.tool==='github'){
@@ -590,6 +624,7 @@ async function handleEvent(evt){
     setState('SWITCHING','busy');
     updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
     updateRoleModel(lastWorker,evt.model);
+    setActiveProvider(evt.model);
     active=new Set([lastWorker]);
     setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     render(); kickNode(lastWorker); return;
@@ -610,6 +645,8 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='reviewer'){
+    if(activeProviderNode)completedProviders.add(activeProviderNode);
+    activeProviderNode='';
     completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); setFlowEdge(`${lastWorker}:reviewer`); render(); kickNode('reviewer'); return;
@@ -630,6 +667,8 @@ async function handleEvent(evt){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; updatePending('Reviewer requested a refinement…'); return;
   }
   if(evt.type==='done'){
+    if(activeProviderNode)completedProviders.add(activeProviderNode);
+    activeProviderNode='';
     clearFailedAttempt(currentQuestion);
     lastSuccessfulModel=String(evt.model||'');
     lastSuccessfulTaskType=String(evt.taskType||'');
@@ -796,6 +835,39 @@ function submitFollow(){
   resizeFollow();
   ask(text,false);
 }
+async function initProviderRoster(){
+  try{
+    const response=await fetch('/api/health',{headers:{Accept:'application/json'}});
+    if(!response.ok)return;
+    const health=await response.json();
+    const providers=health?.providers||{};
+    const state={
+      gemini:Boolean(providers.gemini),
+      openai:Boolean(providers.openai),
+      claude:Boolean(providers.anthropic),
+      deepseek:Boolean(providers.openrouter),
+      qwen:Boolean(providers.openrouter),
+      grok:Boolean(providers.openrouter)
+    };
+    document.querySelectorAll('[data-provider-node]').forEach(node=>{
+      const id=node.dataset.providerNode;
+      const enabled=Boolean(state[id]);
+      node.classList.toggle('available',enabled);
+      node.classList.toggle('offline',!enabled);
+      const small=node.querySelector('small');
+      if(!small)return;
+      if(enabled){
+        if(id==='gemini')small.textContent='READY · Gemini';
+        else if(id==='openai')small.textContent='READY · OpenAI';
+        else if(id==='claude')small.textContent='READY · Anthropic';
+        else small.textContent='READY · OpenRouter';
+      }else{
+        small.textContent=(id==='deepseek'||id==='qwen'||id==='grok')?'STANDBY · OpenRouter':'STANDBY';
+      }
+    });
+  }catch{}
+}
+
 function initVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){mic.disabled=true;mic.title='Voice input is not supported in this browser';return}
@@ -860,4 +932,4 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>setParallax(0,0));
 
-draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
+draw(); initVoice(); initProviderRoster(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
