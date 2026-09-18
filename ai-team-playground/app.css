@@ -1912,3 +1912,107 @@ body{overflow:hidden}
 }
 #workspace.open .ambient{opacity:.10!important}
 #workspace.open .scanBeam{opacity:.05!important}
+
+/* Relay viewport-safe tool modals v19 */
+body.toolModalOpen{
+  overflow:hidden!important;
+}
+.videoEditorPanel,
+.mediaGeneratorPanel{
+  position:fixed!important;
+  inset:68px 0 0!important;
+  z-index:9999!important;
+  display:none;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  pointer-events:auto!important;
+  padding:18px 18px 28px!important;
+  background:rgba(1,4,8,.76)!important;
+  backdrop-filter:blur(18px);
+}
+.videoEditorPanel.open,
+.mediaGeneratorPanel.open{
+  display:flex!important;
+}
+.videoEditorCard,
+.mediaGeneratorCard{
+  position:relative;
+  flex:0 0 auto;
+  width:min(760px,calc(100vw - 36px))!important;
+  max-height:none!important;
+  min-height:0;
+  overflow:visible!important;
+  margin:0 auto!important;
+  padding:16px!important;
+  box-sizing:border-box;
+}
+.videoEditorHead{
+  position:sticky;
+  top:-1px;
+  z-index:8;
+  margin:-4px -4px 12px!important;
+  padding:8px 6px 10px!important;
+  background:linear-gradient(180deg,rgba(7,14,23,.995) 72%,rgba(7,14,23,.88));
+  backdrop-filter:blur(14px);
+}
+#videoEditorClose,
+#mediaGeneratorClose{
+  flex:0 0 auto;
+  pointer-events:auto!important;
+}
+.mediaTabs{
+  position:sticky;
+  top:58px;
+  z-index:7;
+  background:rgba(7,14,23,.96)!important;
+  backdrop-filter:blur(12px);
+}
+.mediaGeneratorCard .videoEditorActions{
+  position:sticky;
+  bottom:0;
+  z-index:7;
+  margin:12px -4px -4px;
+  padding:10px 4px 4px;
+  background:linear-gradient(0deg,rgba(7,14,23,.995) 70%,rgba(7,14,23,.82));
+  backdrop-filter:blur(14px);
+}
+.mediaPromptLabel textarea{
+  min-height:96px!important;
+  max-height:150px!important;
+}
+.mediaGeneratorCard .videoEditGrid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+.mediaKeyRow{
+  margin-bottom:10px!important;
+}
+#mediaProgress{
+  max-width:420px;
+  white-space:normal;
+  line-height:1.35;
+}
+.mediaOutput{
+  padding-bottom:8px;
+}
+@media(max-width:900px){
+  .videoEditorPanel,
+  .mediaGeneratorPanel{
+    inset:68px 0 0!important;
+    padding:10px 10px 24px!important;
+  }
+  .videoEditorCard,
+  .mediaGeneratorCard{
+    width:calc(100vw - 20px)!important;
+  }
+}
+@media(max-width:640px){
+  .mediaGeneratorCard .videoEditGrid{
+    grid-template-columns:1fr!important;
+  }
+  .mediaTabs{top:54px}
+  .mediaKeyRow label{grid-template-columns:1fr!important}
+}
