@@ -193,17 +193,70 @@ function appendStructuredText(container,text=''){
 function renderHandwrittenPages(body,text=''){
   const rawText=String(text).trim();
   let parts=rawText.split(/(?=^(?:#{1,6}\s*)?(?:\*\*)?\s*WEEK\s+\d+\b)/gmi).map(x=>x.trim()).filter(Boolean);
-  if(parts.length<2)parts=[rawText];
+  let intro='';
+  if(parts.length>1 && !/^(?:#{1,6}\s*)?(?:\*\*)?\s*WEEK\s+\d+\b/i.test(parts[0])){
+    intro=parts.shift()||'';
+  }
+  if(!parts.length)parts=[intro||rawText];
+
+  const deck=document.createElement('div');deck.className='handwrittenDeck';
+
+  if(intro){
+    const introEl=document.createElement('div');
+    introEl.className='handwrittenIntro';
+    appendStructuredText(introEl,intro);
+    deck.appendChild(introEl);
+  }
+
+  const nav=document.createElement('div');nav.className='noteDeckNav';
+  const prev=document.createElement('button');prev.type='button';prev.className='noteNavBtn';prev.textContent='‹';
+  const counter=document.createElement('div');counter.className='noteDeckCounter';
+  const next=document.createElement('button');next.type='button';next.className='noteNavBtn';next.textContent='›';
+  nav.append(prev,counter,next);
+
+  const tabs=document.createElement('div');tabs.className='noteWeekTabs';
+  const viewport=document.createElement('div');viewport.className='noteDeckViewport';
   const wrap=document.createElement('div');wrap.className='handwrittenPages';
+  viewport.appendChild(wrap);
+
+  const pages=[];
   parts.forEach((part,index)=>{
-    const page=document.createElement('section');page.className='notePage';
+    const page=document.createElement('section');page.className='notePage';page.dataset.page=String(index);
     const clip=document.createElement('div');clip.className='paperClip';
     const num=document.createElement('div');num.className='notePageNo';num.textContent=String(index+1).padStart(2,'0');
     const ink=document.createElement('div');ink.className='noteInk';
     appendStructuredText(ink,part);
-    page.append(clip,num,ink);wrap.appendChild(page);
+    page.append(clip,num,ink);wrap.appendChild(page);pages.push(page);
+
+    const tab=document.createElement('button');
+    tab.type='button';tab.className='noteWeekTab';tab.textContent=parts.length>1?'W'+(index+1):'NOTE';
+    tab.dataset.page=String(index);tabs.appendChild(tab);
   });
-  body.appendChild(wrap);
+
+  let current=0;
+  const show=index=>{
+    current=Math.max(0,Math.min(index,pages.length-1));
+    pages.forEach((page,i)=>page.classList.toggle('active',i===current));
+    [...tabs.children].forEach((tab,i)=>tab.classList.toggle('active',i===current));
+    counter.textContent=parts.length>1?'Week '+(current+1)+' of '+pages.length:'Note';
+    prev.disabled=current===0;next.disabled=current===pages.length-1;
+    const ink=pages[current]?.querySelector('.noteInk');
+    if(ink)ink.scrollTop=0;
+  };
+  prev.addEventListener('click',()=>show(current-1));
+  next.addEventListener('click',()=>show(current+1));
+  tabs.addEventListener('click',event=>{
+    const target=event.target.closest('.noteWeekTab');
+    if(target)show(Number(target.dataset.page||0));
+  });
+  deck.addEventListener('keydown',event=>{
+    if(event.key==='ArrowLeft'){event.preventDefault();show(current-1)}
+    if(event.key==='ArrowRight'){event.preventDefault();show(current+1)}
+  });
+  deck.tabIndex=0;
+  deck.append(nav,tabs,viewport);
+  body.appendChild(deck);
+  show(0);
 }
 function applyPresentation(row,text,presentation){
   if(!row)return;
