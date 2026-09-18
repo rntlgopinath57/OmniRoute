@@ -23,10 +23,10 @@ const VISUAL_ROUTES={
 const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
-const followQ=$('followQ'),followGo=$('followGo'),canvas=$('canvas'),burstLayer=$('burstLayer');
+const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
-let lastWorker='openai', recognition=null, currentQuestion='', conversation=[];
+let lastWorker='openai', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 
 function classify(t){
   const s=t.toLowerCase();
@@ -104,6 +104,7 @@ function render(){
   go.disabled=busy||!q.value.trim();
   followGo.disabled=busy||!followQ.value.trim();
   mic.classList.toggle('listening',listening);
+  followMic.classList.toggle('listening',listening&&voiceTarget===followQ);
 }
 function burstAt(id,kind='route'){
   const p=POS[id];
@@ -135,42 +136,140 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function travel(a,b,ms=300){
   active=new Set([b]); activeEdges=new Set([`${a}:${b}`]); render(); kickNode(b); await wait(ms);
 }
+function scrollThread(){
+  requestAnimationFrame(()=>{ thread.scrollTop=thread.scrollHeight; });
+}
+function clearWelcome(){
+  const welcome=thread.querySelector('.threadWelcome');
+  if(welcome)welcome.remove();
+}
+function appendMessage(role,text,meta=''){
+  clearWelcome();
+  const row=document.createElement('div');
+  row.className=`messageRow ${role}`;
+  const bubble=document.createElement('article');
+  bubble.className='messageBubble';
+  const label=document.createElement('div');
+  label.className='messageLabel';
+  label.textContent=role==='user'?'YOU':'AI TEAM';
+  const body=document.createElement('div');
+  body.className='messageText';
+  body.textContent=text;
+  bubble.append(label,body);
+  if(meta){
+    const m=document.createElement('div');
+    m.className='messageMeta';
+    m.textContent=meta;
+    bubble.appendChild(m);
+  }
+  row.appendChild(bubble);
+  thread.appendChild(row);
+  scrollThread();
+  return row;
+}
+function startPending(text='Understanding your request…'){
+  pendingMessage=appendMessage('assistant',text);
+  pendingMessage.classList.add('pending');
+  const dots=document.createElement('span');
+  dots.className='thinkingDots';
+  dots.innerHTML='<i></i><i></i><i></i>';
+  pendingMessage.querySelector('.messageBubble').appendChild(dots);
+}
+function updatePending(text){
+  if(!pendingMessage)return;
+  const el=pendingMessage.querySelector('.messageText');
+  if(el)el.textContent=text;
+  scrollThread();
+}
+function resolvePending(text,meta){
+  if(!pendingMessage){
+    pendingMessage=appendMessage('assistant',text,meta);
+    return;
+  }
+  pendingMessage.classList.remove('pending','failed');
+  const el=pendingMessage.querySelector('.messageText');
+  if(el)el.textContent=text;
+  const dots=pendingMessage.querySelector('.thinkingDots');
+  if(dots)dots.remove();
+  let m=pendingMessage.querySelector('.messageMeta');
+  if(!m){
+    m=document.createElement('div');
+    m.className='messageMeta';
+    pendingMessage.querySelector('.messageBubble').appendChild(m);
+  }
+  m.textContent=meta||'Validated';
+  pendingMessage=null;
+  scrollThread();
+}
+function failPending(message){
+  if(!pendingMessage)pendingMessage=appendMessage('assistant',message);
+  pendingMessage.classList.remove('pending');
+  pendingMessage.classList.add('failed');
+  const text=pendingMessage.querySelector('.messageText');
+  if(text)text.textContent=message;
+  const dots=pendingMessage.querySelector('.thinkingDots');
+  if(dots)dots.remove();
+  const bubble=pendingMessage.querySelector('.messageBubble');
+  const retry=document.createElement('button');
+  retry.className='messageRetry';
+  retry.type='button';
+  retry.textContent='Retry this prompt';
+  retry.addEventListener('click',()=>{ if(!busy)ask(currentQuestion,true); });
+  bubble.appendChild(retry);
+  pendingMessage=null;
+  scrollThread();
+}
 function openAnswer(ok=true){
-  answer.classList.add('open'); workspace.classList.add('open');
+  answer.classList.add('open');
+  workspace.classList.add('open','chatting');
   $('tick').textContent=ok?'✓':'!';
   $('tick').classList.toggle('bad',!ok);
 }
-function resetForRun(question){
+function resetForRun(question,isRetry=false){
   currentQuestion=question;
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
-  active=new Set(['you']); activeEdges.clear(); answer.classList.remove('open'); workspace.classList.remove('open');
+  active=new Set(['you']); activeEdges.clear();
+  if(!chatStarted){
+    chatStarted=true;
+    openAnswer(true);
+  }else{
+    answer.classList.add('open');
+    workspace.classList.add('open','chatting');
+  }
+  if(!isRetry)appendMessage('user',question);
+  startPending(isRetry?'Retrying your request…':'Understanding your request…');
+  $('tick').textContent='◉'; $('tick').classList.remove('bad');
+  $('badge').textContent='PROCESSING';
+  $('meta').textContent='WORKING';
+  q.value=''; resizeInput();
   setStage('understand'); setState('THINKING','busy'); listenText.textContent='AI Team is working'; render();
 }
 function finishError(message){
   answered=false; busy=false; active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
-  $('badge').textContent='RETRY';
-  $('badge').classList.add('retryable');
+  $('badge').textContent='INTERRUPTED';
   $('meta').textContent='REQUEST STOPPED';
-  $('body').textContent=message;
-  $('agents').textContent='Your prompt is still here. Retry after the service recovers — no sign-in is required.';
-  openAnswer(false);
+  failPending(message);
+  $('tick').textContent='!'; $('tick').classList.add('bad');
+  answer.classList.add('open'); workspace.classList.add('open','chatting');
   listenText.textContent='Type or speak';
 }
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    setStage('understand'); setState('UNDERSTANDING','busy'); $('badge').classList.remove('retryable'); await travel('you','planner',260); return;
+    setStage('understand'); setState('UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
   }
   if(evt.type==='worker'){
     setStage('route'); setState('ROUTING','busy');
     active=new Set(['router']); activeEdges=new Set(['planner:router']); render(); kickNode('router'); await wait(280);
     setStage('solve'); setState('SOLVING','busy');
+    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
+    updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
     active=new Set([lastWorker]);
@@ -179,19 +278,21 @@ async function handleEvent(evt){
   }
   if(evt.type==='reviewer'){
     setStage('verify'); setState('VERIFYING','busy');
+    updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
   if(evt.type==='retry'){
-    setState('REFINING','busy'); $('badge').textContent='REFINING'; return;
+    setState('REFINING','busy'); $('badge').textContent='REFINING'; updatePending('Reviewer requested a refinement…'); return;
   }
   if(evt.type==='done'){
     answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
-    $('badge').classList.remove('retryable');
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
-    $('body').textContent=evt.answer||'No answer returned.';
-    $('agents').textContent=`Specialist: ${friendlyModel(evt.model||'AI model')} · Independent review passed · OmniRoute server-side gateway`;
+    resolvePending(
+      evt.answer||'No answer returned.',
+      `${friendlyModel(evt.model||'AI model')} · independent review passed`
+    );
     if(currentQuestion && evt.answer){
       conversation.push({role:'user',content:currentQuestion},{role:'assistant',content:evt.answer});
       conversation=conversation.slice(-8);
@@ -203,13 +304,13 @@ async function handleEvent(evt){
   }
   if(evt.type==='error') throw new Error(evt.message||'AI Team failed');
 }
-async function ask(questionOverride=''){
+async function ask(questionOverride='',isRetry=false){
   const question=(questionOverride||q.value).trim();
   if(!question||busy)return;
   q.value=question;
   resizeInput();
   if(listening&&recognition){try{recognition.stop()}catch{}}
-  resetForRun(question);
+  resetForRun(question,isRetry);
   try{
     if(/raw\.githack\.com|raw\.githubusercontent\.com/.test(location.hostname)){
       throw new Error('This static preview cannot execute the secure AI backend. Open the deployed OmniRoute URL for live answers.');
@@ -253,7 +354,7 @@ function submitFollow(){
   if(!text||busy)return;
   followQ.value='';
   resizeFollow();
-  ask(text);
+  ask(text,false);
 }
 function initVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -265,7 +366,11 @@ function initVoice(){
   recognition.onresult=e=>{
     let text='';
     for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
-    if(text.trim()){q.value=text.trim();resizeInput();render()}
+    if(text.trim()){
+      voiceTarget.value=text.trim();
+      if(voiceTarget===followQ)resizeFollow(); else resizeInput();
+      render();
+    }
   };
   recognition.onerror=e=>{
     listening=false; setState('READY'); listenText.textContent=e.error==='not-allowed'?'Microphone permission was not granted':'Voice input stopped'; render();
@@ -277,20 +382,20 @@ function initVoice(){
     render();
   };
 }
-mic.addEventListener('click',()=>{
+function toggleVoice(target){
   if(!recognition)return;
+  voiceTarget=target;
   if(listening){try{recognition.stop()}catch{};return}
   try{recognition.start()}catch{}
-});
+}
+mic.addEventListener('click',()=>toggleVoice(q));
+followMic.addEventListener('click',()=>toggleVoice(followQ));
 q.addEventListener('input',()=>{resizeInput();render()});
 q.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}});
 followQ.addEventListener('input',()=>{resizeFollow();render()});
 followQ.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitFollow()}});
 go.addEventListener('click',()=>ask());
 followGo.addEventListener('click',submitFollow);
-$('badge').addEventListener('click',()=>{
-  if($('badge').classList.contains('retryable') && currentQuestion && !busy) ask(currentQuestion);
-});
 
 let parallaxFrame=0;
 function setParallax(x,y){
