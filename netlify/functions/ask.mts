@@ -674,6 +674,7 @@ export default async (request: Request) => {
         const candidates = longForm
           ? Array.from(new Set([
               primaryModel,
+              "gemini-3.5-flash",
               "claude-haiku-4-5",
               "deepseek/deepseek-v4-flash",
             ]))
@@ -787,9 +788,11 @@ export default async (request: Request) => {
 
         if (presentation.format !== "default") {
           emit({ type: "reviewer", model: "local-format-validator" });
-          reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "SKIPPED";
-          if (reviewStatus === "SKIPPED") {
-            emit({ type: "review_skipped", reason: "format_structure_incomplete" });
+          const formatValid = presentationLooksStructured(answer, presentation, question);
+          reviewStatus = formatValid ? "PASS" : "FAIL";
+          if (!formatValid) {
+            review = "FAIL\nReturn the requested visual format as concise structured content. Do not emit Mermaid/Graphviz source or raw diagram code.";
+            emit({ type: "review_failed", reason: "format_structure_incomplete" });
           }
         } else if (useFastPath(question, taskType, presentation)) {
           reviewStatus = "FAST_PATH";
