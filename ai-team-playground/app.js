@@ -126,6 +126,7 @@ function resetForRun(question){
 function finishError(message){
   answered=false; busy=false; active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
   $('badge').textContent='RETRY';
+  $('badge').classList.add('retryable');
   $('meta').textContent='REQUEST STOPPED';
   $('body').textContent=message;
   $('agents').textContent='Your prompt is still here. Retry after the service recovers — no sign-in is required.';
@@ -135,7 +136,7 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    setStage('understand'); setState('UNDERSTANDING','busy'); await travel('you','planner',260); return;
+    setStage('understand'); setState('UNDERSTANDING','busy'); $('badge').classList.remove('retryable'); await travel('you','planner',260); return;
   }
   if(evt.type==='worker'){
     setStage('route'); setState('ROUTING','busy');
@@ -156,6 +157,7 @@ async function handleEvent(evt){
     answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you');
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
+    $('badge').classList.remove('retryable');
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
     $('body').textContent=evt.answer||'No answer returned.';
     $('agents').textContent=`Specialist: ${friendlyModel(evt.model||'AI model')} · Independent review passed · OmniRoute server-side gateway`;
@@ -255,5 +257,8 @@ followQ.addEventListener('input',()=>{resizeFollow();render()});
 followQ.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitFollow()}});
 go.addEventListener('click',()=>ask());
 followGo.addEventListener('click',submitFollow);
+$('badge').addEventListener('click',()=>{
+  if($('badge').classList.contains('retryable') && currentQuestion && !busy) ask(currentQuestion);
+});
 
 draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
