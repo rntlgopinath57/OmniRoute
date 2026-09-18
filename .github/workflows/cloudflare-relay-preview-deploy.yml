@@ -99,10 +99,10 @@ jobs:
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
         run: |
           url="${{ steps.deploy.outputs.url }}/api/ask"
-          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFLARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
           echo "$response"
           echo "$response" | grep -q '"type":"done"'
-          echo "$response" | grep -q 'CLOUDFARE_RELAY_OK'
+          echo "$response" | grep -q 'CLOUDFLARE_RELAY_OK'
 
       - name: Verify progressive Relay UI
         if: steps.deploy.outputs.url != ''
