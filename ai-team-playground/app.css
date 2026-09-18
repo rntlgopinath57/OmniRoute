@@ -2713,3 +2713,74 @@ header{
     font-size:8px;
   }
 }
+
+
+/* Relay visible activity signal v24 */
+.runSignal{
+  flex:1 1 auto;
+  min-width:72px;
+  max-width:260px;
+  height:18px;
+  position:relative;
+  overflow:hidden;
+  opacity:.34;
+  pointer-events:none;
+}
+.runSignal:before{
+  content:"";
+  position:absolute;
+  left:0;right:0;top:50%;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(113,239,255,.16),rgba(113,239,255,.36),rgba(113,239,255,.16),transparent);
+  transform:translateY(-50%);
+}
+.runSignal span{
+  position:absolute;
+  left:0;top:50%;
+  width:100%;
+  height:12px;
+  transform:translateY(-50%);
+  background:
+    linear-gradient(90deg,transparent 0 5%,rgba(113,239,255,.10) 18%,transparent 34% 100%);
+  clip-path:polygon(0 50%,8% 50%,11% 28%,15% 74%,19% 43%,23% 54%,29% 14%,35% 86%,41% 35%,47% 58%,55% 26%,63% 69%,70% 46%,78% 52%,86% 22%,93% 78%,100% 50%,100% 56%,93% 84%,86% 28%,78% 58%,70% 52%,63% 75%,55% 32%,47% 64%,41% 41%,35% 92%,29% 20%,23% 60%,19% 49%,15% 80%,11% 34%,8% 56%,0 56%);
+}
+.runSignal b{
+  position:absolute;
+  top:50%;
+  left:-18px;
+  width:18px;
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,#fff,var(--cyan));
+  box-shadow:0 0 8px rgba(113,239,255,.9),0 0 18px rgba(113,239,255,.45);
+  transform:translateY(-50%);
+  opacity:0;
+}
+.runStrip[data-mode="busy"] .runSignal,
+.runStrip[data-mode="listening"] .runSignal{opacity:.95}
+.runStrip[data-mode="busy"] .runSignal span,
+.runStrip[data-mode="listening"] .runSignal span{animation:runWave 1.05s ease-in-out infinite}
+.runStrip[data-mode="busy"] .runSignal b,
+.runStrip[data-mode="listening"] .runSignal b{opacity:1;animation:runFlight 1.15s linear infinite}
+.runStrip[data-mode="done"] .runSignal{opacity:.68}
+.runStrip[data-mode="done"] .runSignal b{
+  opacity:1;
+  background:linear-gradient(90deg,transparent,#fff,var(--green));
+  box-shadow:0 0 8px rgba(82,242,178,.9),0 0 18px rgba(82,242,178,.42);
+  animation:runReturn .72s cubic-bezier(.2,.8,.2,1) 1;
+}
+@keyframes runWave{
+  0%,100%{transform:translateY(-50%) scaleY(.72);filter:brightness(.9)}
+  50%{transform:translateY(-50%) scaleY(1.28);filter:brightness(1.35)}
+}
+@keyframes runFlight{
+  from{left:-18px}
+  to{left:calc(100% + 2px)}
+}
+@keyframes runReturn{
+  from{left:calc(100% + 2px)}
+  to{left:-18px}
+}
+@media(max-width:720px){
+  .runSignal{max-width:120px}
+}
