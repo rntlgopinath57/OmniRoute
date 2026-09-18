@@ -567,12 +567,15 @@ async function handleEvent(evt){
 }
 function isVideoEditIntent(text=''){
   const s=text.toLowerCase();
-  return /\b(video|clip|footage)\b/.test(s) && /\b(edit|trim|cut|crop|resize|reframe|mute|remove audio|aspect|convert)\b/.test(s);
+  return /\b(video|vedio|vidio|vdeo|clip|footage)\b/.test(s) && /\b(edit|trim|cut|crop|resize|reframe|mute|remove audio|aspect|convert)\b/.test(s);
 }
 function mediaIntentType(text=''){
   const s=text.toLowerCase();
-  if(/\b(generate|create|make|render)\b/.test(s) && /\b(video|clip|animation|reel)\b/.test(s))return 'video';
-  if(/\b(generate|create|make|draw|render)\b/.test(s) && /\b(image|picture|photo|poster|art|logo)\b/.test(s))return 'image';
+  const create=/\b(generate|create|make|render|produce|build|show me|give me)\b/.test(s);
+  const video=/\b(video|vedio|vidio|vdeo|clip|animation|reel|movie)\b/.test(s);
+  const image=/\b(image|img|picture|pic|photo|poster|art|logo|illustration)\b/.test(s);
+  if(create&&video)return 'video';
+  if(create&&image)return 'image';
   return '';
 }
 function openVideoEditorForPrompt(question){
@@ -595,17 +598,44 @@ async function ask(questionOverride='',isRetry=false){
   if(!question||busy)return;
   if(!isRetry&&isVideoEditIntent(question)&&openVideoEditorForPrompt(question))return;
   const mediaType=!isRetry?mediaIntentType(question):'';
-  if(mediaType&&window.RelayMediaGenerator?.openFromPrompt){
+  if(mediaType&&window.RelayMediaGenerator?.generateFromPrompt){
     if(!chatStarted){chatStarted=true;openAnswer(true)}
     appendMessage('user',question);
-    appendMessage('assistant',`${mediaType==='video'?'Video':'Image'} generator ready. Review the prompt, then press Generate.`);
+    const mediaRow=appendMessage('assistant',mediaType==='video'
+      ? 'Generating your video with Veo 3.1 now…'
+      : 'Generating your image now…');
     $('badge').textContent='MEDIA TOOL';
     $('meta').textContent=mediaType==='video'?'VEO 3.1':'NANO BANANA 2';
-    setState(mediaType==='video'?'VIDEO GENERATOR':'IMAGE GENERATOR','done');
+    busy=true;
+    selected=new Set(['designer']);
+    active=new Set(['designer']);
+    completed.add('planner'); completed.add('router');
+    setFlowEdge('router:designer');
+    setStage('render');
+    setState(mediaType==='video'?'DESIGNER · GENERATING VIDEO':'DESIGNER · GENERATING IMAGE','busy');
     q.value=''; resizeInput();
     followQ.value=''; resizeFollow();
-    window.RelayMediaGenerator.openFromPrompt(mediaType,question);
     render();
+    try{
+      await window.RelayMediaGenerator.generateFromPrompt(mediaType,question);
+      completed.add('designer');
+      active=new Set(['you']);
+      setFlowEdge('designer:reviewer');
+      completed.add('reviewer');
+      setFlowEdge('reviewer:you');
+      mediaRow.querySelector('.messageText').textContent=mediaType==='video'
+        ? 'Video generation completed. The result is ready in the media panel.'
+        : 'Image generation completed. The result is ready in the media panel.';
+      $('badge').textContent='READY';
+      setStage('done');
+      setState('ANSWERED','done');
+    }catch(error){
+      mediaRow.classList.add('failed');
+      mediaRow.querySelector('.messageText').textContent=error?.message||'Media generation failed.';
+      setState('MEDIA · ATTENTION','error');
+    }finally{
+      busy=false;render();
+    }
     return;
   }
   q.value=question;
