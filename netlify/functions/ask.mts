@@ -340,7 +340,7 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
     return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
   }
   if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
-    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+\s*--?>\s*[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
+    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
       return false;
     }
     return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
