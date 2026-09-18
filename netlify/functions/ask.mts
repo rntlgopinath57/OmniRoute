@@ -176,8 +176,106 @@ async function githubRepoContext(text: string) {
   };
 }
 
-function useFastPath(question: string, taskType: string) {
+
+type PresentationIntent = {
+  format: string;
+  visual: boolean;
+  explicit: boolean;
+  label: string;
+};
+
+const PRESENTATION_PATTERNS: Array<{
+  format: string;
+  label: string;
+  visual: boolean;
+  patterns: RegExp[];
+}> = [
+  { format: "handwritten", label: "HANDWRITTEN", visual: true, patterns: [/\/handwritten\b/i,/\bhand[- ]?written\b/i,/\bnotebook[- ]style\b/i] },
+  { format: "cheatsheet", label: "CHEATSHEET", visual: true, patterns: [/\/cheatsheet\b/i,/\bcheat\s*sheet\b/i] },
+  { format: "blueprint", label: "BLUEPRINT", visual: true, patterns: [/\/blueprint\b/i,/\bblueprint\b/i] },
+  { format: "flashcards", label: "FLASHCARDS", visual: true, patterns: [/\/flashcards?\b/i,/\bflash\s*cards?\b/i] },
+  { format: "mindmap", label: "MIND MAP", visual: true, patterns: [/\/mindmap\b/i,/\bmind\s*map\b/i] },
+  { format: "exploded", label: "EXPLODED VIEW", visual: true, patterns: [/\/exploded\b/i,/\bexploded\s+view\b/i] },
+  { format: "flowchart", label: "FLOWCHART", visual: true, patterns: [/\/flowchart\b/i,/\bflow\s*chart\b/i] },
+  { format: "timeline", label: "TIMELINE", visual: true, patterns: [/\/timeline\b/i,/\btimeline\b/i] },
+  { format: "roadmap", label: "ROADMAP", visual: true, patterns: [/\/roadmap\b/i,/\broad\s*map\b/i] },
+  { format: "framework", label: "FRAMEWORK", visual: true, patterns: [/\/framework\b/i,/\bframework\b/i] },
+  { format: "comparison", label: "COMPARISON", visual: true, patterns: [/\/comparison\b/i,/\bcomparison\b/i,/\bcompare\b/i,/\bversus\b/i,/\bvs\.?\b/i] },
+  { format: "before_after", label: "BEFORE / AFTER", visual: true, patterns: [/\/before[-_ ]?after\b/i,/\bbefore\s*(?:\/|and|&|vs)\s*after\b/i] },
+  { format: "hierarchy", label: "PYRAMID / HIERARCHY", visual: true, patterns: [/\/pyramid\b/i,/\/hierarchy\b/i,/\bpyramid\b/i,/\bhierarchy\b/i] },
+  { format: "matrix", label: "MATRIX", visual: true, patterns: [/\/matrix\b/i,/\bmatrix\b/i] },
+  { format: "cycle", label: "CYCLE", visual: true, patterns: [/\/cycle\b/i,/\bcycle\b/i] },
+  { format: "sticky", label: "STICKY NOTES", visual: true, patterns: [/\/sticky(?:[-_ ]?notes?)?\b/i,/\bsticky\s+notes?\b/i] },
+  { format: "infographic", label: "INFOGRAPHIC", visual: true, patterns: [/\/infographic\b/i,/\binfographic\b/i] },
+  { format: "whiteboard", label: "WHITEBOARD", visual: true, patterns: [/\/whiteboard\b/i,/\bwhite\s*board\b/i] },
+  { format: "sketchnote", label: "SKETCHNOTE", visual: true, patterns: [/\/sketchnote\b/i,/\bsketch\s*note\b/i] },
+  { format: "notion", label: "NOTION", visual: true, patterns: [/\/notion\b/i,/\bnotion[- ]style\b/i] },
+  { format: "goodnotes", label: "GOODNOTES", visual: true, patterns: [/\/goodnotes\b/i,/\bgood\s*notes\b/i,/\bgoodnotes[- ]style\b/i] },
+];
+
+function detectPresentationIntent(text: string): PresentationIntent {
+  const q = text.trim();
+  for (const item of PRESENTATION_PATTERNS) {
+    if (item.patterns.some((pattern) => pattern.test(q))) {
+      return { format: item.format, visual: item.visual, explicit: true, label: item.label };
+    }
+  }
+
+  const lower = q.toLowerCase();
+  if (/\b(study|revision|learning)\b.*\bnotes?\b|\bnotes?\b.*\bweek(?:ly)?\b/.test(lower)) {
+    return { format: "goodnotes", visual: true, explicit: false, label: "GOODNOTES" };
+  }
+  if (/\barchitecture|system design|components?|layers?|topology\b/.test(lower)) {
+    return { format: "blueprint", visual: true, explicit: false, label: "BLUEPRINT" };
+  }
+  if (/\bprocess|workflow|how .* works|steps?\b/.test(lower)) {
+    return { format: "flowchart", visual: true, explicit: false, label: "FLOWCHART" };
+  }
+  if (/\bweek[- ]by[- ]week|month[- ]by[- ]month|milestones?|implementation plan\b/.test(lower)) {
+    return { format: "roadmap", visual: true, explicit: false, label: "ROADMAP" };
+  }
+
+  return { format: "default", visual: false, explicit: false, label: "STANDARD" };
+}
+
+function presentationInstruction(presentation: PresentationIntent) {
+  if (!presentation || presentation.format === "default") return "";
+
+  const shared =
+    " PRESENTATION CONTRACT: The requested presentation format is " + presentation.label +
+    ". Treat this as a mandatory deliverable requirement, not a suggestion. " +
+    "Write concise, structured content that Relay can render visually. Do not replace a requested visual format with ASCII art, generic prose, or a code block.";
+
+  const specific: Record<string,string> = {
+    handwritten: " Use a clear notebook title, then short handwritten-note sections. If the request is week-by-week, create a distinct WEEK heading for every week with compact goals, concepts, practice, and checkboxes.",
+    goodnotes: " Structure this like polished study notes with clear headings, callouts, concise bullets, and revision-friendly chunks.",
+    sketchnote: " Use short labels, arrows/relationships described in compact phrases, and memorable callouts.",
+    cheatsheet: " Be dense and scan-friendly: headings, short definitions, commands/formulas, do/don't points, and quick examples.",
+    blueprint: " Organize into layers/components, responsibilities, interfaces, data flow, dependencies, and risks.",
+    flashcards: " Produce repeated QUESTION / ANSWER pairs, one concept per card.",
+    mindmap: " Start with one central topic, then branches and sub-branches using concise labels.",
+    exploded: " Break the subject into parts, what each part does, inputs/outputs, and how parts connect.",
+    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node.",
+    timeline: " Use dated or ordered milestones with a short event/outcome for each.",
+    roadmap: " Use phases or time periods, with objective, actions, and exit criteria for each.",
+    framework: " Use named pillars/components with purpose, inputs, outputs, and relationships.",
+    comparison: " Use the same criteria on both sides. Prefer a compact comparison matrix followed by a concise conclusion.",
+    before_after: " Separate BEFORE and AFTER clearly, then list the changes and impact.",
+    hierarchy: " Organize from top-level to lower levels with concise parent/child labels.",
+    matrix: " Define axes/criteria clearly and place each option consistently against them.",
+    cycle: " Use numbered repeating stages and state what feeds the next stage.",
+    sticky: " Use several short, self-contained idea blocks; one idea/action per note.",
+    infographic: " Use a strong title, 3-7 visual sections, key numbers/callouts, and minimal prose.",
+    whiteboard: " Use short boxes, arrows/relationships, decisions, and action notes rather than long paragraphs.",
+    notion: " Use clean document sections, toggles/checklists style content, and concise callouts."
+  };
+
+  return shared + (specific[presentation.format] || "");
+}
+
+function useFastPath(question: string, taskType: string, presentation: PresentationIntent) {
   const q = question.toLowerCase();
+  if (presentation?.explicit && presentation.format !== "default") return false;
   const highRiskOrFresh = /\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news|verify|fact[- ]?check)\b/.test(q);
   const explicitlyComplex = /\b(deep research|comprehensive audit|production deploy|security review|threat model)\b/.test(q);
   if (highRiskOrFresh || explicitlyComplex) return false;
@@ -377,11 +475,13 @@ export default async (request: Request) => {
   let history: Array<{ role: "user" | "assistant"; content: string }> = [];
   let preferredModel = "";
   let previousTaskType = "";
+  let previousPresentation = "";
   try {
     const body = await request.json();
     question = typeof body?.question === "string" ? body.question.trim() : "";
     preferredModel = typeof body?.preferredModel === "string" ? body.preferredModel.trim() : "";
     previousTaskType = typeof body?.previousTaskType === "string" ? body.previousTaskType.trim() : "";
+    previousPresentation = typeof body?.previousPresentation === "string" ? body.previousPresentation.trim() : "";
     if (Array.isArray(body?.history)) {
       history = body.history
         .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string")
@@ -412,15 +512,30 @@ export default async (request: Request) => {
         const taskType = followUp && previousTaskType
           ? previousTaskType
           : classify(contextualQuestion);
+        let presentation = detectPresentationIntent(question);
+        if (followUp && presentation.format === "default" && previousPresentation) {
+          const stickyPresentation = PRESENTATION_PATTERNS.find((item) => item.format === previousPresentation);
+          if (stickyPresentation) {
+            presentation = {
+              format: stickyPresentation.format,
+              visual: stickyPresentation.visual,
+              explicit: false,
+              label: stickyPresentation.label,
+            };
+          }
+        }
         const stickyModel = followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
         const workerModel = stickyModel || workerFor(taskType, contextualQuestion);
         const reviewerModel = reviewerFor(workerModel);
 
-        emit({ type: "planner", taskType });
+        emit({ type: "planner", taskType, presentation });
         await new Promise((resolve) => setTimeout(resolve, 180));
-        emit({ type: "worker", taskType, model: workerModel });
+        if (presentation.format !== "default") {
+          emit({ type: "presentation", presentation });
+        }
+        emit({ type: "worker", taskType, model: workerModel, presentation });
 
         let actualWorkerModel = workerModel;
         const contextNote = disambiguationContext(contextualQuestion);
@@ -436,6 +551,7 @@ export default async (request: Request) => {
             content:
               "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture."
               + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : "")
+              + presentationInstruction(presentation)
               + (repoLookup.context
                 ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories:\n\n" + repoLookup.context
                 : repoLookup.inaccessible.length
@@ -511,7 +627,7 @@ export default async (request: Request) => {
         let review = "";
         let reviewStatus: "PASS" | "FAIL" | "SKIPPED" | "FAST_PATH" = "SKIPPED";
 
-        if (useFastPath(question, taskType)) {
+        if (useFastPath(question, taskType, presentation)) {
           reviewStatus = "FAST_PATH";
           emit({ type: "fast_path", reason: "simple_or_low_risk" });
         } else {
@@ -523,7 +639,7 @@ export default async (request: Request) => {
               {
                 role: "system",
                 content:
-                  "You are an independent reviewer. Evaluate relevance, correctness, completeness, and unsupported claims. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
+                  "You are an independent reviewer. Evaluate relevance, correctness, completeness, unsupported claims, and presentation-format compliance. The required presentation format is " + presentation.label + ". A requested visual format must not be replaced by ASCII art, generic prose, or a code block. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
               },
               ...history,
               { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
@@ -576,6 +692,7 @@ export default async (request: Request) => {
           model: actualWorkerModel,
           reviewer: actualReviewerModel,
           taskType,
+          presentation,
         });
       } catch (error) {
         emit({
