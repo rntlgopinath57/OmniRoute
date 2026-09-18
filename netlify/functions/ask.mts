@@ -67,9 +67,16 @@ export default async (request: Request) => {
   }
 
   let question = "";
+  let history: Array<{ role: "user" | "assistant"; content: string }> = [];
   try {
     const body = await request.json();
     question = typeof body?.question === "string" ? body.question.trim() : "";
+    if (Array.isArray(body?.history)) {
+      history = body.history
+        .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string")
+        .slice(-6)
+        .map((m: any) => ({ role: m.role, content: m.content.slice(0, 6000) }));
+    }
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -96,8 +103,9 @@ export default async (request: Request) => {
           {
             role: "system",
             content:
-              "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture.",
+              "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture.",
           },
+          ...history,
           { role: "user", content: question },
         ]);
 
@@ -113,7 +121,8 @@ export default async (request: Request) => {
                 content:
                   "You are an independent reviewer. Evaluate relevance, correctness, completeness, and unsupported claims. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
               },
-              { role: "user", content: `QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
+              ...history,
+              { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
             ],
             260,
           );
@@ -130,7 +139,8 @@ export default async (request: Request) => {
                 content:
                   "You are an independent reviewer. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
               },
-              { role: "user", content: `QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
+              ...history,
+              { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
             ],
             260,
           );
@@ -142,9 +152,10 @@ export default async (request: Request) => {
             {
               role: "system",
               content:
-                "Revise the answer using the review feedback. Return only the improved final answer. Keep it direct and useful.",
+                "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful.",
             },
-            { role: "user", content: `QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
+            ...history,
+            { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
           ]);
           emit({ type: "reviewer", model: reviewerModel });
         }
