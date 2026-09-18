@@ -28,8 +28,9 @@ jobs:
 
       - name: Verify Relay bundle
         run: |
-          test -f .cloudflare-dry-run/index.js
-          grep -q "/api/ask" .cloudflare-dry-run/index.js
-          grep -q "/api/media" .cloudflare-dry-run/index.js
-          grep -q "/api/health" .cloudflare-dry-run/index.js
-          echo "Cloudflare Relay dry-run bundle validated."
+          bundle="$(find .cloudflare-dry-run -type f -name '*.js' | head -1)"
+          test -n "$bundle"
+          grep -q "/api/ask" "$bundle"
+          grep -q "/api/media" "$bundle"
+          grep -q "/api/health" "$bundle"
+          echo "Cloudflare Relay dry-run bundle validated: $bundle"
