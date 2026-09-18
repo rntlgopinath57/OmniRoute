@@ -36,6 +36,8 @@ function allowedStickyModel(model: string) {
     "gpt-5.6-sol",
     "claude-haiku-4-5",
     "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "deepseek/deepseek-v4-flash",
   ]).has(model);
 }
 
@@ -271,6 +273,38 @@ function presentationInstruction(presentation: PresentationIntent) {
   };
 
   return shared + (specific[presentation.format] || "");
+}
+
+
+function presentationLooksStructured(answer: string, presentation: PresentationIntent, question: string) {
+  if (!presentation || presentation.format === "default") return true;
+  const text = String(answer || "").trim();
+  if (text.length < 220) return false;
+
+  const q = question.toLowerCase();
+  const lower = text.toLowerCase();
+
+  if (presentation.format === "handwritten" || presentation.format === "goodnotes") {
+    if (/\bweek(?:ly)?\b/.test(q)) {
+      return /\bweek\s*1\b/.test(lower) && (/\bweek\s*2\b/.test(lower) || text.length > 700);
+    }
+    return /\n/.test(text);
+  }
+  if (presentation.format === "comparison" || presentation.format === "matrix") {
+    return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
+  }
+  if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
+    return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
+  }
+  return true;
+}
+
+function isLongFormPresentation(question: string, presentation: PresentationIntent) {
+  const q = question.toLowerCase();
+  return Boolean(
+    presentation?.visual ||
+    /\b(week[- ]?by[- ]?week|weekly plan|study plan|roadmap|timeline|comprehensive|detailed|deep)\b/.test(q)
+  );
 }
 
 function useFastPath(question: string, taskType: string, presentation: PresentationIntent) {
@@ -527,7 +561,8 @@ export default async (request: Request) => {
         const stickyModel = followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
-        const workerModel = stickyModel || workerFor(taskType, contextualQuestion);
+        const routedWorkerModel = workerFor(taskType, contextualQuestion);
+        const workerModel = stickyModel || (presentation.visual ? "gpt-5.6-luna" : routedWorkerModel);
         const reviewerModel = reviewerFor(workerModel);
 
         emit({ type: "planner", taskType, presentation });
@@ -563,30 +598,46 @@ export default async (request: Request) => {
         ];
 
         let answer = "";
+        const longForm = isLongFormPresentation(question, presentation);
         const primaryModel = actualWorkerModel;
-        const candidates = Array.from(new Set([
-          primaryModel,
-          "claude-haiku-4-5",
-          "gemini-3.5-flash",
-          "gpt-5.6-luna",
-        ]));
+        const candidates = longForm
+          ? Array.from(new Set([
+              primaryModel,
+              "claude-haiku-4-5",
+              "deepseek/deepseek-v4-flash",
+            ]))
+          : Array.from(new Set([
+              primaryModel,
+              "gpt-5.6-luna",
+              "claude-haiku-4-5",
+              "gemini-3.5-flash-lite",
+              "deepseek/deepseek-v4-flash",
+            ]));
         let pool = candidates.filter((model, index) => index === 0 || providerAvailable(model));
         if (!pool.length) pool = candidates;
 
         const failures: string[] = [];
         let rateLimited = 0;
         let creditLimited = 0;
+        let timedOut = 0;
 
         for (let index = 0; index < pool.length; index++) {
           const model = pool[index];
           if (index > 0) emit({ type: "fallback", model });
 
+          const maxTokens = longForm
+            ? (model.startsWith("gpt-") ? 2000 : 1700)
+            : (model.startsWith("gpt-") ? 1200 : 1000);
+          const timeoutMs = longForm
+            ? (index === 0 ? 22000 : index === 1 ? 14000 : 9000)
+            : (index === 0 ? 11000 : 7500);
+
           try {
             answer = await callModel(
               model,
               workerMessages,
-              model.startsWith("gpt-") ? 1200 : 1000,
-              index === 0 ? 9000 : 7000,
+              maxTokens,
+              timeoutMs,
             );
             actualWorkerModel = model;
             markProviderHealthy(model);
@@ -597,6 +648,11 @@ export default async (request: Request) => {
             failures.push(`${model}: ${message}`);
             console.warn("Relay provider attempt failed", { model, error: message });
 
+            if (/abort|timeout|timed out/i.test(message)) {
+              timedOut += 1;
+              coolDownProvider(model, 20000);
+              continue;
+            }
             if (/\b429\b|rate.?limit|resource[_ -]?exhausted/i.test(message)) {
               rateLimited += 1;
               coolDownProvider(model, 60000);
@@ -611,13 +667,38 @@ export default async (request: Request) => {
           }
         }
 
+        if (!answer && longForm && timedOut > 0) {
+          const rescueModel = "deepseek/deepseek-v4-flash";
+          emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
+          try {
+            const rescueMessages = [
+              {
+                role: "system",
+                content:
+                  "Return a compact but complete version now. Preserve every requested section and presentation structure. Use short bullets and headings so the answer fits quickly.",
+              },
+              ...workerMessages,
+            ];
+            answer = await callModel(rescueModel, rescueMessages, 900, 8500);
+            actualWorkerModel = rescueModel;
+            markProviderHealthy(rescueModel);
+            emit({ type: "worker_selected", model: actualWorkerModel });
+          } catch (rescueError) {
+            const message = rescueError instanceof Error ? rescueError.message : String(rescueError);
+            failures.push(`${rescueModel} rescue: ${message}`);
+          }
+        }
+
         if (!answer) {
           console.error("All Relay providers failed", { failures });
-          if (rateLimited === pool.length) {
-            throw new Error("Relay's available AI providers are temporarily rate-limited. Wait about a minute, then retry.");
+          if (rateLimited > 0 && rateLimited + timedOut >= pool.length) {
+            throw new Error("Relay's AI gateway is temporarily saturated. It will recover shortly; retry this prompt in about a minute.");
           }
-          if (creditLimited === pool.length) {
+          if (creditLimited > 0 && creditLimited + timedOut >= pool.length) {
             throw new Error("Relay's AI gateway credits are unavailable or exhausted. Check Netlify usage/billing.");
+          }
+          if (timedOut > 0) {
+            throw new Error("Relay's providers timed out while generating this longer response. Retry once; Relay will use the compact rescue path.");
           }
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
@@ -627,7 +708,13 @@ export default async (request: Request) => {
         let review = "";
         let reviewStatus: "PASS" | "FAIL" | "SKIPPED" | "FAST_PATH" = "SKIPPED";
 
-        if (useFastPath(question, taskType, presentation)) {
+        if (presentation.format !== "default") {
+          emit({ type: "reviewer", model: "local-format-validator" });
+          reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "SKIPPED";
+          if (reviewStatus === "SKIPPED") {
+            emit({ type: "review_skipped", reason: "format_structure_incomplete" });
+          }
+        } else if (useFastPath(question, taskType, presentation)) {
           reviewStatus = "FAST_PATH";
           emit({ type: "fast_path", reason: "simple_or_low_risk" });
         } else {
