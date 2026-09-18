@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070a">
 <title>OmniRoute AI Team</title>
-<link rel="stylesheet" href="./app.css?v=5">
+<link rel="stylesheet" href="./app.css?v=6">
 </head>
 <body>
 <main class="shell">
@@ -20,6 +20,9 @@
   <section id="workspace">
     <div id="canvas">
       <div class="ambient a1"></div><div class="ambient a2"></div><div class="ambient a3"></div>
+      <div class="neuralField" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="scanBeam" aria-hidden="true"></div>
+      <div id="burstLayer" aria-hidden="true"></div>
       <svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
       <div id="nodes"></div>
 
@@ -58,6 +61,6 @@
     </aside>
   </section>
 </main>
-<script src="./app.js?v=5"></script>
+<script src="./app.js?v=6"></script>
 </body>
 </html>
