@@ -1,32 +1,225 @@
-const POS={you:[50,92],planner:[50,75],router:[50,60],qwen:[10,37],openai:[23,24],gemini:[38,37],claude:[50,12],deepseek:[62,37],grok:[77,24],mistral:[90,37],kimi:[30,8],perplexity:[70,8],reviewer:[50,46]};
-const INFO={you:['YOU','Prompt'],planner:['PLANNER','Understands'],router:['ROUTER','Chooses team'],qwen:['QWEN','Code + reasoning'],openai:['OPENAI','General + coding'],gemini:['GEMINI','Research + design'],claude:['CLAUDE','Review + reasoning'],deepseek:['DEEPSEEK','Reasoning + code'],grok:['GROK','Critic'],mistral:['MISTRAL','Fast generalist'],kimi:['KIMI','Long context'],perplexity:['PERPLEXITY','Research'],reviewer:['REVIEWER','Independent validation']};
-const FAMILY=['qwen','openai','gemini','claude','deepseek','grok','mistral','kimi','perplexity'];
-const ROUTES={coding:['qwen','openai','claude'],research:['perplexity','gemini','claude'],automation:['openai','qwen','deepseek'],design:['gemini','claude','openai'],reasoning:['deepseek','openai','claude'],general:['openai','claude','gemini']};
-const PREF={
- qwen:[/qwen3[ ._-]?8.*max/i,/qwen3[ ._-]?7.*max/i,/qwen.*coder/i,/qwen/i],
- openai:[/gpt[ ._-]?5[ ._-]?6.*sol/i,/gpt[ ._-]?5[ ._-]?6.*luna/i,/gpt[ ._-]?5[ ._-]?5/i,/gpt/i],
- gemini:[/gemini.*3[ ._-]?6.*flash/i,/gemini.*3[ ._-]?1.*pro/i,/gemini.*3/i,/gemini/i],
- claude:[/claude.*sonnet.*4[ ._-]?6/i,/claude.*opus.*5/i,/claude.*opus.*4[ ._-]?8/i,/claude/i],
- deepseek:[/deepseek.*v?4.*flash/i,/deepseek.*v?4.*pro/i,/deepseek/i],
- grok:[/grok.*4[ ._-]?6/i,/grok.*4[ ._-]?20/i,/grok/i],
- mistral:[/mistral.*medium.*3[ ._-]?5/i,/mistral.*small.*4/i,/mistral/i],
- kimi:[/kimi.*k2[ ._-]?7/i,/kimi.*k2[ ._-]?6/i,/kimi/i],
- perplexity:[/sonar.*pro/i,/perplexity/i,/sonar/i]
+const POS={
+  you:[50,91],planner:[50,76],router:[50,61],
+  qwen:[10,38],openai:[23,24],gemini:[38,38],claude:[50,14],
+  deepseek:[62,38],grok:[77,24],mistral:[90,38],kimi:[31,8],perplexity:[69,8],
+  reviewer:[50,47]
 };
-const PROVIDER={qwen:/qwen|alibaba/i,openai:/openai/i,gemini:/google|gemini/i,claude:/anthropic|claude/i,deepseek:/deepseek/i,grok:/xai|x\.ai|grok/i,mistral:/mistral/i,kimi:/moonshot|kimi/i,perplexity:/perplexity/i};
-const $=id=>document.getElementById(id),edges=$('edges'),nodes=$('nodes'),stars=$('stars'),q=$('q'),go=$('go'),answer=$('answer'),workspace=$('workspace');
-let models=[],busy=false,active=new Set(),selected=new Set(),activeEdges=new Set(),answered=false;
-function classify(t){const s=t.toLowerCase();if(/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(s))return'coding';if(/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market|repo|github)\b/.test(s))return'research';if(/\b(workflow|automate|automation|schedule|monitor|alert|pipeline|action)\b/.test(s))return'automation';if(/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(s))return'design';if(/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';return'general'}
-function providerText(m){return `${m.provider||''} ${m.id||''} ${m.name||''}`}
-function pick(f){const pool=models.filter(m=>PROVIDER[f].test(providerText(m)));for(const re of PREF[f]){const hit=pool.find(m=>re.test(`${m.name||''} ${m.id||''}`));if(hit)return hit}return pool[0]||null}
-function modelName(m){return m?.name||m?.id||'unavailable'}
-async function ensureModels(){if(models.length)return;models=await puter.ai.listModels();if(!Array.isArray(models)||!models.length)throw new Error('No AI models available')}
-function draw(){edges.innerHTML='';const links=[['you','planner'],['planner','router'],...FAMILY.map(x=>['router',x]),...FAMILY.map(x=>[x,'reviewer']),['reviewer','you']];for(const [a,b] of links){const A=POS[a],B=POS[b],p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',`M ${A[0]} ${A[1]} C ${A[0]} ${(A[1]+B[1])/2}, ${B[0]} ${(A[1]+B[1])/2}, ${B[0]} ${B[1]}`);p.setAttribute('class','edge');p.dataset.e=`${a}:${b}`;edges.appendChild(p)}for(const [id,p] of Object.entries(POS)){const n=document.createElement('div');n.id=`n-${id}`;n.className=`node ${id==='you'?'you ':''}`;n.style.left=`${p[0]}%`;n.style.top=`${p[1]}%`;n.innerHTML=`<div class="halo"></div><div class="core"><span>${id==='you'?'◎':id==='reviewer'?'✓':'✦'}</span></div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;nodes.appendChild(n)}render()}
-function render(){document.querySelectorAll('.edge').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));for(const id of Object.keys(POS)){const n=$(`n-${id}`);n.classList.toggle('active',active.has(id));n.classList.toggle('answered',answered&&id==='you');if(FAMILY.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id))}document.querySelector('.state').className=`state ${busy?'busy':answered?'done':''}`;$('stateText').textContent=busy?'WORKING':answered?'ANSWERED':'READY';go.disabled=busy||!q.value.trim()}
-function star(a,b){const A=POS[a],B=POS[b],d=document.createElement('div');d.className='star';d.style.setProperty('--x1',`${A[0]}%`);d.style.setProperty('--y1',`${A[1]}%`);d.style.setProperty('--x2',`${B[0]}%`);d.style.setProperty('--y2',`${B[1]}%`);d.innerHTML='<span></span>';stars.appendChild(d);setTimeout(()=>d.remove(),800)}
-const wait=ms=>new Promise(r=>setTimeout(r,ms));async function travel(a,b,ms=360){active=new Set([b]);activeEdges=new Set([`${a}:${b}`]);star(a,b);render();await wait(ms)}
-function role(kind){return kind==='coding'?'senior coding specialist':kind==='research'?'rigorous research analyst':kind==='automation'?'automation and reliability engineer':kind==='design'?'product and UI specialist':kind==='reasoning'?'careful analytical reasoner':'strong general problem solver'}
-async function chat(model,question,kind){const r=await puter.ai.chat([{role:'system',content:`You are the ${role(kind)} in an AI team. Answer the user directly. Check assumptions and correctness. Be concise unless detail is necessary.`},{role:'user',content:question}],{model:model.id,normalize:true});const text=r?.message?.content;if(!text)throw new Error(`${modelName(model)} returned no answer`);return String(text).trim()}
-async function callFamily(f,question,kind){const first=pick(f),fallbacks=['openai','gemini','claude','qwen','deepseek','mistral'].map(pick).filter(Boolean),seen=new Set();let last;for(const m of [first,...fallbacks]){if(!m||seen.has(m.id))continue;seen.add(m.id);try{return{family:f,model:m,text:await chat(m,question,kind)}}catch(e){last=e}}throw last||new Error(`${f} unavailable`)}
-async function ask(){const question=q.value.trim();if(!question||busy)return;busy=true;answered=false;selected.clear();active.clear();activeEdges.clear();answer.classList.remove('open');workspace.classList.remove('open');render();try{if(!puter.auth.isSignedIn())await puter.auth.signIn({attempt_temp_user_creation:true});await ensureModels();const kind=classify(question),route=ROUTES[kind],workers=route.slice(0,2),reviewer=route[2];await travel('you','planner');await travel('planner','router');selected=new Set([...workers,reviewer]);active=new Set(workers);activeEdges=new Set(workers.map(x=>`router:${x}`));workers.forEach(x=>star('router',x));render();const results=await Promise.all(workers.map(x=>callFamily(x,question,kind)));results.forEach(r=>star(r.family,'reviewer'));active=new Set(['reviewer']);activeEdges=new Set(results.map(r=>`${r.family}:reviewer`));render();const reviewModel=pick(reviewer)||pick('claude')||pick('gemini')||pick('openai');if(!reviewModel)throw new Error('No reviewer model available');const synthesis=`User question:\n${question}\n\nCandidate A (${modelName(results[0].model)}):\n${results[0].text}\n\nCandidate B (${modelName(results[1].model)}):\n${results[1].text}\n\nAct as an independent reviewer. Return only the best final answer. Reconcile disagreements, remove unsupported claims, correct mistakes, and keep it concise unless detail is necessary.`;const rr=await puter.ai.chat([{role:'user',content:synthesis}],{model:reviewModel.id,normalize:true});const finalText=rr?.message?.content;if(!finalText)throw new Error('Reviewer returned no answer');await wait(180);star('reviewer','you');active=new Set(['you']);activeEdges=new Set(['reviewer:you']);answered=true;render();$('tick').textContent='✓';$('tick').classList.remove('bad');$('badge').textContent='VALIDATED';$('meta').textContent=`${kind.toUpperCase()} · ${modelName(reviewModel)}`;$('body').textContent=String(finalText).trim();$('agents').textContent=`Specialists: ${results.map(r=>modelName(r.model)).join(' + ')} · Reviewer: ${modelName(reviewModel)} · Live catalog: ${models.length} models`;answer.classList.add('open');workspace.classList.add('open');document.title='✓ AI Team answered';setTimeout(()=>document.title='AI Team',2600)}catch(e){answered=false;active=new Set(['you']);activeEdges.clear();render();$('tick').textContent='!';$('tick').classList.add('bad');$('badge').textContent='RETRY';$('meta').textContent='AI NETWORK';$('body').textContent=e?.msg||e?.message||String(e);$('agents').textContent='No result was marked validated.';answer.classList.add('open');workspace.classList.add('open');document.querySelector('.state').className='state error';$('stateText').textContent='RETRY'}finally{busy=false;render()}}
-q.addEventListener('input',render);q.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}});go.addEventListener('click',ask);draw();
+const INFO={
+  you:['YOU','Command center'],planner:['PLANNER','Understands intent'],router:['ROUTER','Selects specialist'],
+  qwen:['QWEN','Code + reasoning'],openai:['OPENAI','General + coding'],gemini:['GEMINI','Research + design'],
+  claude:['CLAUDE','Review + reasoning'],deepseek:['DEEPSEEK','Reasoning + code'],grok:['GROK','Critic'],
+  mistral:['MISTRAL','Fast generalist'],kimi:['KIMI','Long context'],perplexity:['PERPLEXITY','Research'],
+  reviewer:['REVIEWER','Independent validation']
+};
+const FAMILY=['qwen','openai','gemini','claude','deepseek','grok','mistral','kimi','perplexity'];
+const VISUAL_ROUTES={
+  coding:['openai','qwen','claude'],
+  research:['gemini','perplexity','claude'],
+  automation:['openai','deepseek','qwen'],
+  design:['gemini','claude','openai'],
+  reasoning:['deepseek','claude','openai'],
+  general:['openai','claude','gemini']
+};
+const $=id=>document.getElementById(id);
+const edges=$('edges'),nodes=$('nodes'),stars=$('stars'),q=$('q'),go=$('go'),mic=$('mic');
+const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
+
+let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
+let lastWorker='openai', recognition=null;
+
+function classify(t){
+  const s=t.toLowerCase();
+  if(/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(s))return'coding';
+  if(/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market|repo|github)\b/.test(s))return'research';
+  if(/\b(workflow|automate|automation|schedule|monitor|alert|pipeline|action)\b/.test(s))return'automation';
+  if(/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(s))return'design';
+  if(/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';
+  return'general';
+}
+function nodeForModel(model=''){
+  const m=model.toLowerCase();
+  if(m.includes('gemini')||m.includes('google'))return'gemini';
+  if(m.includes('claude')||m.includes('anthropic'))return'claude';
+  if(m.includes('deepseek'))return'deepseek';
+  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
+  if(m.includes('grok')||m.includes('xai'))return'grok';
+  if(m.includes('mistral'))return'mistral';
+  if(m.includes('kimi')||m.includes('moonshot'))return'kimi';
+  if(m.includes('perplexity')||m.includes('sonar'))return'perplexity';
+  return'openai';
+}
+function friendlyModel(model=''){
+  return model.replace(/^.*\//,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function draw(){
+  edges.innerHTML=''; nodes.innerHTML='';
+  const links=[['you','planner'],['planner','router'],...FAMILY.map(x=>['router',x]),...FAMILY.map(x=>[x,'reviewer']),['reviewer','you']];
+  for(const [a,b] of links){
+    const A=POS[a],B=POS[b],p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',`M ${A[0]} ${A[1]} C ${A[0]} ${(A[1]+B[1])/2}, ${B[0]} ${(A[1]+B[1])/2}, ${B[0]} ${B[1]}`);
+    p.setAttribute('class','edge'); p.dataset.e=`${a}:${b}`; edges.appendChild(p);
+  }
+  for(const [id,p] of Object.entries(POS)){
+    const n=document.createElement('div'); n.id=`n-${id}`; n.className=`node ${id==='you'?'you ':''}`;
+    n.style.left=`${p[0]}%`; n.style.top=`${p[1]}%`;
+    n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="core"><span>${id==='you'?'◉':id==='reviewer'?'✓':'✦'}</span></div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
+    nodes.appendChild(n);
+  }
+  render();
+}
+function setStage(name){
+  const order=['understand','route','solve','verify'];
+  const idx=order.indexOf(name);
+  document.querySelectorAll('.stage').forEach((el,i)=>{
+    el.classList.toggle('active',i===idx);
+    el.classList.toggle('done',i<idx || (answered && i<=idx));
+  });
+}
+function setState(text,kind=''){
+  document.querySelector('.state').className=`state ${kind}`.trim();
+  $('stateText').textContent=text;
+}
+function render(){
+  document.querySelectorAll('.edge').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
+  for(const id of Object.keys(POS)){
+    const n=$(`n-${id}`);
+    if(!n)continue;
+    n.classList.toggle('active',active.has(id));
+    n.classList.toggle('answered',answered&&id==='you');
+    n.classList.toggle('listening',listening&&id==='you');
+    if(FAMILY.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id));
+  }
+  go.disabled=busy||!q.value.trim();
+  mic.classList.toggle('listening',listening);
+}
+function star(a,b){
+  const A=POS[a],B=POS[b],d=document.createElement('div'); d.className='star';
+  d.style.setProperty('--x1',`${A[0]}%`); d.style.setProperty('--y1',`${A[1]}%`);
+  d.style.setProperty('--x2',`${B[0]}%`); d.style.setProperty('--y2',`${B[1]}%`);
+  d.innerHTML='<span></span>'; stars.appendChild(d); setTimeout(()=>d.remove(),900);
+}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function travel(a,b,ms=300){
+  active=new Set([b]); activeEdges=new Set([`${a}:${b}`]); star(a,b); render(); await wait(ms);
+}
+function openAnswer(ok=true){
+  answer.classList.add('open'); workspace.classList.add('open');
+  $('tick').textContent=ok?'✓':'!';
+  $('tick').classList.toggle('bad',!ok);
+}
+function resetForRun(question){
+  busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
+  active=new Set(['you']); activeEdges.clear(); answer.classList.remove('open'); workspace.classList.remove('open');
+  setStage('understand'); setState('THINKING','busy'); listenText.textContent='AI Team is working'; render();
+}
+function finishError(message){
+  answered=false; busy=false; active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
+  $('badge').textContent='CHECK';
+  $('meta').textContent='AI NETWORK';
+  $('body').textContent=message;
+  $('agents').textContent='No login is required by this interface. If this is a static preview, use the deployed OmniRoute endpoint.';
+  openAnswer(false);
+  listenText.textContent='Type or speak';
+}
+async function handleEvent(evt){
+  if(!evt||!evt.type)return;
+  if(evt.type==='planner'){
+    setStage('understand'); setState('UNDERSTANDING','busy'); await travel('you','planner',260); return;
+  }
+  if(evt.type==='worker'){
+    setStage('solve'); setState('SOLVING','busy');
+    active=new Set(['router']); activeEdges=new Set(['planner:router']); star('planner','router'); render(); await wait(220);
+    lastWorker=nodeForModel(evt.model);
+    selected.add(lastWorker);
+    active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); star('router',lastWorker); render(); return;
+  }
+  if(evt.type==='reviewer'){
+    setStage('verify'); setState('VERIFYING','busy');
+    active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); star(lastWorker,'reviewer'); render(); return;
+  }
+  if(evt.type==='retry'){
+    setState('REFINING','busy'); $('badge').textContent='REFINING'; return;
+  }
+  if(evt.type==='done'){
+    answered=true; busy=false; setStage('verify'); star('reviewer','you'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render();
+    setState('ANSWERED','done');
+    $('badge').textContent='VALIDATED';
+    $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
+    $('body').textContent=evt.answer||'No answer returned.';
+    $('agents').textContent=`Specialist: ${friendlyModel(evt.model||'AI model')} · Independent review passed · OmniRoute server-side gateway`;
+    openAnswer(true); listenText.textContent='Ready for your next prompt';
+    document.title='✓ OmniRoute answered'; setTimeout(()=>document.title='OmniRoute AI Team',2400); return;
+  }
+  if(evt.type==='error') throw new Error(evt.message||'AI Team failed');
+}
+async function ask(){
+  const question=q.value.trim();
+  if(!question||busy)return;
+  if(listening&&recognition){try{recognition.stop()}catch{}}
+  resetForRun(question);
+  try{
+    if(/raw\.githack\.com|raw\.githubusercontent\.com/.test(location.hostname)){
+      throw new Error('This is a static code preview, so it cannot execute the secure AI backend. Puter has been removed; use the deployed OmniRoute URL for live answers.');
+    }
+    const response=await fetch('/api/ask',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question})
+    });
+    if(!response.ok)throw new Error(`AI endpoint returned ${response.status}`);
+    if(!response.body)throw new Error('Streaming response is unavailable in this browser');
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer='';
+    while(true){
+      const {value,done}=await reader.read();
+      buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+      const lines=buffer.split('\n'); buffer=lines.pop()||'';
+      for(const line of lines){
+        if(!line.trim())continue;
+        await handleEvent(JSON.parse(line));
+      }
+      if(done)break;
+    }
+    if(buffer.trim())await handleEvent(JSON.parse(buffer));
+  }catch(e){
+    finishError(e?.message||String(e));
+  }finally{
+    if(busy){busy=false;render()}
+  }
+}
+function resizeInput(){
+  q.style.height='auto';
+  q.style.height=Math.min(q.scrollHeight,120)+'px';
+}
+function initVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){mic.disabled=true;mic.title='Voice input is not supported in this browser';return}
+  recognition=new SR(); recognition.lang='en-IN'; recognition.interimResults=true; recognition.continuous=false;
+  recognition.onstart=()=>{
+    listening=true; active=new Set(['you']); setState('LISTENING','listening'); listenText.textContent='Listening… speak naturally'; render();
+  };
+  recognition.onresult=e=>{
+    let text='';
+    for(let i=e.resultIndex;i<e.results.length;i++)text+=e.results[i][0].transcript;
+    if(text.trim()){q.value=text.trim();resizeInput();render()}
+  };
+  recognition.onerror=e=>{
+    listening=false; setState('READY'); listenText.textContent=e.error==='not-allowed'?'Microphone permission was not granted':'Voice input stopped'; render();
+  };
+  recognition.onend=()=>{
+    listening=false;
+    if(!busy)setState('READY');
+    listenText.textContent=q.value.trim()?'Voice captured — press send':'Type or speak';
+    render();
+  };
+}
+mic.addEventListener('click',()=>{
+  if(!recognition)return;
+  if(listening){try{recognition.stop()}catch{};return}
+  try{recognition.start()}catch{}
+});
+q.addEventListener('input',()=>{resizeInput();render()});
+q.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}});
+go.addEventListener('click',ask);
+
+draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput();
