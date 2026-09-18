@@ -79,7 +79,7 @@ function updateRoleModel(role,model=''){
 }
 function setStage(name){
   canvas.dataset.stage=name;
-  const order=['understand','route','tool','solve','verify','done'];
+  const order=['understand','route','tool','solve','render','verify','done'];
   const current=order.indexOf(name);
   document.querySelectorAll('#executionTrace [data-stage]').forEach(el=>{
     const i=order.indexOf(el.dataset.stage);
@@ -354,14 +354,7 @@ async function handleEvent(evt){
     const label=String(currentPresentation.label||currentPresentation.format||'STANDARD').toUpperCase();
     setState('FORMAT · '+label,'busy');
     $('badge').textContent='FORMAT · '+label;
-    updatePending('Preparing '+label.toLowerCase()+' presentation…');
-    if(currentPresentation.visual){
-      lastWorker='designer';
-      selected=new Set(['designer']);
-      active=new Set(['designer']);
-      activeEdges=new Set(['router:designer']);
-      render(); kickNode('designer');
-    }
+    updatePending('Presentation format locked: '+label.toLowerCase()+'…');
     return;
   }
   if(evt.type==='worker'){
@@ -372,7 +365,7 @@ async function handleEvent(evt){
     setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
     currentPresentation=evt.presentation||currentPresentation;
-    lastWorker=currentPresentation&&currentPresentation.visual?'designer':roleForTask(evt.taskType);
+    lastWorker=roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
@@ -395,6 +388,13 @@ async function handleEvent(evt){
     updatePending(`Relay opened another provider path with ${friendlyModel(evt.model)}…`);
     return;
   }
+  if(evt.type==='progress'){
+    const seconds=Math.max(1,Math.round(Number(evt.elapsedMs||0)/1000));
+    const role=INFO[lastWorker]?.[0]||'SPECIALIST';
+    setState(role+' · WORKING '+seconds+'s','busy');
+    updatePending(role.charAt(0)+role.slice(1).toLowerCase()+' is drafting the response… '+seconds+'s');
+    return;
+  }
   if(evt.type==='worker_selected'){
     if(lastTool)completed.add(lastTool);
     updateRoleModel(lastWorker,evt.model);
@@ -412,6 +412,21 @@ async function handleEvent(evt){
     active=new Set([lastWorker]);
     activeEdges=new Set([`${lastTool||'router'}:${lastWorker}`]);
     render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='render'){
+    const source=lastWorker;
+    completed.add(source);
+    lastWorker='designer';
+    selected=new Set(['designer']);
+    updateRoleModel('designer','Local renderer');
+    setStage('render');
+    setState('DESIGNER · RENDERING','busy');
+    updatePending('Designer is rendering the '+String(currentPresentation?.label||'visual').toLowerCase()+' output…');
+    active=new Set(['designer']);
+    activeEdges=new Set([source+':designer']);
+    render(); kickNode('designer');
+    await wait(260);
+    return;
   }
   if(evt.type==='reviewer'){
     completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
@@ -512,7 +527,7 @@ async function ask(questionOverride='',isRetry=false){
       throw new Error('This static preview cannot execute the secure AI backend. Open the deployed Relay URL for live answers.');
     }
     const requestController=new AbortController();
-    const requestTimeout=setTimeout(()=>requestController.abort(),28000);
+    const requestTimeout=setTimeout(()=>requestController.abort(),55000);
     let response;
     try{
       response=await fetch('/api/ask',{
@@ -547,7 +562,7 @@ async function ask(questionOverride='',isRetry=false){
     if(buffer.trim())await handleEvent(JSON.parse(buffer));
   }catch(e){
     const message=e?.name==='AbortError'
-      ? 'Relay could not get a provider response within 28 seconds. Please retry in a moment.'
+      ? 'Relay could not complete this request within 55 seconds. Please retry once; the next healthy provider will be used.'
       : (e?.message||String(e));
     finishError(message);
   }finally{
