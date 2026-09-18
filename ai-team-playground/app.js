@@ -114,10 +114,10 @@ function resetForRun(question){
 }
 function finishError(message){
   answered=false; busy=false; active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
-  $('badge').textContent='CHECK';
-  $('meta').textContent='AI NETWORK';
+  $('badge').textContent='RETRY';
+  $('meta').textContent='REQUEST STOPPED';
   $('body').textContent=message;
-  $('agents').textContent='No login is required by this interface. If this is a static preview, use the deployed OmniRoute endpoint.';
+  $('agents').textContent='Your prompt is still here. Retry after the service recovers — no sign-in is required.';
   openAnswer(false);
   listenText.textContent='Type or speak';
 }
@@ -127,8 +127,9 @@ async function handleEvent(evt){
     setStage('understand'); setState('UNDERSTANDING','busy'); await travel('you','planner',260); return;
   }
   if(evt.type==='worker'){
+    setStage('route'); setState('ROUTING','busy');
+    active=new Set(['router']); activeEdges=new Set(['planner:router']); star('planner','router'); render(); await wait(280);
     setStage('solve'); setState('SOLVING','busy');
-    active=new Set(['router']); activeEdges=new Set(['planner:router']); star('planner','router'); render(); await wait(220);
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); star('router',lastWorker); render(); return;
