@@ -280,6 +280,12 @@ async function handleEvent(evt){
     updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
+  if(evt.type==='review_skipped'){
+    setState('FINALIZING','busy');
+    $('badge').textContent='FAST PATH';
+    updatePending('Reviewer was slow, so Relay is returning the specialist answer without blocking you…');
+    return;
+  }
   if(evt.type==='retry'){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; updatePending('Reviewer requested a refinement…'); return;
   }
@@ -290,7 +296,7 @@ async function handleEvent(evt){
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
     resolvePending(
       evt.answer||'No answer returned.',
-      `${friendlyModel(evt.model||'AI model')} · independent review passed`
+      `${friendlyModel(evt.model||'AI model')} · ${evt.review==='PASS'?'independent review passed':'review timeout — answer returned'}`
     );
     if(currentQuestion && evt.answer){
       conversation.push({role:'user',content:currentQuestion},{role:'assistant',content:evt.answer});
