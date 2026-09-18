@@ -20,6 +20,8 @@ function reviewerFor(worker: string) {
   return worker.startsWith("deepseek/") ? "gpt-5.6-luna" : "deepseek/deepseek-v4-flash";
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function callModel(model: string, messages: Array<{ role: string; content: string }>, maxTokens = 1700) {
   const baseUrl = Netlify.env.get("OPENAI_BASE_URL");
   const apiKey = Netlify.env.get("OPENAI_API_KEY");
@@ -28,28 +30,63 @@ async function callModel(model: string, messages: Array<{ role: string; content:
     throw new Error("AI Gateway is not active yet. Complete one production deploy, then retry.");
   }
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      ...(model.startsWith("gpt-")
-        ? { max_completion_tokens: maxTokens }
-        : { max_tokens: maxTokens }),
-    }),
+  const url = `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  const requestBody = JSON.stringify({
+    model,
+    messages,
+    ...(model.startsWith("gpt-")
+      ? { max_completion_tokens: maxTokens }
+      : { max_tokens: maxTokens }),
   });
 
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 500);
-    console.error("AI Gateway model error", { model, status: response.status, detail });
+  let response: Response | null = null;
+  let lastNetworkError = "";
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: requestBody,
+      });
+
+      if (response.ok) break;
+
+      if ([429, 502, 503, 504].includes(response.status) && attempt < 3) {
+        console.warn("AI Gateway transient response", { model, status: response.status, attempt });
+        await sleep(350 * attempt);
+        continue;
+      }
+
+      const detail = (await response.text()).slice(0, 500);
+      console.error("AI Gateway model error", { model, status: response.status, detail });
+      throw new Error(
+        response.status >= 500 || response.status === 429
+          ? "The AI service is temporarily busy. Please retry."
+          : "The selected AI model rejected the request. OmniRoute will need a routing adjustment."
+      );
+    } catch (error) {
+      if (error instanceof Error && !/^The AI service|^The selected AI model/.test(error.message)) {
+        lastNetworkError = error.message;
+        console.warn("AI Gateway network retry", { model, attempt, error: lastNetworkError });
+        if (attempt < 3) {
+          await sleep(350 * attempt);
+          continue;
+        }
+        throw new Error("The AI connection was interrupted. Tap RETRY — your prompt is preserved.");
+      }
+      throw error;
+    }
+  }
+
+  if (!response || !response.ok) {
     throw new Error(
-      response.status >= 500
-        ? "The AI service is temporarily unavailable. Please try again."
-        : "The selected AI model rejected the request. OmniRoute will need a routing adjustment."
+      lastNetworkError
+        ? "The AI connection was interrupted. Tap RETRY — your prompt is preserved."
+        : "The AI service is temporarily busy. Please retry."
     );
   }
 
