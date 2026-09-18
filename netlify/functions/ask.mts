@@ -10,16 +10,13 @@ function classify(text: string) {
 
 function workerFor(taskType: string, question: string) {
   const q = question.toLowerCase();
-  const lightReasoning =
-    taskType === "reasoning" &&
-    question.length <= 360 &&
-    !/\b(code|coding|bug|debug|refactor|architecture|security|production|deploy)\b/.test(q);
+  const heavy =
+    question.length > 900 ||
+    /\b(deep|complex|architecture|architect|production|root cause|large refactor|security audit|performance audit)\b/.test(q);
 
-  if (lightReasoning) return "gpt-5.6-luna";
-  if (taskType === "coding" || taskType === "reasoning") return "gpt-5.6-sol";
-  if (taskType === "research") return "gemini-3.5-flash";
-  if (taskType === "automation") return "gpt-5.6-sol";
-  if (taskType === "design") return "gemini-3.5-flash";
+  if ((taskType === "coding" || taskType === "automation") && heavy) return "gpt-5.6-sol";
+  if (taskType === "coding" || taskType === "automation") return "gpt-5.6-luna";
+  if (taskType === "research" || taskType === "design" || taskType === "reasoning") return "gemini-3.5-flash";
   return "gpt-5.6-luna";
 }
 
@@ -258,36 +255,46 @@ export default async (request: Request) => {
         ];
 
         let answer = "";
-        try {
-          const primaryModel = actualWorkerModel;
-          const pool = Array.from(new Set([
-            primaryModel,
-            "gpt-5.6-luna",
-            "claude-haiku-4-5",
-            "gemini-3.5-flash",
-            "deepseek/deepseek-v4-flash-0731",
-          ]));
+        const primaryModel = actualWorkerModel;
+        const pool = Array.from(new Set([
+          primaryModel,
+          "gpt-5.6-luna",
+          "claude-haiku-4-5",
+          "gemini-3.5-flash",
+        ]));
 
-          const attempts = pool.map((model, index) => (async () => {
-            if (index > 0) {
-              await sleep(index === 1 ? 2200 : index === 2 ? 3800 : 5200);
-              emit({ type: "hedge", model });
-            }
-            const value = await callModel(
+        const failures: string[] = [];
+        for (let index = 0; index < pool.length; index++) {
+          const model = pool[index];
+          if (index > 0) emit({ type: "fallback", model });
+
+          try {
+            answer = await callModel(
               model,
               workerMessages,
-              model.startsWith("gpt-") ? 1400 : 1200,
-              model === primaryModel ? 10000 : 8500,
+              model.startsWith("gpt-") ? 1200 : 1000,
+              index === 0 ? 7500 : 6500,
             );
-            return { answer: value, model };
-          })());
+            actualWorkerModel = model;
+            emit({ type: "worker_selected", model: actualWorkerModel });
+            break;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            failures.push(`${model}: ${message}`);
+            console.warn("Relay provider attempt failed", { model, error: message });
 
-          const winner = await Promise.any(attempts);
-          answer = winner.answer;
-          actualWorkerModel = winner.model;
-          emit({ type: "worker_selected", model: actualWorkerModel });
-        } catch (workerError) {
-          throw new Error("Relay could not get a response from any available AI provider. Please retry in a moment.");
+            if (/\b429\b|rate.?limit/i.test(message)) {
+              throw new Error("Relay hit the Netlify AI Gateway per-minute rate limit. Wait about a minute, then retry.");
+            }
+            if (/\b402\b|insufficient|credits?/i.test(message)) {
+              throw new Error("Relay's Netlify AI credits are unavailable or exhausted. Check Netlify usage/billing before retrying.");
+            }
+          }
+        }
+
+        if (!answer) {
+          console.error("All Relay providers failed", { failures });
+          throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
         const actualReviewerModel = reviewerFor(actualWorkerModel);
