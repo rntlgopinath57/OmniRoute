@@ -8,7 +8,14 @@ function classify(text: string) {
   return "general";
 }
 
-function workerFor(taskType: string) {
+function workerFor(taskType: string, question: string) {
+  const q = question.toLowerCase();
+  const lightReasoning =
+    taskType === "reasoning" &&
+    question.length <= 360 &&
+    !/\b(code|coding|bug|debug|refactor|architecture|security|production|deploy)\b/.test(q);
+
+  if (lightReasoning) return "gpt-5.6-luna";
   if (taskType === "coding" || taskType === "reasoning") return "gpt-5.6-sol";
   if (taskType === "research") return "perplexity/sonar-pro-search";
   if (taskType === "automation") return "gpt-5.6-sol";
@@ -150,7 +157,7 @@ export default async (request: Request) => {
 
       try {
         const taskType = classify(question);
-        const workerModel = workerFor(taskType);
+        const workerModel = workerFor(taskType, question);
         const reviewerModel = reviewerFor(workerModel);
 
         emit({ type: "planner", taskType });
@@ -170,11 +177,30 @@ export default async (request: Request) => {
 
         let answer = "";
         try {
-          answer = await callModel(actualWorkerModel, workerMessages);
+          if (actualWorkerModel === "gpt-5.6-luna") {
+            answer = await callModel(actualWorkerModel, workerMessages, 1500, 9000);
+          } else {
+            const primaryModel = actualWorkerModel;
+            const backupModel = "gpt-5.6-luna";
+
+            const primary = callModel(primaryModel, workerMessages, 1600, 9500)
+              .then((value) => ({ answer: value, model: primaryModel }));
+
+            const backup = (async () => {
+              await sleep(3500);
+              emit({ type: "hedge", model: backupModel });
+              const value = await callModel(backupModel, workerMessages, 1400, 8000);
+              return { answer: value, model: backupModel };
+            })();
+
+            const winner = await Promise.any([primary, backup]);
+            answer = winner.answer;
+            actualWorkerModel = winner.model;
+          }
         } catch (workerError) {
           actualWorkerModel = "gpt-5.6-luna";
           emit({ type: "fallback", model: actualWorkerModel });
-          answer = await callModel(actualWorkerModel, workerMessages);
+          answer = await callModel(actualWorkerModel, workerMessages, 1400, 8000);
         }
 
         const actualReviewerModel = reviewerFor(actualWorkerModel);
