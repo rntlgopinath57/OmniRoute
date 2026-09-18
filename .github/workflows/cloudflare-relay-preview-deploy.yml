@@ -104,6 +104,44 @@ jobs:
           echo "$response" | grep -q '"type":"done"'
           echo "$response" | grep -q 'CLOUDFARE_RELAY_OK'
 
+      - name: Verify progressive Relay UI
+        if: steps.deploy.outputs.url != ''
+        run: |
+          html="$(curl --fail --show-error --silent "${{ steps.deploy.outputs.url }}/")"
+          echo "$html" | grep -q 'id="runStrip"'
+          echo "$html" | grep -q 'id="runToggle"'
+          echo "$html" | grep -q 'View run'
+          echo "Progressive disclosure UI verified."
+
+      - name: Verify media capabilities
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"action":"capabilities"}'             "${{ steps.deploy.outputs.url }}/api/media")"
+          echo "$response"
+          echo "$response" | grep -q '"imageGeneration":true'
+          echo "$response" | grep -q '"videoGeneration":true'
+          echo "$response" | grep -q '"serverGeminiConfigured":true'
+
+      - name: Verify flowchart presentation contract
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"/flowchart Show a simple three-step release process: validate, deploy, verify.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q '"format":"flowchart"'
+          if echo "$response" | grep -Eq 'flowchart (TD|LR|TB|RL)|graph (TD|LR|TB|RL)|[A-Za-z0-9_]+ --?> [A-Za-z0-9_]+'; then
+            echo "Raw diagram source leaked into presentation answer."
+            exit 1
+          fi
+
+      - name: Verify GitHub workflow inventory path
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"List my GitHub workflows by repository. Keep it concise.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"tool","tool":"github","status":"complete"'
+          echo "$response" | grep -q '"type":"done"'
+
       - name: Deployment summary
         run: |
           {
