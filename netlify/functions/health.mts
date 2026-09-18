@@ -1,9 +1,11 @@
+import { envGet } from "../../relay-runtime/env.mts";
+
 export default async () => {
   return Response.json({
     ok: true,
     service: "OmniRoute AI Team",
     aiGateway: Boolean(
-      Netlify.env.get("OPENAI_BASE_URL") && Netlify.env.get("OPENAI_API_KEY"),
+      envGet("OPENAI_BASE_URL") && envGet("OPENAI_API_KEY"),
     ),
   });
 };
