@@ -130,7 +130,7 @@ jobs:
           echo "$response" | grep -q '"type":"done"'
           echo "$response" | grep -q '"format":"flowchart"'
           echo "$response" | grep -q '"review":"PASS"'
-          if echo "$response" | grep -Eq 'flowchart (TD|LR|TB|RL)|graph (TD|LR|TB|RL)|[A-Za-z0-9_]+ --?> [A-Za-z0-9_]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>'; then
+          if echo "$response" | grep -Eq 'flowchart (TD|LR|TB|RL)|graph (TD|LR|TB|RL)|[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>'; then
             echo "Raw diagram source leaked into presentation answer."
             exit 1
           fi
