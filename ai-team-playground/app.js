@@ -264,16 +264,27 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    setStage('understand'); setState('UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
+    setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
   }
   if(evt.type==='worker'){
-    setStage('route'); setState('ROUTING','busy');
+    setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); activeEdges=new Set(['planner:router']); render(); kickNode('router'); await wait(280);
-    setStage('solve'); setState('SOLVING','busy');
+    setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='tool'&&evt.tool==='github'){
+    if(evt.status==='complete'){
+      const repos=Array.isArray(evt.repos)?evt.repos:[];
+      setState('GITHUB · READING REPOS','busy');
+      updatePending(`Reading GitHub repository evidence${repos.length?': '+repos.join(', '):'…'}`);
+    }else{
+      setState('GITHUB · ACCESS NEEDED','busy');
+      updatePending('Relay can read public repositories, but this repository needs private read access.');
+    }
+    return;
   }
   if(evt.type==='hedge'){
     setState('ACCELERATING','busy');
@@ -285,7 +296,7 @@ async function handleEvent(evt){
     selected.add(lastWorker);
     active=new Set([lastWorker]);
     activeEdges=new Set([`router:${lastWorker}`]);
-    setState('SOLVING','busy');
+    setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} responded first — preparing the answer…`);
     render(); kickNode(lastWorker); return;
   }
@@ -299,7 +310,7 @@ async function handleEvent(evt){
     render(); kickNode(lastWorker); return;
   }
   if(evt.type==='reviewer'){
-    setStage('verify'); setState('VERIFYING','busy');
+    setStage('verify'); setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
