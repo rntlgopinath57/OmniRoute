@@ -1202,3 +1202,299 @@ body{overflow:hidden}
   #workspace.open #canvas{display:none}
   #workspace.working #answer{opacity:1!important;filter:none!important}
 }
+
+/* Relay presentation system v16 */
+.presentationResult .messageBubble{
+  max-width:96%!important;
+}
+.presentationBubble{
+  position:relative;
+  overflow:visible;
+}
+.presentationTag{
+  width:max-content;
+  margin:0 0 12px;
+  padding:5px 9px;
+  border:1px solid rgba(113,239,255,.18);
+  border-radius:999px;
+  color:#9eefff;
+  background:rgba(113,239,255,.055);
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.12em;
+}
+.presentationBody{
+  width:100%;
+}
+.presentationBody h2,.presentationBody h3{
+  margin:18px 0 8px;
+  line-height:1.25;
+}
+.presentationBody h2:first-child,.presentationBody h3:first-child{margin-top:0}
+.presentationBody p{margin:8px 0}
+.presentationBody ul,.presentationBody ol{margin:8px 0 12px;padding-left:22px}
+.presentationBody li{margin:5px 0}
+.presentationBody code{
+  padding:2px 5px;
+  border-radius:5px;
+  background:rgba(255,255,255,.055);
+}
+.artifactTableWrap{
+  overflow:auto;
+  margin:12px 0;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;
+}
+.artifactTableWrap table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+.artifactTableWrap th,.artifactTableWrap td{
+  padding:9px 10px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  text-align:left;
+  vertical-align:top;
+}
+.artifactTableWrap th{background:rgba(113,239,255,.045);color:#c7f9ff}
+
+/* Handwritten / notebook */
+.fmt-handwritten.messageBubble{
+  padding:10px!important;
+  border-color:rgba(242,226,170,.16)!important;
+  background:rgba(15,13,9,.42)!important;
+}
+.fmt-handwritten .presentationTag{
+  color:#e9d998;
+  border-color:rgba(233,217,152,.22);
+  background:rgba(233,217,152,.055);
+}
+.handwrittenPages{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:16px;
+}
+.notePage{
+  position:relative;
+  min-height:410px;
+  padding:32px 26px 28px 58px;
+  border-radius:12px;
+  color:#27323a;
+  background:
+    linear-gradient(90deg,transparent 0,transparent 42px,rgba(216,96,96,.36) 43px,transparent 44px),
+    repeating-linear-gradient(180deg,#f8f3df 0,#f8f3df 27px,#b9cfe3 28px,#f8f3df 29px);
+  box-shadow:0 18px 42px rgba(0,0,0,.28),inset 0 0 0 1px rgba(97,76,44,.13);
+  transform:rotate(-.22deg);
+}
+.notePage:nth-child(even){transform:rotate(.18deg)}
+.paperClip{
+  position:absolute;
+  width:18px;height:46px;
+  right:24px;top:-10px;
+  border:2px solid rgba(96,100,104,.55);
+  border-radius:9px;
+  transform:rotate(6deg);
+}
+.notePageNo{
+  position:absolute;
+  top:13px;left:15px;
+  font:700 10px/1 ui-monospace,monospace;
+  color:rgba(81,91,101,.5);
+}
+.noteInk{
+  font-family:"Segoe Print","Bradley Hand","Comic Sans MS","Marker Felt",cursive;
+  font-size:15px;
+  line-height:28px;
+  letter-spacing:.01em;
+}
+.noteInk h2,.noteInk h3{
+  font-family:"Segoe Print","Bradley Hand","Comic Sans MS",cursive;
+  color:#173e67;
+  text-decoration:underline;
+  text-decoration-color:rgba(236,183,64,.65);
+  text-decoration-thickness:5px;
+  text-underline-offset:-2px;
+  text-decoration-skip-ink:none;
+}
+.noteInk p,.noteInk li{margin-top:0;margin-bottom:0}
+.noteInk ul,.noteInk ol{margin-top:0;margin-bottom:4px}
+.noteInk li::marker{color:#c84f5b}
+
+/* GoodNotes / sketchnote / whiteboard */
+.fmt-goodnotes .presentationBody,
+.fmt-sketchnote .presentationBody,
+.fmt-whiteboard .presentationBody{
+  padding:22px 24px;
+  border-radius:14px;
+  color:#26313c;
+  background:
+    repeating-linear-gradient(180deg,#f8f7f1 0,#f8f7f1 31px,#dbe4ec 32px);
+  box-shadow:0 16px 34px rgba(0,0,0,.24);
+}
+.fmt-goodnotes .presentationBody h2,.fmt-goodnotes .presentationBody h3,
+.fmt-sketchnote .presentationBody h2,.fmt-sketchnote .presentationBody h3,
+.fmt-whiteboard .presentationBody h2,.fmt-whiteboard .presentationBody h3{
+  color:#214d78;
+}
+
+/* Cheatsheet */
+.fmt-cheatsheet .presentationBody{
+  columns:2 280px;
+  column-gap:16px;
+}
+.fmt-cheatsheet .presentationBody h2,
+.fmt-cheatsheet .presentationBody h3,
+.fmt-cheatsheet .presentationBody p,
+.fmt-cheatsheet .presentationBody ul,
+.fmt-cheatsheet .presentationBody ol{
+  break-inside:avoid;
+}
+.fmt-cheatsheet .presentationBody h2,
+.fmt-cheatsheet .presentationBody h3{
+  padding:8px 10px;
+  border:1px solid rgba(113,239,255,.12);
+  border-radius:9px;
+  background:rgba(113,239,255,.045);
+}
+
+/* Blueprint */
+.fmt-blueprint .presentationBody{
+  padding:20px;
+  border:1px solid rgba(104,180,255,.2);
+  border-radius:14px;
+  background:
+    linear-gradient(rgba(98,175,255,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(98,175,255,.06) 1px,transparent 1px),
+    rgba(4,20,36,.92);
+  background-size:24px 24px;
+}
+.fmt-blueprint .presentationBody h2,.fmt-blueprint .presentationBody h3{color:#86c7ff}
+
+/* Flashcards and sticky notes */
+.fmt-flashcards .presentationBody,
+.fmt-sticky .presentationBody{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+.fmt-flashcards .presentationBody>*,
+.fmt-sticky .presentationBody>*{
+  margin:0!important;
+}
+.fmt-flashcards .presentationBody h2,
+.fmt-flashcards .presentationBody h3,
+.fmt-flashcards .presentationBody p,
+.fmt-sticky .presentationBody h2,
+.fmt-sticky .presentationBody h3,
+.fmt-sticky .presentationBody p{
+  padding:13px 14px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+}
+
+/* Flow / roadmap / timeline */
+.fmt-flowchart .presentationBody,
+.fmt-roadmap .presentationBody,
+.fmt-timeline .presentationBody{
+  position:relative;
+  padding-left:24px;
+}
+.fmt-flowchart .presentationBody:before,
+.fmt-roadmap .presentationBody:before,
+.fmt-timeline .presentationBody:before{
+  content:"";
+  position:absolute;
+  left:8px;top:8px;bottom:8px;
+  width:1px;
+  background:linear-gradient(var(--cyan),rgba(113,239,255,.08));
+}
+.fmt-flowchart .presentationBody p,
+.fmt-flowchart .presentationBody li,
+.fmt-roadmap .presentationBody p,
+.fmt-roadmap .presentationBody li,
+.fmt-timeline .presentationBody p,
+.fmt-timeline .presentationBody li{
+  position:relative;
+  margin:9px 0;
+  padding:9px 11px;
+  border:1px solid rgba(113,239,255,.09);
+  border-radius:10px;
+  background:rgba(113,239,255,.025);
+}
+
+/* Comparison / matrix / before-after */
+.fmt-comparison .presentationBody,
+.fmt-matrix .presentationBody,
+.fmt-before_after .presentationBody{
+  padding:16px;
+  border:1px solid rgba(255,255,255,.065);
+  border-radius:14px;
+  background:rgba(255,255,255,.018);
+}
+.fmt-comparison .presentationBody h2,
+.fmt-comparison .presentationBody h3,
+.fmt-matrix .presentationBody h2,
+.fmt-matrix .presentationBody h3,
+.fmt-before_after .presentationBody h2,
+.fmt-before_after .presentationBody h3{
+  padding:8px 10px;
+  border-left:3px solid rgba(113,239,255,.55);
+  background:rgba(113,239,255,.035);
+}
+
+/* Framework / hierarchy / exploded */
+.fmt-framework .presentationBody h2,
+.fmt-framework .presentationBody h3,
+.fmt-hierarchy .presentationBody h2,
+.fmt-hierarchy .presentationBody h3,
+.fmt-exploded .presentationBody h2,
+.fmt-exploded .presentationBody h3{
+  width:max-content;
+  max-width:100%;
+  padding:8px 12px;
+  border:1px solid rgba(156,134,255,.14);
+  border-radius:10px;
+  background:rgba(156,134,255,.04);
+}
+.fmt-hierarchy .presentationBody{text-align:center}
+.fmt-hierarchy .presentationBody ul,.fmt-hierarchy .presentationBody ol{text-align:left;display:inline-block}
+
+/* Mindmap / cycle */
+.fmt-mindmap .presentationBody,
+.fmt-cycle .presentationBody{
+  padding:18px;
+  border-radius:50% / 12%;
+  border:1px dashed rgba(156,134,255,.22);
+  background:radial-gradient(circle,rgba(156,134,255,.07),transparent 62%);
+}
+.fmt-mindmap .presentationBody h2,.fmt-mindmap .presentationBody h3,
+.fmt-cycle .presentationBody h2,.fmt-cycle .presentationBody h3{text-align:center;color:#c6bbff}
+
+/* Infographic */
+.fmt-infographic .presentationBody{
+  display:grid;
+  gap:10px;
+}
+.fmt-infographic .presentationBody h2,.fmt-infographic .presentationBody h3{
+  padding:12px 14px;
+  border-radius:11px;
+  background:linear-gradient(90deg,rgba(113,239,255,.09),rgba(156,134,255,.055));
+  border:1px solid rgba(113,239,255,.11);
+}
+
+/* Notion-like */
+.fmt-notion .presentationBody{
+  max-width:780px;
+  padding:22px 26px;
+  border-radius:14px;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.065);
+}
+.fmt-notion .presentationBody h2,.fmt-notion .presentationBody h3{letter-spacing:-.02em}
+
+@media(max-width:720px){
+  .handwrittenPages{grid-template-columns:1fr}
+  .notePage{padding-left:48px}
+  .fmt-cheatsheet .presentationBody{columns:1}
+}
