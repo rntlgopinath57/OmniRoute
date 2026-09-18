@@ -132,7 +132,7 @@ jobs:
       - name: Verify Cloudflare security header parity
         if: steps.deploy.outputs.url != ''
         run: |
-          headers="$(curl --fail --show-error --silent --head "${{ steps.deploy.outputs.url }}/")"
+          headers="$(curl --fail --show-error --silent -D - -o /dev/null "${{ steps.deploy.outputs.url }}/")"
           echo "$headers"
           echo "$headers" | grep -qi '^x-content-type-options: nosniff'
           echo "$headers" | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
