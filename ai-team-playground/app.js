@@ -21,11 +21,12 @@ const VISUAL_ROUTES={
   general:['openai','claude','gemini']
 };
 const $=id=>document.getElementById(id);
-const edges=$('edges'),nodes=$('nodes'),stars=$('stars'),q=$('q'),go=$('go'),mic=$('mic');
+const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
+const followQ=$('followQ'),followGo=$('followGo');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
-let lastWorker='openai', recognition=null;
+let lastWorker='openai', recognition=null, currentQuestion='', conversation=[];
 
 function classify(t){
   const s=t.toLowerCase();
@@ -62,7 +63,12 @@ function draw(){
   for(const [id,p] of Object.entries(POS)){
     const n=document.createElement('div'); n.id=`n-${id}`; n.className=`node ${id==='you'?'you ':''}`;
     n.style.left=`${p[0]}%`; n.style.top=`${p[1]}%`;
-    n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core"><span>${id==='you'?'◉':id==='reviewer'?'✓':'✦'}</span></div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
+    const mark=id==='you'
+      ? '<span class="youMark">◉</span>'
+      : id==='reviewer'
+        ? '<span class="reviewMark">✓</span>'
+        : '<span class="nodeSignal"><i></i><i></i><i></i></span>';
+    n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core">${mark}</div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
     nodes.appendChild(n);
   }
   render();
@@ -91,6 +97,7 @@ function render(){
     if(FAMILY.includes(id))n.classList.toggle('dim',selected.size>0&&!selected.has(id));
   }
   go.disabled=busy||!q.value.trim();
+  followGo.disabled=busy||!followQ.value.trim();
   mic.classList.toggle('listening',listening);
 }
 function kickNode(id){
@@ -111,6 +118,7 @@ function openAnswer(ok=true){
   $('tick').classList.toggle('bad',!ok);
 }
 function resetForRun(question){
+  currentQuestion=question;
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
   active=new Set(['you']); activeEdges.clear(); answer.classList.remove('open'); workspace.classList.remove('open');
   setStage('understand'); setState('THINKING','busy'); listenText.textContent='AI Team is working'; render();
@@ -151,14 +159,22 @@ async function handleEvent(evt){
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
     $('body').textContent=evt.answer||'No answer returned.';
     $('agents').textContent=`Specialist: ${friendlyModel(evt.model||'AI model')} · Independent review passed · OmniRoute server-side gateway`;
+    if(currentQuestion && evt.answer){
+      conversation.push({role:'user',content:currentQuestion},{role:'assistant',content:evt.answer});
+      conversation=conversation.slice(-8);
+    }
+    followQ.value='';
+    resizeFollow();
     openAnswer(true); listenText.textContent='Ready for your next prompt';
     document.title='✓ OmniRoute answered'; setTimeout(()=>document.title='OmniRoute AI Team',2400); return;
   }
   if(evt.type==='error') throw new Error(evt.message||'AI Team failed');
 }
-async function ask(){
-  const question=q.value.trim();
+async function ask(questionOverride=''){
+  const question=(questionOverride||q.value).trim();
   if(!question||busy)return;
+  q.value=question;
+  resizeInput();
   if(listening&&recognition){try{recognition.stop()}catch{}}
   resetForRun(question);
   try{
@@ -168,7 +184,7 @@ async function ask(){
     const response=await fetch('/api/ask',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question})
+      body:JSON.stringify({question,history:conversation.slice(-6)})
     });
     if(!response.ok)throw new Error(`AI endpoint returned ${response.status}`);
     if(!response.body)throw new Error('Streaming response is unavailable in this browser');
@@ -194,6 +210,17 @@ async function ask(){
 function resizeInput(){
   q.style.height='auto';
   q.style.height=Math.min(q.scrollHeight,120)+'px';
+}
+function resizeFollow(){
+  followQ.style.height='auto';
+  followQ.style.height=Math.min(followQ.scrollHeight,96)+'px';
+}
+function submitFollow(){
+  const text=followQ.value.trim();
+  if(!text||busy)return;
+  followQ.value='';
+  resizeFollow();
+  ask(text);
 }
 function initVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -224,6 +251,9 @@ mic.addEventListener('click',()=>{
 });
 q.addEventListener('input',()=>{resizeInput();render()});
 q.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask()}});
-go.addEventListener('click',ask);
+followQ.addEventListener('input',()=>{resizeFollow();render()});
+followQ.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitFollow()}});
+go.addEventListener('click',()=>ask());
+followGo.addEventListener('click',submitFollow);
 
-draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput();
+draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
