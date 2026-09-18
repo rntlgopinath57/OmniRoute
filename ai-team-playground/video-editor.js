@@ -6,6 +6,13 @@ let selectedFile=null;
 let outputUrl='';
 
 const panel=$('videoEditorPanel');
+
+function mountEditorAtRoot(element){
+  if(element && element.parentElement!==document.body){
+    document.body.appendChild(element);
+  }
+}
+mountEditorAtRoot(panel);
 const openBtn=$('videoEditBtn');
 const closeBtn=$('videoEditorClose');
 const fileInput=$('videoFileInput');
@@ -22,10 +29,15 @@ const preview=$('videoPreview');
 function openPanel(){
   panel.classList.add('open');
   panel.setAttribute('aria-hidden','false');
+  document.body.classList.add('toolModalOpen');
+  panel.scrollTop=0;
+  const card=panel.querySelector('.videoEditorCard');
+  if(card)card.scrollTop=0;
 }
 function closePanel(){
   panel.classList.remove('open');
   panel.setAttribute('aria-hidden','true');
+  document.body.classList.remove('toolModalOpen');
 }
 function setProgress(text){
   progressText.textContent=text;
