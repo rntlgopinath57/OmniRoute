@@ -23,7 +23,7 @@ const VISUAL_ROUTES={
 const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
-const followQ=$('followQ'),followGo=$('followGo');
+const followQ=$('followQ'),followGo=$('followGo'),canvas=$('canvas'),burstLayer=$('burstLayer');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
 let lastWorker='openai', recognition=null, currentQuestion='', conversation=[];
@@ -56,13 +56,17 @@ function draw(){
   edges.innerHTML=''; nodes.innerHTML='';
   const links=[['you','planner'],['planner','router'],...FAMILY.map(x=>['router',x]),...FAMILY.map(x=>[x,'reviewer']),['reviewer','you']];
   for(const [a,b] of links){
-    const A=POS[a],B=POS[b],p=document.createElementNS('http://www.w3.org/2000/svg','path');
-    p.setAttribute('d',`M ${A[0]} ${A[1]} C ${A[0]} ${(A[1]+B[1])/2}, ${B[0]} ${(A[1]+B[1])/2}, ${B[0]} ${B[1]}`);
-    p.setAttribute('class','edge'); p.dataset.e=`${a}:${b}`; edges.appendChild(p);
+    const A=POS[a],B=POS[b],d=`M ${A[0]} ${A[1]} C ${A[0]} ${(A[1]+B[1])/2}, ${B[0]} ${(A[1]+B[1])/2}, ${B[0]} ${B[1]}`;
+    const base=document.createElementNS('http://www.w3.org/2000/svg','path');
+    base.setAttribute('d',d); base.setAttribute('class','edge'); base.dataset.e=`${a}:${b}`; edges.appendChild(base);
+    const flow=document.createElementNS('http://www.w3.org/2000/svg','path');
+    flow.setAttribute('d',d); flow.setAttribute('class','edgeFlow'); flow.dataset.e=`${a}:${b}`; edges.appendChild(flow);
   }
-  for(const [id,p] of Object.entries(POS)){
+  Object.entries(POS).forEach(([id,p],idx)=>{
     const n=document.createElement('div'); n.id=`n-${id}`; n.className=`node ${id==='you'?'you ':''}`;
     n.style.left=`${p[0]}%`; n.style.top=`${p[1]}%`;
+    n.style.setProperty('--phase',`${-(idx%7)*.41}s`);
+    n.style.setProperty('--tilt',`${(idx%2?1:-1)*(1+(idx%3))}deg`);
     const mark=id==='you'
       ? '<span class="youMark">◉</span>'
       : id==='reviewer'
@@ -70,7 +74,7 @@ function draw(){
         : '<span class="nodeSignal"><i></i><i></i><i></i></span>';
     n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core">${mark}</div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
     nodes.appendChild(n);
-  }
+  });
   render();
 }
 function setStage(name){
@@ -84,9 +88,10 @@ function setStage(name){
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
   $('stateText').textContent=text;
+  canvas.dataset.mode=kind||'ready';
 }
 function render(){
-  document.querySelectorAll('.edge').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
+  document.querySelectorAll('.edge,.edgeFlow').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
   for(const id of Object.keys(POS)){
     const n=$(`n-${id}`);
     if(!n)continue;
@@ -100,13 +105,31 @@ function render(){
   followGo.disabled=busy||!followQ.value.trim();
   mic.classList.toggle('listening',listening);
 }
+function burstAt(id,kind='route'){
+  const p=POS[id];
+  if(!p||!burstLayer)return;
+  const b=document.createElement('div');
+  b.className=`nodeBurst ${kind}`;
+  b.style.left=`${p[0]}%`; b.style.top=`${p[1]}%`;
+  b.innerHTML='<i></i><i></i><i></i>';
+  burstLayer.appendChild(b);
+  setTimeout(()=>b.remove(),1150);
+}
 function kickNode(id){
   const n=$(`n-${id}`);
   if(!n)return;
   n.classList.remove('kick');
   void n.offsetWidth;
   n.classList.add('kick');
-  setTimeout(()=>n.classList.remove('kick'),520);
+  burstAt(id,'route');
+  setTimeout(()=>n.classList.remove('kick'),650);
+}
+function validatedBurst(){
+  canvas.classList.remove('validatedBurst');
+  void canvas.offsetWidth;
+  canvas.classList.add('validatedBurst');
+  burstAt('you','done');
+  setTimeout(()=>canvas.classList.remove('validatedBurst'),1500);
 }
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function travel(a,b,ms=300){
@@ -162,7 +185,7 @@ async function handleEvent(evt){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; return;
   }
   if(evt.type==='done'){
-    answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you');
+    answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
     $('badge').classList.remove('retryable');
@@ -268,5 +291,21 @@ followGo.addEventListener('click',submitFollow);
 $('badge').addEventListener('click',()=>{
   if($('badge').classList.contains('retryable') && currentQuestion && !busy) ask(currentQuestion);
 });
+
+let parallaxFrame=0;
+function setParallax(x,y){
+  cancelAnimationFrame(parallaxFrame);
+  parallaxFrame=requestAnimationFrame(()=>{
+    canvas.style.setProperty('--mx',String(x));
+    canvas.style.setProperty('--my',String(y));
+  });
+}
+canvas.addEventListener('pointermove',e=>{
+  const r=canvas.getBoundingClientRect();
+  const x=Math.max(-1,Math.min(1,((e.clientX-r.left)/r.width-.5)*2));
+  const y=Math.max(-1,Math.min(1,((e.clientY-r.top)/r.height-.5)*2));
+  setParallax(x.toFixed(3),y.toFixed(3));
+});
+canvas.addEventListener('pointerleave',()=>setParallax(0,0));
 
 draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
