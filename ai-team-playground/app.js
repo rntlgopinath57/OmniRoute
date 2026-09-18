@@ -1,7 +1,9 @@
 const POS={
-  you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
-  researcher:[50,45],analyst:[79,43],coder:[28,64],builder:[57,64],designer:[82,63],
-  reviewer:[70,82]
+  // Left: command / orchestration path.
+  you:[13,82],planner:[16,24],router:[31,43],github:[29,67],
+  // Right: specialist AI team, with reviewer at the exit.
+  researcher:[56,22],analyst:[78,22],coder:[55,49],builder:[76,49],designer:[60,75],
+  reviewer:[84,75]
 };
 const INFO={
   you:['YOU','Command center'],
