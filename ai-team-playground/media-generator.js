@@ -134,6 +134,12 @@ async function generateVideo(){
   downloadEl.hidden=false;
   setStatus('Video ready');
 }
+async function generateFromPrompt(type,prompt){
+  openPanel(type,prompt);
+  setStatus(type==='video'?'Preparing Veo 3.1…':'Preparing image generation…');
+  await new Promise(r=>setTimeout(r,80));
+  return generate();
+}
 async function generate(){
   const prompt=promptEl.value.trim();
   if(!prompt){setStatus('Describe what you want to create');promptEl.focus();return}
@@ -161,5 +167,6 @@ apiKeyEl?.addEventListener('change',rememberKey);
 
 window.RelayMediaGenerator={
   open:openPanel,
-  openFromPrompt(type,prompt){openPanel(type,prompt)}
+  openFromPrompt(type,prompt){openPanel(type,prompt)},
+  generateFromPrompt
 };
