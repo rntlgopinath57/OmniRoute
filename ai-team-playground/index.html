@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070a">
 <title>Relay AI Team</title>
-<link rel="stylesheet" href="./app.css?v=12">
+<link rel="stylesheet" href="./app.css?v=13">
 </head>
 <body>
 <main class="shell">
@@ -54,7 +54,11 @@
           <svg class="processWave" viewBox="0 0 320 26" preserveAspectRatio="none" aria-hidden="true">
             <polyline points="0,13 20,13 26,9 32,17 38,12 46,13 54,5 62,21 70,10 78,14 90,8 98,18 108,13 126,13 132,7 138,19 146,11 154,14 168,4 180,22 190,9 200,15 214,11 224,16 236,13 248,13 258,6 270,20 280,10 290,15 300,12 320,13"></polyline>
           </svg>
-          <button id="videoEditBtn" class="toolAction" type="button">EDIT VIDEO</button>
+          <div class="toolActions">
+            <button id="imageGenBtn" class="toolAction" type="button">GENERATE IMAGE</button>
+            <button id="videoGenBtn" class="toolAction" type="button">GENERATE VIDEO</button>
+            <button id="videoEditBtn" class="toolAction" type="button">EDIT VIDEO</button>
+          </div>
         </div>
       </div>
       <div class="followup">
@@ -85,10 +89,44 @@
           <video id="videoPreview" class="videoPreview" controls playsinline hidden></video>
         </div>
       </section>
+    
+      <section id="mediaGeneratorPanel" class="videoEditorPanel mediaGeneratorPanel" aria-hidden="true">
+        <div class="videoEditorCard mediaGeneratorCard" role="dialog" aria-modal="true" aria-labelledby="mediaGeneratorTitle">
+          <div class="videoEditorHead">
+            <div><b id="mediaGeneratorTitle">Generate with Relay</b><span>Images with Nano Banana 2 · videos with Veo 3.1.</span></div>
+            <button id="mediaGeneratorClose" type="button" aria-label="Close generator">×</button>
+          </div>
+          <div class="mediaTabs">
+            <button id="mediaImageTab" class="mediaTab active" type="button">IMAGE</button>
+            <button id="mediaVideoTab" class="mediaTab" type="button">VIDEO</button>
+          </div>
+          <label class="mediaPromptLabel">Prompt
+            <textarea id="mediaPrompt" rows="5" placeholder="Describe exactly what Relay should create…"></textarea>
+          </label>
+          <div id="mediaVideoOptions" class="videoEditGrid" hidden>
+            <label>Aspect ratio<select id="mediaAspect"><option value="16:9">16:9 landscape</option><option value="9:16">9:16 vertical</option></select></label>
+            <label>Length<select id="mediaDuration"><option value="8">8 seconds</option><option value="6">6 seconds</option><option value="4">4 seconds</option></select></label>
+            <label>Resolution<select id="mediaResolution"><option value="720p">720p</option><option value="1080p">1080p</option><option value="4k">4K</option></select></label>
+          </div>
+          <div class="mediaKeyRow">
+            <label>Gemini API key
+              <input id="mediaApiKey" type="password" autocomplete="off" placeholder="Only needed if Relay server has no Gemini key">
+            </label>
+            <small>Used only for this browser session when required.</small>
+          </div>
+          <div class="videoEditorActions">
+            <button id="mediaGenerateBtn" type="button">GENERATE</button>
+            <span id="mediaProgress">Ready</span>
+            <a id="mediaDownload" hidden>Save result</a>
+          </div>
+          <div id="mediaOutput" class="mediaOutput"></div>
+        </div>
+      </section>
     </aside>
   </section>
 </main>
-<script src="./app.js?v=10"></script>
+<script src="./app.js?v=11"></script>
 <script type="module" src="./video-editor.js?v=1"></script>
+<script type="module" src="./media-generator.js?v=1"></script>
 </body>
 </html>
