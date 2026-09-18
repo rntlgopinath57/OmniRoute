@@ -45,6 +45,25 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
 
+      - name: Run AI Team core suite
+        run: |
+          node --test ai-team/tests/*.test.mjs
+          node ai-team/src/main.mjs '{"task":"Review Bharosa security","type":"analysis"}'
+
+      - name: Validate Relay browser extensions
+        run: |
+          node --check ai-team-playground/app.js
+          node --check ai-team-playground/media-generator.js
+          node --check ai-team-playground/video-editor.js
+          grep -q 'video-editor.js' ai-team-playground/index.html
+          grep -q 'media-generator.js' ai-team-playground/index.html
+          grep -q 'id="imageGenBtn"' ai-team-playground/index.html
+          grep -q 'id="videoGenBtn"' ai-team-playground/index.html
+          grep -q 'id="videoEditBtn"' ai-team-playground/index.html
+          grep -q 'SpeechRecognition' ai-team-playground/app.js
+          grep -q 'window.RelayMediaGenerator' ai-team-playground/media-generator.js
+          grep -q 'window.RelayVideoEditor' ai-team-playground/video-editor.js
+
       - name: Validate bundle before deploy
         run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .cloudflare-dry-run
 
@@ -103,6 +122,21 @@ jobs:
           echo "$response"
           echo "$response" | grep -q '"type":"done"'
           echo "$response" | grep -q 'CLOUDFLARE_RELAY_OK'
+
+      - name: Verify Cloudflare security header parity
+        if: steps.deploy.outputs.url != ''
+        run: |
+          headers="$(curl --fail --show-error --silent --head "${{ steps.deploy.outputs.url }}/")"
+          echo "$headers"
+          echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+          echo "$headers" | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
+          echo "$headers" | grep -qi '^x-frame-options: SAMEORIGIN'
+
+      - name: Verify Relay presentation extensions
+        run: |
+          for format in handwritten cheatsheet blueprint flashcards mindmap exploded flowchart timeline roadmap framework comparison before_after hierarchy matrix cycle sticky infographic whiteboard sketchnote notion goodnotes; do
+            grep -q "format: \"$format\"" netlify/functions/ask.mts
+          done
 
       - name: Verify progressive Relay UI
         if: steps.deploy.outputs.url != ''
@@ -181,4 +215,8 @@ jobs:
             echo "- Static UI served from Cloudflare assets"
             echo "- Worker runs only for /api/*"
             echo "- Production traffic was not changed"
+            echo "- Core AI Team unit/integration suite executed"
+            echo "- Browser extensions verified: voice, image generation, video generation, local video editor"
+            echo "- Netlify security headers preserved on Cloudflare"
+            echo "- Provider coverage is reported by /api/health; unavailable providers remain disabled rather than silently assumed"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -17,27 +17,31 @@ type Env = {
   GITHUB_TOKEN?: string;
 };
 
+function secure(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("X-Frame-Options", "SAMEORIGIN");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     setRuntimeEnv(env as unknown as Record<string, unknown>);
     const url = new URL(request.url);
 
-    if (url.pathname === "/api/ask") {
-      return askHandler(request);
-    }
-
-    if (url.pathname === "/api/media") {
-      return mediaHandler(request);
-    }
-
-    if (url.pathname === "/api/health") {
-      return healthHandler();
-    }
+    if (url.pathname === "/api/ask") return secure(await askHandler(request));
+    if (url.pathname === "/api/media") return secure(await mediaHandler(request));
+    if (url.pathname === "/api/health") return secure(await healthHandler());
 
     if (url.pathname.startsWith("/api/")) {
-      return Response.json({ error: "Not found" }, { status: 404 });
+      return secure(Response.json({ error: "Not found" }, { status: 404 }));
     }
 
-    return env.ASSETS.fetch(request);
+    return secure(await env.ASSETS.fetch(request));
   },
 };
