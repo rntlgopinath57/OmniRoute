@@ -46,3 +46,6 @@ Netlify remains untouched as a rollback reference.
 ## Deployment credential
 
 Preview deployment reuses the existing GitHub Actions secret named `CLOUDFLARE_API_TOKEN`. No second Cloudflare token is required.
+
+
+Preview deployment is triggered only after required GitHub Actions credentials are present.
