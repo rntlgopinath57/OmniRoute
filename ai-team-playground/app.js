@@ -27,6 +27,7 @@ const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
@@ -94,6 +95,8 @@ function setState(text,kind=''){
   const processRail=$('processRail');
   if(processText)processText.textContent=text;
   if(processRail)processRail.dataset.mode=kind||'ready';
+  if(runStripText)runStripText.textContent=text;
+  if(runStrip)runStrip.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
 }
@@ -545,7 +548,7 @@ async function handleEvent(evt){
     currentPresentation=evt.presentation||currentPresentation;
     lastPresentation=String((currentPresentation&&currentPresentation.format)||'default');
     answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); setFlowEdge(evt.review==='PASS'?'reviewer:you':''); render(); kickNode('you'); validatedBurst();
-    setState('ANSWERED','done');
+    setState(`DONE · ${completed.size} STEPS`,'done');
     const presentationLabel=currentPresentation&&currentPresentation.format&&currentPresentation.format!=='default' ? String(currentPresentation.label||currentPresentation.format).toUpperCase() : '';
     $('badge').textContent=presentationLabel||'VALIDATED';
     $('meta').textContent=String(evt.taskType||'general').toUpperCase()+' · '+friendlyModel(evt.model||'')+(presentationLabel?' · '+presentationLabel:'');
@@ -736,6 +739,13 @@ function toggleVoice(target){
   voiceTarget=target;
   if(listening){try{recognition.stop()}catch{};return}
   try{recognition.start()}catch{}
+}
+if(runToggle){
+  runToggle.addEventListener('click',()=>{
+    const open=workspace.classList.toggle('show-run');
+    runToggle.setAttribute('aria-expanded',String(open));
+    runToggle.textContent=open?'Hide run':'View run';
+  });
 }
 mic.addEventListener('click',()=>toggleVoice(q));
 followMic.addEventListener('click',()=>toggleVoice(followQ));
