@@ -1,0 +1,96 @@
+name: Relay Sandbox Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - relay-sandbox
+    paths:
+      - "ai-team-playground/**"
+      - "netlify/functions/**"
+      - ".github/workflows/relay-sandbox-check.yml"
+  schedule:
+    - cron: '20 7 * * *'
+      timezone: 'Asia/Kolkata'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-sandbox-check
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout Relay sandbox
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: relay-sandbox
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: JavaScript syntax checks
+        run: |
+          node --check ai-team-playground/app.js
+          node --check ai-team-playground/media-generator.js
+          node --check ai-team-playground/video-editor.js
+
+      - name: TypeScript/Netlify function parse checks
+        run: |
+          npx --yes esbuild@0.25.10 netlify/functions/ask.mts --loader:.mts=ts --format=esm --outfile=/tmp/relay-ask.js
+          npx --yes esbuild@0.25.10 netlify/functions/media.mts --loader:.mts=ts --format=esm --outfile=/tmp/relay-media.js
+          npx --yes esbuild@0.25.10 netlify/functions/health.mts --loader:.mts=ts --format=esm --outfile=/tmp/relay-health.js
+
+      - name: Relay invariant checks
+        shell: python
+        run: |
+          from pathlib import Path
+          html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
+          app = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
+          ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
+          media = Path("netlify/functions/media.mts").read_text(encoding="utf-8")
+
+          required_html = [
+              "Ask Relay anything",
+              "GENERATE IMAGE",
+              "GENERATE VIDEO",
+              "EDIT VIDEO",
+              "media-generator.js",
+              "video-editor.js",
+          ]
+          for item in required_html:
+              assert item in html, f"Missing UI capability: {item}"
+
+          assert "review_skipped" in ask, "Reviewer must be fail-open"
+          assert "useFastPath" in ask, "Simple questions must have fast-path"
+          assert "coding|coder" in ask or "code|coding|coder" in ask, "Coding classification regression"
+          assert "/api/ask" in app, "Chat endpoint missing"
+          assert "video-start" in media and "image" in media, "Media generation routes missing"
+
+          print("Relay sandbox invariants: PASS")
+
+      - name: Security guard
+        shell: bash
+        run: |
+          if grep -R -n -E 'AIza[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9]{20,}' ai-team-playground netlify/functions; then
+            echo "Potential hard-coded secret detected."
+            exit 1
+          fi
+          echo "No obvious hard-coded provider secrets found."
+
+      - name: Summary
+        run: |
+          {
+            echo "## Relay sandbox"
+            echo "- JavaScript syntax: PASS"
+            echo "- Netlify function parse: PASS"
+            echo "- Routing/reviewer/media invariants: PASS"
+            echo "- Secret scan: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
