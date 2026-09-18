@@ -280,10 +280,16 @@ async function handleEvent(evt){
     updatePending('Independent reviewer is checking the answer…');
     active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
   }
-  if(evt.type==='review_skipped'){
+  if(evt.type==='fast_path'){
     setState('FINALIZING','busy');
     $('badge').textContent='FAST PATH';
-    updatePending('Reviewer was slow, so Relay is returning the specialist answer without blocking you…');
+    updatePending('Answer ready — no extra review needed for this request…');
+    return;
+  }
+  if(evt.type==='review_skipped'){
+    setState('FINALIZING','busy');
+    $('badge').textContent='REVIEW BYPASSED';
+    updatePending('Reviewer was unavailable, so Relay is returning the specialist answer without blocking you…');
     return;
   }
   if(evt.type==='retry'){
