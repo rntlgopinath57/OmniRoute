@@ -159,7 +159,7 @@ async function ask(){
   resetForRun(question);
   try{
     if(/raw\.githack\.com|raw\.githubusercontent\.com/.test(location.hostname)){
-      throw new Error('This is a static code preview, so it cannot execute the secure AI backend. Puter has been removed; use the deployed OmniRoute URL for live answers.');
+      throw new Error('This static preview cannot execute the secure AI backend. Open the deployed OmniRoute URL for live answers.');
     }
     const response=await fetch('/api/ask',{
       method:'POST',
