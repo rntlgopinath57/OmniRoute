@@ -64,6 +64,116 @@ function disambiguationContext(question: string) {
   return notes.join(" ");
 }
 
+const REPO_ALIASES: Array<[RegExp, string]> = [
+  [/\bgoogle\s+skills\b/i, "rntlgopinath57/Google-skills"],
+  [/\banthropic\s+skills\b/i, "rntlgopinath57/anthropic-skills"],
+  [/\bopenai\s+plugins\b/i, "rntlgopinath57/openai-plugins"],
+  [/\bgoogle\s+adk(?:\s+python)?\b/i, "rntlgopinath57/google-adk-python"],
+  [/\bcrawl4ai\b/i, "rntlgopinath57/crawl4ai"],
+  [/\bplaywright(?:[- ]mcp)?\b/i, "rntlgopinath57/microsoft-playwright-mcp"],
+  [/\bfreellmapi\b/i, "rntlgopinath57/freellmapi"],
+  [/\bharosa\b|\bsafeqr\b/i, "rntlgopinath57/safeqr"],
+  [/\bgopi[_ -]?alerts\b/i, "rntlgopinath57/gopi_alerts"],
+  [/\bnimbus\b/i, "rntlgopinath57/nimbus"],
+  [/\bomniroute\b|\brelay\b/i, "rntlgopinath57/OmniRoute"],
+];
+
+function mentionedRepos(text: string) {
+  const found = new Set<string>();
+  const explicit = text.match(/\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g) || [];
+  for (const repo of explicit) found.add(repo);
+  for (const [pattern, repo] of REPO_ALIASES) {
+    if (pattern.test(text)) found.add(repo);
+  }
+  return [...found].slice(0, 3);
+}
+
+async function githubRepoContext(text: string) {
+  const repos = mentionedRepos(text);
+  if (!repos.length) return { context: "", repos: [], inaccessible: [] as string[] };
+
+  const token = Netlify.env.get("RELAY_GITHUB_TOKEN") || Netlify.env.get("GITHUB_TOKEN") || "";
+  const headers: Record<string, string> = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "relay-ai-team",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const blocks: string[] = [];
+  const accessible: string[] = [];
+  const inaccessible: string[] = [];
+
+  for (const repo of repos) {
+    try {
+      const metaResponse = await fetchWithTimeout(
+        `https://api.github.com/repos/${repo}`,
+        { headers },
+        5000,
+      );
+      if (!metaResponse.ok) {
+        inaccessible.push(repo);
+        continue;
+      }
+      const meta = await metaResponse.json();
+      accessible.push(repo);
+
+      let readme = "";
+      try {
+        const readmeResponse = await fetchWithTimeout(
+          `https://api.github.com/repos/${repo}/readme`,
+          {
+            headers: {
+              ...headers,
+              "Accept": "application/vnd.github.raw+json",
+            },
+          },
+          5000,
+        );
+        if (readmeResponse.ok) readme = (await readmeResponse.text()).slice(0, 7000);
+      } catch {}
+
+      let rootFiles = "";
+      try {
+        const contentsResponse = await fetchWithTimeout(
+          `https://api.github.com/repos/${repo}/contents`,
+          { headers },
+          5000,
+        );
+        if (contentsResponse.ok) {
+          const items = await contentsResponse.json();
+          if (Array.isArray(items)) {
+            rootFiles = items.slice(0, 40).map((item: any) =>
+              `${item?.type === "dir" ? "dir" : "file"}:${item?.name || ""}`
+            ).join(", ");
+          }
+        }
+      } catch {}
+
+      blocks.push([
+        `REPOSITORY: ${repo}`,
+        `Description: ${meta?.description || ""}`,
+        `Default branch: ${meta?.default_branch || ""}`,
+        `Visibility: ${meta?.visibility || (meta?.private ? "private" : "public")}`,
+        `Updated: ${meta?.updated_at || ""}`,
+        `Pushed: ${meta?.pushed_at || ""}`,
+        `Fork: ${Boolean(meta?.fork)}`,
+        meta?.source?.full_name ? `Upstream: ${meta.source.full_name}` : "",
+        rootFiles ? `Root files: ${rootFiles}` : "",
+        readme ? `README:\n${readme}` : "README unavailable",
+      ].filter(Boolean).join("\n"));
+    } catch {
+      inaccessible.push(repo);
+    }
+  }
+
+  return {
+    context: blocks.join("\n\n---\n\n"),
+    repos: accessible,
+    inaccessible,
+  };
+}
+
 function useFastPath(question: string, taskType: string) {
   const q = question.toLowerCase();
   const highRiskOrFresh = /\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news|verify|fact[- ]?check)\b/.test(q);
@@ -301,12 +411,23 @@ export default async (request: Request) => {
 
         let actualWorkerModel = workerModel;
         const contextNote = disambiguationContext(contextualQuestion);
+        const repoLookup = await githubRepoContext(contextualQuestion);
+        if (repoLookup.repos.length) {
+          emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos });
+        } else if (mentionedRepos(contextualQuestion).length) {
+          emit({ type: "tool", tool: "github", status: "unavailable", repos: repoLookup.inaccessible });
+        }
         const workerMessages = [
           {
             role: "system",
             content:
               "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture."
-              + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : ""),
+              + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : "")
+              + (repoLookup.context
+                ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories:\n\n" + repoLookup.context
+                : repoLookup.inaccessible.length
+                  ? " NOTE: The requested repository appears private or unavailable to Relay's live GitHub reader. Say that clearly; do not pretend it was inspected."
+                  : ""),
           },
           ...history,
           { role: "user", content: question },
