@@ -1,8 +1,8 @@
 function classify(text: string) {
   const q = text.toLowerCase();
   if (/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
-  if (/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market|repo|github)\b/.test(q)) return "research";
-  if (/\b(workflow|automate|automation|schedule|monitor|alert|pipeline|action)\b/.test(q)) return "automation";
+  if (/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(q)) return "automation";
+  if (/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market)\b/.test(q)) return "research";
   if (/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(q)) return "design";
   if (/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(q)) return "reasoning";
   return "general";
@@ -11,7 +11,7 @@ function classify(text: string) {
 function workerFor(taskType: string) {
   if (taskType === "coding" || taskType === "reasoning") return "gpt-5.6-sol";
   if (taskType === "research") return "perplexity/sonar-pro-search";
-  if (taskType === "automation") return "deepseek/deepseek-v4-flash";
+  if (taskType === "automation") return "gpt-5.6-sol";
   if (taskType === "design") return "qwen/qwen3.5-397b-a17b";
   return "gpt-5.6-luna";
 }
@@ -42,20 +42,27 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   let response: Response | null = null;
   let lastNetworkError = "";
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: requestBody,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 14000);
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: requestBody,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (response.ok) break;
 
-      if ([429, 502, 503, 504].includes(response.status) && attempt < 3) {
+      if ([429, 502, 503, 504].includes(response.status) && attempt < 2) {
         console.warn("AI Gateway transient response", { model, status: response.status, attempt });
         await sleep(350 * attempt);
         continue;
@@ -72,11 +79,11 @@ async function callModel(model: string, messages: Array<{ role: string; content:
       if (error instanceof Error && !/^The AI service|^The selected AI model/.test(error.message)) {
         lastNetworkError = error.message;
         console.warn("AI Gateway network retry", { model, attempt, error: lastNetworkError });
-        if (attempt < 3) {
+        if (attempt < 2) {
           await sleep(350 * attempt);
           continue;
         }
-        throw new Error("The AI connection was interrupted. Tap RETRY — your prompt is preserved.");
+        throw new Error("The selected AI provider did not respond in time. OmniRoute will switch providers on retry.");
       }
       throw error;
     }
@@ -85,7 +92,7 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   if (!response || !response.ok) {
     throw new Error(
       lastNetworkError
-        ? "The AI connection was interrupted. Tap RETRY — your prompt is preserved."
+        ? "The selected AI provider did not respond in time. OmniRoute will switch providers on retry."
         : "The AI service is temporarily busy. Please retry."
     );
   }
@@ -136,7 +143,8 @@ export default async (request: Request) => {
         await new Promise((resolve) => setTimeout(resolve, 180));
         emit({ type: "worker", taskType, model: workerModel });
 
-        let answer = await callModel(workerModel, [
+        let actualWorkerModel = workerModel;
+        const workerMessages = [
           {
             role: "system",
             content:
@@ -144,14 +152,24 @@ export default async (request: Request) => {
           },
           ...history,
           { role: "user", content: question },
-        ]);
+        ];
 
-        emit({ type: "reviewer", model: reviewerModel });
+        let answer = "";
+        try {
+          answer = await callModel(actualWorkerModel, workerMessages);
+        } catch (workerError) {
+          actualWorkerModel = "gpt-5.6-luna";
+          emit({ type: "fallback", model: actualWorkerModel });
+          answer = await callModel(actualWorkerModel, workerMessages);
+        }
+
+        const actualReviewerModel = reviewerFor(actualWorkerModel);
+        emit({ type: "reviewer", model: actualReviewerModel });
 
         let review = "";
         try {
           review = await callModel(
-            reviewerModel,
+            actualReviewerModel,
             [
               {
                 role: "system",
@@ -164,7 +182,7 @@ export default async (request: Request) => {
             260,
           );
         } catch {
-          const fallbackReviewer = reviewerModel === "gpt-5.6-luna"
+          const fallbackReviewer = actualReviewerModel === "gpt-5.6-luna"
             ? "deepseek/deepseek-v4-flash"
             : "gpt-5.6-luna";
           emit({ type: "reviewer", model: fallbackReviewer });
@@ -194,15 +212,15 @@ export default async (request: Request) => {
             ...history,
             { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
           ]);
-          emit({ type: "reviewer", model: reviewerModel });
+          emit({ type: "reviewer", model: actualReviewerModel });
         }
 
         emit({
           type: "done",
           answer,
           review: "PASS",
-          model: workerModel,
-          reviewer: reviewerModel,
+          model: actualWorkerModel,
+          reviewer: actualReviewerModel,
           taskType,
         });
       } catch (error) {
