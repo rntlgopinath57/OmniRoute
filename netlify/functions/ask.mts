@@ -47,6 +47,49 @@ function reviewerFor(worker: string) {
   return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
 }
 
+function providerForModel(model: string) {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (model.startsWith("gemini-")) return "gemini";
+  if (model.includes("/")) return "openrouter";
+  return "openai";
+}
+
+function modelConfigured(model: string) {
+  const provider = providerForModel(model);
+  if (provider === "anthropic") return Boolean(envGet("ANTHROPIC_API_KEY"));
+  if (provider === "gemini") return Boolean(envGet("GEMINI_API_KEY"));
+  if (provider === "openrouter") return Boolean(envGet("OPENROUTER_API_KEY"));
+  return Boolean(envGet("OPENAI_API_KEY"));
+}
+
+function firstConfiguredModel(models: string[]) {
+  return models.find((model) => modelConfigured(model)) || "";
+}
+
+function resolveWorkerModel(requested: string) {
+  if (modelConfigured(requested)) return requested;
+  return firstConfiguredModel([
+    "gemini-3.5-flash-lite",
+    "gpt-5.6-luna",
+    "claude-haiku-4-5",
+    "deepseek/deepseek-v4-flash",
+  ]) || requested;
+}
+
+function resolveReviewerModel(worker: string) {
+  const workerProvider = providerForModel(worker);
+  const candidates = [
+    reviewerFor(worker),
+    "claude-haiku-4-5",
+    "gemini-3.5-flash",
+    "gpt-5.6-luna",
+    "deepseek/deepseek-v4-flash",
+  ];
+  return candidates.find((model) =>
+    modelConfigured(model) && providerForModel(model) !== workerProvider
+  ) || "";
+}
+
 function disambiguationContext(question: string) {
   const q = question.toLowerCase();
   const notes: string[] = [];
@@ -635,8 +678,8 @@ export default async (request: Request) => {
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
-        const workerModel = stickyModel || (presentation.visual ? "gpt-5.6-luna" : routedWorkerModel);
-        const reviewerModel = reviewerFor(workerModel);
+        const requestedWorkerModel = stickyModel || (presentation.visual ? "gpt-5.6-luna" : routedWorkerModel);
+        const workerModel = resolveWorkerModel(requestedWorkerModel);
 
         emit({ type: "planner", taskType, presentation });
         await new Promise((resolve) => setTimeout(resolve, 180));
@@ -688,8 +731,10 @@ export default async (request: Request) => {
               "gemini-3.5-flash-lite",
               "deepseek/deepseek-v4-flash",
             ]));
-        let pool = candidates.filter((model, index) => index === 0 || providerAvailable(model));
-        if (!pool.length) pool = candidates;
+        const configuredCandidates = candidates.filter((model) => modelConfigured(model));
+        let pool = (configuredCandidates.length ? configuredCandidates : candidates)
+          .filter((model, index) => index === 0 || providerAvailable(model));
+        if (!pool.length) pool = configuredCandidates.length ? configuredCandidates : candidates;
 
         const failures: string[] = [];
         let rateLimited = 0;
@@ -744,9 +789,15 @@ export default async (request: Request) => {
         }
 
         if (!answer && longForm && timedOut > 0) {
-          const rescueModel = "deepseek/deepseek-v4-flash";
-          emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
+          const rescueModel = firstConfiguredModel([
+            "deepseek/deepseek-v4-flash",
+            "gemini-3.5-flash-lite",
+            "gpt-5.6-luna",
+            "claude-haiku-4-5",
+          ]);
+          if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
+            if (!rescueModel) throw new Error("No configured rescue provider.");
             const rescueMessages = [
               {
                 role: "system",
@@ -771,7 +822,7 @@ export default async (request: Request) => {
             throw new Error("Relay's AI gateway is temporarily saturated. It will recover shortly; retry this prompt in about a minute.");
           }
           if (creditLimited > 0 && creditLimited + timedOut >= pool.length) {
-            throw new Error("Relay's AI gateway credits are unavailable or exhausted. Check Netlify usage/billing.");
+            throw new Error("Relay's configured AI provider credits or quota are unavailable. Check the active provider account.");
           }
           if (timedOut > 0) {
             throw new Error("Relay's providers timed out while generating this longer response. Retry once; Relay will use the compact rescue path.");
@@ -779,7 +830,7 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
-        const actualReviewerModel = reviewerFor(actualWorkerModel);
+        const actualReviewerModel = resolveReviewerModel(actualWorkerModel);
 
         if (presentation.visual) {
           emit({ type: "render", presentation });
@@ -800,6 +851,9 @@ export default async (request: Request) => {
         } else if (useFastPath(question, taskType, presentation)) {
           reviewStatus = "FAST_PATH";
           emit({ type: "fast_path", reason: "simple_or_low_risk" });
+        } else if (!actualReviewerModel) {
+          reviewStatus = "SKIPPED";
+          emit({ type: "review_skipped", reason: "no_independent_provider" });
         } else {
           emit({ type: "reviewer", model: actualReviewerModel });
           try {
