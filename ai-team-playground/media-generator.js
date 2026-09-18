@@ -142,15 +142,17 @@ async function generateFromPrompt(type,prompt){
 }
 async function generate(){
   const prompt=promptEl.value.trim();
-  if(!prompt){setStatus('Describe what you want to create');promptEl.focus();return}
+  if(!prompt){setStatus('Describe what you want to create');promptEl.focus();return false}
   clearOutput();
   rememberKey();
   generateBtn.disabled=true;
   try{
     if(mode==='video')await generateVideo();
     else await generateImage();
+    return true;
   }catch(error){
     setStatus(humanError(error));
+    return false;
   }finally{
     generateBtn.disabled=false;
   }
