@@ -124,6 +124,14 @@ jobs:
           grep -q 'grid-template-columns:minmax(150px,1fr) minmax(720px,980px) minmax(150px,1fr)' ai-team-playground/app.css
           grep -q 'Relay structural three-column workspace v28' ai-team-playground/app.css
 
+      - name: Verify Relay immersive rail animation
+        run: |
+          grep -q 'id="handoffFx"' ai-team-playground/index.html
+          grep -q 'function animateAmbientFlight' ai-team-playground/app.js
+          grep -q 'ambientPacket' ai-team-playground/app.css
+          grep -q 'railImpactCore' ai-team-playground/app.css
+          grep -q 'Relay immersive rail animation v29' ai-team-playground/app.css
+
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
         run: |

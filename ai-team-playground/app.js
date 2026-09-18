@@ -28,11 +28,12 @@ const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
-const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 let lastSuccessfulModel='', lastSuccessfulTaskType='', lastPresentation='default';
+let ambientLastNode='you';
 let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
 
 function classify(t){
@@ -160,7 +161,49 @@ function render(){
     node.classList.toggle('energized',isEnergized);
     node.classList.toggle('listening',listening&&id==='you');
   });
+
+  const ambientActive=[...active].find(id=>document.querySelector(`[data-ambient-node="${id}"]`));
+  if(ambientActive && ambientActive!==ambientLastNode && (busy||answered)){
+    animateAmbientFlight(ambientLastNode,ambientActive);
+    ambientLastNode=ambientActive;
+  }
 }
+function animateAmbientFlight(fromId,toId){
+  if(!handoffFx||!workspace||!fromId||!toId||fromId===toId)return;
+  const from=document.querySelector(`[data-ambient-node="${fromId}"] .railCore`);
+  const to=document.querySelector(`[data-ambient-node="${toId}"] .railCore`);
+  if(!from||!to)return;
+
+  const wr=workspace.getBoundingClientRect();
+  const a=from.getBoundingClientRect();
+  const b=to.getBoundingClientRect();
+  const x1=a.left+a.width/2-wr.left;
+  const y1=a.top+a.height/2-wr.top;
+  const x2=b.left+b.width/2-wr.left;
+  const y2=b.top+b.height/2-wr.top;
+  const dx=x2-x1,dy=y2-y1;
+  const distance=Math.hypot(dx,dy);
+  const angle=Math.atan2(dy,dx)*180/Math.PI;
+
+  const flight=document.createElement('div');
+  flight.className='ambientFlight';
+  flight.style.left=x1+'px';
+  flight.style.top=y1+'px';
+  flight.style.width=Math.max(24,distance)+'px';
+  flight.style.transform=`rotate(${angle}deg)`;
+  flight.innerHTML='<span class="flightLine"></span><i class="flightPacket"></i><b class="flightTail"></b>';
+  handoffFx.appendChild(flight);
+
+  const destination=document.querySelector(`[data-ambient-node="${toId}"]`);
+  if(destination){
+    destination.classList.remove('impact');
+    void destination.offsetWidth;
+    destination.classList.add('impact');
+    setTimeout(()=>destination.classList.remove('impact'),900);
+  }
+  setTimeout(()=>flight.remove(),1050);
+}
+
 function burstAt(id,kind='route'){
   const p=POS[id];
   if(!p||!burstLayer)return;
