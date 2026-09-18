@@ -32,9 +32,9 @@ function classify(t){
   const s=t.toLowerCase();
   if(/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(s))return'coding';
   if(/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(s))return'automation';
-  if(/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market)\b/.test(s))return'research';
+  if(/\b(research|find|discover|latest|source|cite|news|security|privacy|market)\b/.test(s))return'research';
   if(/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(s))return'design';
-  if(/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';
+  if(/\b(compare|comparison|versus|vs\.?|analyse|analyze|reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';
   return'general';
 }
 function nodeForModel(model=''){
@@ -166,9 +166,16 @@ function appendMessage(role,text,meta=''){
   scrollThread();
   return row;
 }
+function clearFailedAttempt(question=''){
+  const rows=[...thread.querySelectorAll('.messageRow.failed')];
+  for(const row of rows){
+    if(!question || row.dataset.question===question)row.remove();
+  }
+}
 function startPending(text='Understanding your request…'){
   pendingMessage=appendMessage('assistant',text);
   pendingMessage.classList.add('pending');
+  pendingMessage.dataset.question=currentQuestion;
   const dots=document.createElement('span');
   dots.className='thinkingDots';
   dots.innerHTML='<i></i><i></i><i></i>';
@@ -235,7 +242,8 @@ function resetForRun(question,isRetry=false){
     answer.classList.add('open');
     workspace.classList.add('open','chatting');
   }
-  if(!isRetry)appendMessage('user',question);
+  if(isRetry)clearFailedAttempt(question);
+  else appendMessage('user',question);
   startPending(isRetry?'Retrying your request…':'Understanding your request…');
   $('tick').textContent='◉'; $('tick').classList.remove('bad');
   $('badge').textContent='PROCESSING';
@@ -310,6 +318,7 @@ async function handleEvent(evt){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; updatePending('Reviewer requested a refinement…'); return;
   }
   if(evt.type==='done'){
+    clearFailedAttempt(currentQuestion);
     answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
