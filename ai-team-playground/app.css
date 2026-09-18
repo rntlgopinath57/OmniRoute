@@ -11,4 +11,101 @@
 @media(max-width:900px){header{padding:0 13px}.liveChip{display:none}.brand small{display:none}#workspace,#workspace.open{display:block}#canvas{min-height:calc(100dvh - 68px);min-height:700px}#answer{position:fixed;left:8px;right:8px;bottom:8px;max-height:68vh;border:1px solid rgba(255,255,255,.08);border-radius:22px;z-index:30;transform:translateY(110%)}#answer.open{transform:translateY(0)}#body{min-height:0}.followup{padding:10px}.ask{width:94%;bottom:2%}#edges{inset:2% 0 23%;width:100%;height:75%}.node small{display:none}.core{width:42px;height:42px}.node.you .core{width:57px;height:57px}.stagePanel{top:2.5%;transform:translateX(-50%) scale(.88);transform-origin:center}.stagePanel>i{width:11px}.askMeta span:last-child{display:none}}
 @media(max-width:560px){.stagePanel{top:2%;padding:6px 11px;min-width:108px;justify-content:center}.stagePanel>i,.stage:not(.active){display:none}.stage.active{display:flex;padding:5px 9px}.stage span{display:none}.stage b{display:block;font-size:8px;letter-spacing:.08em;text-transform:uppercase}.node strong{font-size:7px}.ask{width:95%}}
 
-@media(prefers-reduced-motion:reduce){.node.active,.node.energized,.node.active .core,.node.active .energy,.node.active .energy i,.node.energized .energy i{animation:none!important}.edge.on{animation:none!important}}
+
+/* Immersive command-center motion pass */
+#canvas{--mx:0;--my:0;perspective:1100px}
+#canvas:before{transform:translate(calc(var(--mx)*-7px),calc(var(--my)*-5px)) scale(1.035);transition:transform .35s ease-out,opacity .35s;animation:gridBreathe 7s ease-in-out infinite}
+#canvas:after{content:"";position:absolute;inset:-20%;z-index:0;pointer-events:none;background:radial-gradient(circle at 50% 55%,rgba(113,239,255,.12),rgba(156,134,255,.045) 23%,transparent 56%);opacity:.18;transform:scale(.9);transition:opacity .5s}
+#canvas[data-mode="busy"]:after{opacity:.44;animation:fieldBreath 2.3s ease-in-out infinite}
+#canvas[data-mode="listening"]:after{opacity:.52;animation:listenField 1.15s ease-in-out infinite}
+#canvas[data-mode="done"]:after{background:radial-gradient(circle at 50% 58%,rgba(82,242,178,.18),rgba(113,239,255,.05) 27%,transparent 58%);opacity:.5}
+.neuralField{position:absolute;inset:-7%;z-index:0;pointer-events:none;transform:translate(calc(var(--mx)*12px),calc(var(--my)*9px));transition:transform .55s cubic-bezier(.2,.75,.2,1);filter:saturate(1.25)}
+.neuralField:before,.neuralField:after{content:"";position:absolute;border-radius:50%;border:1px solid rgba(113,239,255,.045);left:50%;top:46%;transform:translate(-50%,-50%);animation:fieldOrbit 18s linear infinite}
+.neuralField:before{width:min(70vw,760px);height:min(70vw,760px);box-shadow:0 0 90px rgba(113,239,255,.035),inset 0 0 90px rgba(156,134,255,.025)}
+.neuralField:after{width:min(48vw,520px);height:min(48vw,520px);border-style:dashed;animation-duration:25s;animation-direction:reverse}
+.neuralField i{position:absolute;width:170px;height:170px;border-radius:50%;filter:blur(36px);opacity:.11;background:radial-gradient(circle,rgba(113,239,255,.9),transparent 66%);animation:fieldDrift 9s ease-in-out infinite alternate}
+.neuralField i:nth-child(1){left:12%;top:18%;animation-delay:-1.5s}
+.neuralField i:nth-child(2){right:7%;top:30%;width:230px;height:230px;background:radial-gradient(circle,rgba(156,134,255,.8),transparent 68%);animation-delay:-4s}
+.neuralField i:nth-child(3){left:38%;top:5%;width:140px;height:140px;animation-delay:-6s}
+.neuralField i:nth-child(4){left:28%;bottom:12%;width:220px;height:220px;background:radial-gradient(circle,rgba(82,242,178,.55),transparent 68%);animation-delay:-2.3s}
+.neuralField i:nth-child(5){right:24%;bottom:7%;width:150px;height:150px;animation-delay:-7s}
+.scanBeam{position:absolute;z-index:2;left:-35%;top:-18%;width:170%;height:2px;pointer-events:none;opacity:.08;background:linear-gradient(90deg,transparent,rgba(113,239,255,.9),rgba(255,255,255,.75),rgba(113,239,255,.9),transparent);box-shadow:0 0 24px rgba(113,239,255,.2);transform:rotate(-8deg);animation:scanSweep 8.5s linear infinite}
+#canvas[data-mode="busy"] .scanBeam{opacity:.22;animation-duration:3.4s}
+#edges{filter:drop-shadow(0 0 4px rgba(70,170,210,.06))}
+.edge{transition:stroke .22s,opacity .22s;stroke:rgba(126,153,186,.1)}
+.edge.on{stroke:rgba(113,239,255,.32);stroke-width:.42;stroke-dasharray:none;filter:drop-shadow(0 0 7px rgba(113,239,255,.45))}
+.edgeFlow{fill:none;stroke:transparent;stroke-width:.7;vector-effect:non-scaling-stroke;stroke-linecap:round;opacity:0}
+.edgeFlow.on{stroke:rgba(205,252,255,.96);opacity:.95;stroke-dasharray:.45 3.4;filter:drop-shadow(0 0 5px rgba(113,239,255,.95));animation:circuitFlow .68s linear infinite}
+.node:not(.active):not(.energized){animation:idleFloat 6.8s ease-in-out var(--phase) infinite}
+.node .core{transition:border-color .28s,box-shadow .28s,filter .28s}
+.node:not(.dim):not(.active) .core{box-shadow:inset 0 0 24px rgba(111,146,190,.09),0 8px 30px rgba(0,0,0,.48),0 0 18px rgba(113,239,255,.025)}
+.node.active{z-index:9;animation:nodeDance .62s steps(1,end) infinite}
+.node.active .core{transform:scale(1.22);border-color:rgba(180,250,255,.95);box-shadow:0 0 11px 2px rgba(220,253,255,.36),0 0 36px rgba(113,239,255,.52),0 0 96px rgba(113,239,255,.25),inset 0 0 32px rgba(113,239,255,.13);filter:saturate(1.35)}
+.node.active .orbit{border-color:rgba(113,239,255,.46);border-style:solid;box-shadow:0 0 12px rgba(113,239,255,.08);animation:orbitSpin 2.8s linear infinite}
+.node.active .halo{width:76px;height:76px;border-color:rgba(113,239,255,.42);box-shadow:0 0 28px rgba(113,239,255,.09);animation:ring .72s ease-out infinite}
+.node.active .energy{opacity:1;animation:energyTurn 1.45s linear infinite}
+.node.active .energy i{width:3px;background:linear-gradient(180deg,#fff,var(--cyan),rgba(156,134,255,.2),transparent);box-shadow:0 0 10px rgba(113,239,255,.95);animation:energyBeat .32s ease-in-out infinite alternate}
+.node.active .nodeSignal{gap:3px}
+.node.active .nodeSignal i{width:3px;box-shadow:0 0 10px rgba(113,239,255,.95);animation-duration:.28s}
+.node.energized:not(.active){opacity:.72;animation:nodeVibe .9s ease-in-out var(--phase) infinite alternate}
+.node.energized:not(.active) .core{border-color:rgba(113,239,255,.38);box-shadow:0 0 28px rgba(113,239,255,.12),inset 0 0 20px rgba(113,239,255,.06)}
+.node.dim{opacity:.09;filter:saturate(.1) blur(.15px)}
+.node strong{transition:color .25s,text-shadow .25s,opacity .25s}
+.node.active strong{color:#ecfeff;text-shadow:0 0 13px rgba(113,239,255,.7);letter-spacing:.16em}
+.nodeBurst{position:absolute;z-index:7;transform:translate(-50%,-50%);width:20px;height:20px;pointer-events:none}
+.nodeBurst i{position:absolute;left:50%;top:50%;width:34px;height:34px;border:1px solid rgba(113,239,255,.48);border-radius:50%;transform:translate(-50%,-50%) scale(.35);opacity:0;animation:burstRing 1.05s cubic-bezier(.1,.65,.2,1) forwards}
+.nodeBurst i:nth-child(2){animation-delay:.11s}
+.nodeBurst i:nth-child(3){animation-delay:.22s}
+.nodeBurst.done i{border-color:rgba(82,242,178,.62);box-shadow:0 0 18px rgba(82,242,178,.12)}
+#canvas.validatedBurst:after{animation:validatedFlash 1.25s cubic-bezier(.2,.7,.2,1)}
+#canvas.validatedBurst .node.you .core{animation:answerArrival .95s cubic-bezier(.2,.85,.25,1)}
+#canvas[data-mode="listening"] .node:not(.you):not(.dim) .core{animation:listenEcho 1.4s ease-in-out var(--phase) infinite}
+#canvas[data-mode="listening"] .node.you .energy{opacity:.85;animation:energyTurn 2s linear infinite}
+#canvas[data-mode="busy"] .stagePanel{box-shadow:0 0 34px rgba(113,239,255,.08),0 10px 40px rgba(0,0,0,.3)}
+.stage.active{position:relative;overflow:hidden;box-shadow:inset 0 0 20px rgba(113,239,255,.035)}
+.stage.active:after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent,rgba(113,239,255,.12),transparent);transform:translateX(-120%);animation:stageSweep 1.35s ease-in-out infinite}
+#canvas[data-mode="busy"] .inputShell{border-color:rgba(113,239,255,.25);box-shadow:0 24px 70px rgba(0,0,0,.48),0 0 36px rgba(113,239,255,.055),inset 0 1px rgba(255,255,255,.025)}
+#answer.open{animation:answerSpring .62s cubic-bezier(.18,.9,.24,1)}
+#answer.open .aHead{animation:answerHeaderGlow .9s ease-out}
+#answer.open #body{animation:answerTextIn .48s .08s both ease-out}
+.followup:focus-within{box-shadow:0 -10px 35px rgba(113,239,255,.035)}
+.followup textarea:focus{border-color:rgba(113,239,255,.34);box-shadow:0 0 0 3px rgba(113,239,255,.035)}
+
+@keyframes circuitFlow{to{stroke-dashoffset:-3.85}}
+@keyframes gridBreathe{0%,100%{opacity:.56}50%{opacity:.88}}
+@keyframes fieldBreath{0%,100%{transform:scale(.91);opacity:.34}50%{transform:scale(1.04);opacity:.52}}
+@keyframes listenField{0%,100%{transform:scale(.94)}50%{transform:scale(1.06)}}
+@keyframes fieldOrbit{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes fieldDrift{0%{transform:translate3d(-18px,8px,0) scale(.86)}100%{transform:translate3d(24px,-18px,0) scale(1.18)}}
+@keyframes scanSweep{0%{top:-18%;opacity:0}12%{opacity:.12}78%{opacity:.08}100%{top:112%;opacity:0}}
+@keyframes idleFloat{0%,100%{transform:translate(-50%,-50%) translate3d(0,0,0) rotate(0)}35%{transform:translate(-50%,-50%) translate3d(1px,-4px,0) rotate(var(--tilt))}70%{transform:translate(-50%,-50%) translate3d(-2px,2px,0) rotate(calc(var(--tilt)*-.5))}}
+@keyframes burstRing{0%{opacity:.92;transform:translate(-50%,-50%) scale(.3)}65%{opacity:.35}100%{opacity:0;transform:translate(-50%,-50%) scale(2.45)}}
+@keyframes validatedFlash{0%{opacity:.18;transform:scale(.72)}28%{opacity:.92;transform:scale(1.06)}100%{opacity:.28;transform:scale(1.38)}}
+@keyframes answerArrival{0%{transform:scale(.82);filter:brightness(1)}32%{transform:scale(1.36);filter:brightness(1.8)}62%{transform:scale(1.04)}100%{transform:scale(1.12);filter:brightness(1)}}
+@keyframes listenEcho{0%,100%{box-shadow:0 0 10px rgba(113,239,255,.02)}50%{box-shadow:0 0 28px rgba(113,239,255,.1)}}
+@keyframes stageSweep{55%,100%{transform:translateX(130%)}}
+@keyframes answerSpring{0%{opacity:0;transform:translateX(100%) scale(.96)}100%{opacity:1;transform:translateX(0) scale(1)}}
+@keyframes answerHeaderGlow{0%{box-shadow:inset 0 0 55px rgba(82,242,178,.13)}100%{box-shadow:inset 0 0 0 rgba(82,242,178,0)}}
+@keyframes answerTextIn{0%{opacity:0;transform:translateY(9px)}100%{opacity:1;transform:translateY(0)}}
+
+@media(max-width:900px){
+  .neuralField{inset:-4%;transform:none}
+  .neuralField:before{width:620px;height:620px}
+  .neuralField:after{width:410px;height:410px}
+  .neuralField i{opacity:.075}
+  .neuralField i:nth-child(2),.neuralField i:nth-child(5){display:none}
+  .scanBeam{opacity:.055}
+  #canvas[data-mode="busy"] .scanBeam{opacity:.14}
+  .node.active .core{transform:scale(1.16);box-shadow:0 0 10px 1px rgba(220,253,255,.32),0 0 28px rgba(113,239,255,.42),0 0 72px rgba(113,239,255,.2)}
+  .node.active .halo{width:70px;height:70px}
+  .node.dim{opacity:.075}
+  #answer.open{animation:answerSheetIn .58s cubic-bezier(.18,.9,.24,1)}
+}
+@keyframes answerSheetIn{0%{opacity:0;transform:translateY(110%) scale(.97)}100%{opacity:1;transform:translateY(0) scale(1)}}
+
+@media(prefers-reduced-motion:reduce){
+  .node,.node.active,.node.energized,.node.active .core,.node.active .energy,.node.active .energy i,.node.energized .energy i,
+  .edgeFlow.on,.scanBeam,.neuralField,.neuralField:before,.neuralField:after,.neuralField i,#canvas:before,#canvas:after,
+  .stage.active:after,#answer.open,#answer.open .aHead,#answer.open #body{animation:none!important}
+  .edge.on{animation:none!important}
+}
