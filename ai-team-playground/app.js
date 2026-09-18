@@ -28,7 +28,7 @@ const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
 
-let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set();
+let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 let lastSuccessfulModel='', lastSuccessfulTaskType='', lastPresentation='default';
 let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
@@ -97,8 +97,16 @@ function setState(text,kind=''){
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
 }
+function setFlowEdge(edge){
+  for(const existing of activeEdges) completedEdges.add(existing);
+  activeEdges=new Set(edge?[edge]:[]);
+}
 function render(){
-  document.querySelectorAll('.edge,.edgeFlow').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
+  document.querySelectorAll('.edge').forEach(e=>{
+    e.classList.toggle('on',activeEdges.has(e.dataset.e));
+    e.classList.toggle('complete',completedEdges.has(e.dataset.e));
+  });
+  document.querySelectorAll('.edgeFlow').forEach(e=>e.classList.toggle('on',activeEdges.has(e.dataset.e)));
   for(const id of Object.keys(POS)){
     const n=$(`n-${id}`);
     if(!n)continue;
@@ -142,7 +150,7 @@ function validatedBurst(){
 }
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function travel(a,b,ms=300){
-  active=new Set([b]); activeEdges=new Set([`${a}:${b}`]); render(); kickNode(b); await wait(ms);
+  active=new Set([b]); setFlowEdge(`${a}:${b}`); render(); kickNode(b); await wait(ms);
 }
 function scrollThread(){
   requestAnimationFrame(()=>{ thread.scrollTop=thread.scrollHeight; });
@@ -399,7 +407,7 @@ function resetForRun(question,isRetry=false){
   currentQuestion=question;
   currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
-  completed=new Set(); lastTool=''; active=new Set(['you']); activeEdges.clear();
+  completed=new Set(); completedEdges=new Set(); lastTool=''; active=new Set(['you']); activeEdges.clear();
   if(!chatStarted){
     chatStarted=true;
     openAnswer(true);
@@ -417,7 +425,7 @@ function resetForRun(question,isRetry=false){
   setStage('understand'); setState('THINKING','busy'); listenText.textContent='AI Team is working'; render();
 }
 function finishError(message){
-  answered=false; busy=false; active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
+  answered=false; busy=false; for(const edge of activeEdges)completedEdges.add(edge); active=new Set(['you']); activeEdges.clear(); setState('ATTENTION','error'); render();
   $('badge').textContent='INTERRUPTED';
   $('meta').textContent='REQUEST STOPPED';
   failPending(message);
@@ -442,7 +450,7 @@ async function handleEvent(evt){
   if(evt.type==='worker'){
     completed.add('planner');
     setStage('route'); setState('ROUTER · SELECTING','busy');
-    active=new Set(['router']); activeEdges=new Set(['planner:router']); render(); kickNode('router'); await wait(280);
+    active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
     completed.add('router');
     setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
@@ -450,13 +458,13 @@ async function handleEvent(evt){
     lastWorker=roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
-    active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
+    active=new Set([lastWorker]); setFlowEdge(`router:${lastWorker}`); render(); kickNode(lastWorker); return;
   }
   if(evt.type==='tool'&&evt.tool==='github'){
     if(evt.status==='complete'){
       const repos=Array.isArray(evt.repos)?evt.repos:[];
       lastTool='github'; completed.add('router'); setStage('tool');
-      active=new Set(['github']); activeEdges=new Set(['router:github']); render(); kickNode('github');
+      active=new Set(['github']); setFlowEdge('router:github'); render(); kickNode('github');
       setState('GITHUB · READING REPOS','busy');
       updatePending(`Reading GitHub repository evidence${repos.length?': '+repos.join(', '):'…'}`);
     }else{
@@ -481,7 +489,7 @@ async function handleEvent(evt){
     if(lastTool)completed.add(lastTool);
     updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]);
-    activeEdges=new Set([`${lastTool||'router'}:${lastWorker}`]);
+    setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     setStage('solve');
     setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} responded — preparing the answer…`);
@@ -492,7 +500,7 @@ async function handleEvent(evt){
     updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
     updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]);
-    activeEdges=new Set([`${lastTool||'router'}:${lastWorker}`]);
+    setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     render(); kickNode(lastWorker); return;
   }
   if(evt.type==='render'){
@@ -505,7 +513,7 @@ async function handleEvent(evt){
     setState('DESIGNER · RENDERING','busy');
     updatePending('Designer is rendering the '+String(currentPresentation?.label||'visual').toLowerCase()+' output…');
     active=new Set(['designer']);
-    activeEdges=new Set([source+':designer']);
+    setFlowEdge(source+':designer');
     render(); kickNode('designer');
     await wait(260);
     return;
@@ -513,7 +521,7 @@ async function handleEvent(evt){
   if(evt.type==='reviewer'){
     completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
-    active=new Set(['reviewer']); activeEdges=new Set([`${lastWorker}:reviewer`]); render(); kickNode('reviewer'); return;
+    active=new Set(['reviewer']); setFlowEdge(`${lastWorker}:reviewer`); render(); kickNode('reviewer'); return;
   }
   if(evt.type==='fast_path'){
     completed.add(lastWorker); setState('FINALIZING','busy');
@@ -536,7 +544,7 @@ async function handleEvent(evt){
     lastSuccessfulTaskType=String(evt.taskType||'');
     currentPresentation=evt.presentation||currentPresentation;
     lastPresentation=String((currentPresentation&&currentPresentation.format)||'default');
-    answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); activeEdges=new Set(evt.review==='PASS'?['reviewer:you']:[]); render(); kickNode('you'); validatedBurst();
+    answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); setFlowEdge(evt.review==='PASS'?'reviewer:you':''); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     const presentationLabel=currentPresentation&&currentPresentation.format&&currentPresentation.format!=='default' ? String(currentPresentation.label||currentPresentation.format).toUpperCase() : '';
     $('badge').textContent=presentationLabel||'VALIDATED';
