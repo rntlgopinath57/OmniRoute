@@ -115,11 +115,14 @@ jobs:
           echo "$html" | grep -q 'id="runToggle"'
           echo "Conversation-first UI with ambient execution canvas verified."
 
-      - name: Verify Relay side-gutter layout markers
+      - name: Verify Relay three-column side rails
         run: |
-          grep -q 'planner:\[11,20\]' ai-team-playground/app.js
-          grep -q 'researcher:\[89,14\]' ai-team-playground/app.js
-          grep -q 'Relay balanced side-gutter layout v27' ai-team-playground/app.css
+          grep -q 'id="leftRail"' ai-team-playground/index.html
+          grep -q 'id="rightRail"' ai-team-playground/index.html
+          grep -q 'data-ambient-node="planner"' ai-team-playground/index.html
+          grep -q 'data-ambient-node="reviewer"' ai-team-playground/index.html
+          grep -q 'grid-template-columns:minmax(150px,1fr) minmax(720px,980px) minmax(150px,1fr)' ai-team-playground/app.css
+          grep -q 'Relay structural three-column workspace v28' ai-team-playground/app.css
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''

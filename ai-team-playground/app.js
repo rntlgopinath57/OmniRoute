@@ -1,8 +1,8 @@
 const POS={
-  // Stable side gutters around the conversation panel.
-  // Left = command/orchestration. Right = AI team/reviewer.
-  planner:[11,20],router:[11,40],github:[11,60],you:[11,82],
-  researcher:[89,14],analyst:[89,29],coder:[89,44],builder:[89,59],designer:[89,74],reviewer:[89,89]
+  // Full execution graph used only by View run.
+  you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
+  researcher:[50,45],analyst:[79,43],coder:[28,64],builder:[57,64],designer:[82,63],
+  reviewer:[70,82]
 };
 const INFO={
   you:['YOU','Command center'],
@@ -78,6 +78,9 @@ function updateRoleModel(role,model=''){
   const n=$(`n-${role}`);
   const small=n?.querySelector('small');
   if(small&&model)small.textContent=friendlyModel(model);
+
+  const ambient=document.querySelector(`[data-ambient-node="${role}"] small`);
+  if(ambient&&model)ambient.textContent=friendlyModel(model);
 }
 function setStage(name){
   canvas.dataset.stage=name;
@@ -146,6 +149,17 @@ function render(){
   followGo.disabled=busy||!followQ.value.trim();
   mic.classList.toggle('listening',listening);
   followMic.classList.toggle('listening',listening&&voiceTarget===followQ);
+
+  document.querySelectorAll('[data-ambient-node]').forEach(node=>{
+    const id=node.dataset.ambientNode;
+    const isActive=active.has(id);
+    const isComplete=completed.has(id)||(answered&&id==='you');
+    const isEnergized=busy&&selected.has(id);
+    node.classList.toggle('active',isActive);
+    node.classList.toggle('completed',isComplete);
+    node.classList.toggle('energized',isEnergized);
+    node.classList.toggle('listening',listening&&id==='you');
+  });
 }
 function burstAt(id,kind='route'){
   const p=POS[id];
