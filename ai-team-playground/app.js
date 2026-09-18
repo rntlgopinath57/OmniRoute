@@ -295,7 +295,7 @@ async function handleEvent(evt){
     followQ.value='';
     resizeFollow();
     openAnswer(true); listenText.textContent='Ready for your next prompt';
-    document.title='✓ OmniRoute answered'; setTimeout(()=>document.title='OmniRoute AI Team',2400); return;
+    document.title='✓ Relay answered'; setTimeout(()=>document.title='Relay AI Team',2400); return;
   }
   if(evt.type==='error') throw new Error(evt.message||'AI Team failed');
 }
@@ -308,7 +308,7 @@ async function ask(questionOverride='',isRetry=false){
   resetForRun(question,isRetry);
   try{
     if(/raw\.githack\.com|raw\.githubusercontent\.com/.test(location.hostname)){
-      throw new Error('This static preview cannot execute the secure AI backend. Open the deployed OmniRoute URL for live answers.');
+      throw new Error('This static preview cannot execute the secure AI backend. Open the deployed Relay URL for live answers.');
     }
     const response=await fetch('/api/ask',{
       method:'POST',
