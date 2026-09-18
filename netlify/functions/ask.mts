@@ -37,13 +37,20 @@ async function callModel(model: string, messages: Array<{ role: string; content:
     body: JSON.stringify({
       model,
       messages,
-      max_tokens: maxTokens,
+      ...(model.startsWith("gpt-")
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens }),
     }),
   });
 
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(`${model} failed (${response.status}): ${detail}`);
+    const detail = (await response.text()).slice(0, 500);
+    console.error("AI Gateway model error", { model, status: response.status, detail });
+    throw new Error(
+      response.status >= 500
+        ? "The AI service is temporarily unavailable. Please try again."
+        : "The selected AI model rejected the request. OmniRoute will need a routing adjustment."
+    );
   }
 
   const json = await response.json();
