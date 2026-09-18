@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#05070a">
 <title>OmniRoute AI Team</title>
-<link rel="stylesheet" href="./app.css?v=6">
+<link rel="stylesheet" href="./app.css?v=7">
 </head>
 <body>
 <main class="shell">
@@ -48,19 +48,23 @@
 
     <aside id="answer">
       <div class="aHead">
-        <span id="tick">✓</span>
-        <div><b>AI Team response</b><small id="meta">WAITING</small></div>
-        <button id="badge" class="badge" type="button">VALIDATED</button>
+        <span id="tick">◉</span>
+        <div><b>AI Team conversation</b><small id="meta">READY</small></div>
+        <span id="badge" class="badge">LIVE</span>
       </div>
-      <div id="body">Your reviewed answer will appear here.</div>
-      <div id="agents"></div>
+      <div id="thread" class="thread" aria-live="polite">
+        <div class="threadWelcome">
+          <b>Start a conversation with your AI Team</b>
+          <span>Your prompt and every reviewed answer will stay here as one continuous conversation.</span>
+        </div>
+      </div>
       <div class="followup">
-        <textarea id="followQ" rows="1" placeholder="Ask a follow-up…"></textarea>
+        <textarea id="followQ" rows="1" placeholder="Continue the conversation…"></textarea>
         <button id="followGo" class="followSend" aria-label="Send follow-up">➜</button>
       </div>
     </aside>
   </section>
 </main>
-<script src="./app.js?v=6"></script>
+<script src="./app.js?v=7"></script>
 </body>
 </html>
