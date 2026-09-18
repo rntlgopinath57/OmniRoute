@@ -95,6 +95,15 @@ jobs:
           echo "Health endpoint did not become ready."
           exit 1
 
+      - name: Smoke Gemini Relay prompt
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          url="${{ steps.deploy.outputs.url }}/api/ask"
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q 'CLOUDFARE_RELAY_OK'
+
       - name: Deployment summary
         run: |
           {
