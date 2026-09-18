@@ -17,14 +17,14 @@ function workerFor(taskType: string, question: string) {
 
   if (lightReasoning) return "gpt-5.6-luna";
   if (taskType === "coding" || taskType === "reasoning") return "gpt-5.6-sol";
-  if (taskType === "research") return "perplexity/sonar-pro-search";
+  if (taskType === "research") return "gemini-3.5-flash";
   if (taskType === "automation") return "gpt-5.6-sol";
-  if (taskType === "design") return "qwen/qwen3.5-397b-a17b";
+  if (taskType === "design") return "gemini-3.5-flash";
   return "gpt-5.6-luna";
 }
 
 function reviewerFor(worker: string) {
-  return worker.startsWith("deepseek/") ? "gpt-5.6-luna" : "deepseek/deepseek-v4-flash";
+  return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
 }
 
 function useFastPath(question: string, taskType: string) {
@@ -263,8 +263,9 @@ export default async (request: Request) => {
           const pool = Array.from(new Set([
             primaryModel,
             "gpt-5.6-luna",
-            "qwen/qwen3.5-397b-a17b",
-            "deepseek/deepseek-v4-flash",
+            "claude-haiku-4-5",
+            "gemini-3.5-flash",
+            "deepseek/deepseek-v4-flash-0731",
           ]));
 
           const attempts = pool.map((model, index) => (async () => {
