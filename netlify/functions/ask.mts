@@ -343,7 +343,8 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
     if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
       return false;
     }
-    return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
+    return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text)
+      || (/\bdecision\s*:/i.test(text) && /(?:^|\n)\s*\d+[.)]\s+/m.test(text));
   }
   return true;
 }
