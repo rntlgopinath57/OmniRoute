@@ -31,8 +31,8 @@ let lastWorker='openai', recognition=null, currentQuestion='', conversation=[];
 function classify(t){
   const s=t.toLowerCase();
   if(/\b(code|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(s))return'coding';
-  if(/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market|repo|github)\b/.test(s))return'research';
-  if(/\b(workflow|automate|automation|schedule|monitor|alert|pipeline|action)\b/.test(s))return'automation';
+  if(/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(s))return'automation';
+  if(/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market)\b/.test(s))return'research';
   if(/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(s))return'design';
   if(/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(s))return'reasoning';
   return'general';
@@ -145,6 +145,14 @@ async function handleEvent(evt){
     lastWorker=nodeForModel(evt.model);
     selected.add(lastWorker);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='fallback'){
+    setState('SWITCHING','busy');
+    lastWorker=nodeForModel(evt.model);
+    selected.add(lastWorker);
+    active=new Set([lastWorker]);
+    activeEdges=new Set([`router:${lastWorker}`]);
+    render(); kickNode(lastWorker); return;
   }
   if(evt.type==='reviewer'){
     setStage('verify'); setState('VERIFYING','busy');
