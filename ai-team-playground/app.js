@@ -296,7 +296,7 @@ async function handleEvent(evt){
     $('meta').textContent=`${String(evt.taskType||'general').toUpperCase()} · ${friendlyModel(evt.model||'')}`;
     resolvePending(
       evt.answer||'No answer returned.',
-      `${friendlyModel(evt.model||'AI model')} · ${evt.review==='PASS'?'independent review passed':'review timeout — answer returned'}`
+      `${friendlyModel(evt.model||'AI model')} · ${evt.review==='PASS'?'independent review passed':evt.review==='FAST_PATH'?'fast path · reviewer skipped':'review timeout · answer returned'}`
     );
     if(currentQuestion && evt.answer){
       conversation.push({role:'user',content:currentQuestion},{role:'assistant',content:evt.answer});
