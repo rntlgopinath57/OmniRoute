@@ -535,6 +535,29 @@ export default async (request: Request) => {
       const emit = (payload: unknown) =>
         controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
 
+      const callModelWithProgress = async (
+        model: string,
+        messages: ChatMessage[],
+        maxTokens: number,
+        timeoutMs: number,
+        phase = "generating",
+      ) => {
+        const started = Date.now();
+        const heartbeat = setInterval(() => {
+          emit({
+            type: "progress",
+            phase,
+            model,
+            elapsedMs: Date.now() - started,
+          });
+        }, 4000);
+        try {
+          return await callModel(model, messages, maxTokens, timeoutMs);
+        } finally {
+          clearInterval(heartbeat);
+        }
+      };
+
       try {
         const recentUserContext = history
           .filter((m) => m.role === "user")
@@ -629,15 +652,16 @@ export default async (request: Request) => {
             ? (model.startsWith("gpt-") ? 2000 : 1700)
             : (model.startsWith("gpt-") ? 1200 : 1000);
           const timeoutMs = longForm
-            ? (index === 0 ? 22000 : index === 1 ? 14000 : 9000)
-            : (index === 0 ? 11000 : 7500);
+            ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
+            : (index === 0 ? 10000 : 7000);
 
           try {
-            answer = await callModel(
+            answer = await callModelWithProgress(
               model,
               workerMessages,
               maxTokens,
               timeoutMs,
+              "drafting",
             );
             actualWorkerModel = model;
             markProviderHealthy(model);
@@ -679,7 +703,7 @@ export default async (request: Request) => {
               },
               ...workerMessages,
             ];
-            answer = await callModel(rescueModel, rescueMessages, 900, 8500);
+            answer = await callModelWithProgress(rescueModel, rescueMessages, 900, 8000, "rescue");
             actualWorkerModel = rescueModel;
             markProviderHealthy(rescueModel);
             emit({ type: "worker_selected", model: actualWorkerModel });
@@ -704,6 +728,11 @@ export default async (request: Request) => {
         }
 
         const actualReviewerModel = reviewerFor(actualWorkerModel);
+
+        if (presentation.visual) {
+          emit({ type: "render", presentation });
+          await sleep(220);
+        }
 
         let review = "";
         let reviewStatus: "PASS" | "FAIL" | "SKIPPED" | "FAST_PATH" = "SKIPPED";
