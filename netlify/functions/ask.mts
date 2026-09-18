@@ -68,6 +68,21 @@ function disambiguationContext(question: string) {
   return notes.join(" ");
 }
 
+const ACTIVE_WORKFLOW_REPOS = [
+  "rntlgopinath57/safeqr",
+  "rntlgopinath57/gopi_alerts",
+  "rntlgopinath57/OmniRoute",
+];
+
+function workflowInventoryIntent(text: string) {
+  const q = String(text || "").toLowerCase();
+  return (
+    /\b(list|show|check|review|summari[sz]e|what(?:'s| is| are)?)\b[\s\S]{0,60}\b(workflows?|github actions?|automations?)\b/.test(q)
+    || /\b(my|all)\b[\s\S]{0,35}\b(workflows?|github actions?)\b/.test(q)
+    || /\b(workflows?|github actions?)\b[\s\S]{0,35}\b(my|all)\b/.test(q)
+  );
+}
+
 const REPO_ALIASES: Array<[RegExp, string]> = [
   [/\bgoogle\s+skills\b/i, "rntlgopinath57/Google-skills"],
   [/\banthropic\s+skills\b/i, "rntlgopinath57/anthropic-skills"],
@@ -84,12 +99,15 @@ const REPO_ALIASES: Array<[RegExp, string]> = [
 
 function mentionedRepos(text: string) {
   const found = new Set<string>();
+  if (workflowInventoryIntent(text)) {
+    for (const repo of ACTIVE_WORKFLOW_REPOS) found.add(repo);
+  }
   const explicit = text.match(/\b[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\b/g) || [];
   for (const repo of explicit) found.add(repo);
   for (const [pattern, repo] of REPO_ALIASES) {
     if (pattern.test(text)) found.add(repo);
   }
-  return [...found].slice(0, 3);
+  return [...found].slice(0, 6);
 }
 
 async function githubRepoContext(text: string) {
@@ -154,6 +172,28 @@ async function githubRepoContext(text: string) {
         }
       } catch {}
 
+      let workflowFiles = "";
+      if (workflowInventoryIntent(text)) {
+        try {
+          const workflowResponse = await fetchWithTimeout(
+            `https://api.github.com/repos/${repo}/contents/.github/workflows?ref=${encodeURIComponent(meta?.default_branch || "main")}`,
+            { headers },
+            5000,
+          );
+          if (workflowResponse.ok) {
+            const items = await workflowResponse.json();
+            if (Array.isArray(items)) {
+              workflowFiles = items
+                .filter((item: any) => item?.type === "file")
+                .map((item: any) => item?.name || "")
+                .filter(Boolean)
+                .sort()
+                .join(", ");
+            }
+          }
+        } catch {}
+      }
+
       blocks.push([
         `REPOSITORY: ${repo}`,
         `Description: ${meta?.description || ""}`,
@@ -164,6 +204,9 @@ async function githubRepoContext(text: string) {
         `Fork: ${Boolean(meta?.fork)}`,
         meta?.source?.full_name ? `Upstream: ${meta.source.full_name}` : "",
         rootFiles ? `Root files: ${rootFiles}` : "",
+        workflowInventoryIntent(text)
+          ? (workflowFiles ? `GitHub workflows: ${workflowFiles}` : "GitHub workflows: none found or workflow directory unavailable")
+          : "",
         readme ? `README:\n${readme}` : "README unavailable",
       ].filter(Boolean).join("\n"));
     } catch {
@@ -611,7 +654,7 @@ export default async (request: Request) => {
               + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : "")
               + presentationInstruction(presentation)
               + (repoLookup.context
-                ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories:\n\n" + repoLookup.context
+                ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories. If the user asks for workflows, list the workflow files from this evidence directly and group them by repository:\n\n" + repoLookup.context
                 : repoLookup.inaccessible.length
                   ? " NOTE: The requested repository appears private or unavailable to Relay's live GitHub reader. Say that clearly; do not pretend it was inspected."
                   : ""),
