@@ -824,3 +824,122 @@ body{overflow:hidden}
   .videoEditGrid{grid-template-columns:1fr}
   .messageText{font-size:13px}
 }
+
+/* Relay media generator v13 */
+.toolActions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.mediaGeneratorCard{width:min(760px,96vw)}
+.mediaTabs{
+  display:flex;
+  gap:8px;
+  padding:5px;
+  width:max-content;
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;
+  background:rgba(255,255,255,.025);
+  margin-bottom:14px;
+}
+.mediaTab{
+  height:32px;
+  padding:0 14px;
+  border-radius:9px;
+  background:transparent;
+  border:1px solid transparent;
+  color:#718399;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.1em;
+}
+.mediaTab.active{
+  color:#c9fbff;
+  border-color:rgba(113,239,255,.24);
+  background:rgba(113,239,255,.08);
+  box-shadow:0 0 20px rgba(113,239,255,.04);
+}
+.mediaPromptLabel{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  color:#788b9f;
+  font-size:9px;
+  letter-spacing:.04em;
+}
+.mediaPromptLabel textarea{
+  width:100%;
+  min-height:118px;
+  max-height:220px;
+  border:1px solid rgba(255,255,255,.085);
+  border-radius:14px;
+  background:#07101a;
+  padding:13px;
+  color:#edf8ff;
+}
+.mediaPromptLabel textarea:focus{border-color:rgba(113,239,255,.32)}
+.mediaKeyRow{
+  margin:8px 0 15px;
+  padding:10px 12px;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:13px;
+  background:rgba(255,255,255,.02);
+}
+.mediaKeyRow label{
+  display:grid;
+  grid-template-columns:120px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  color:#7b8ca0;
+  font-size:9px;
+}
+.mediaKeyRow input{
+  height:38px;
+  min-width:0;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px;
+  background:#050b12;
+  color:#eafbff;
+  padding:0 11px;
+  outline:0;
+}
+.mediaKeyRow small{
+  display:block;
+  margin-top:7px;
+  color:#526276;
+  font-size:8px;
+}
+#mediaGenerateBtn{
+  height:40px;
+  padding:0 16px;
+  border-radius:11px;
+  border:1px solid rgba(113,239,255,.3);
+  background:linear-gradient(145deg,rgba(113,239,255,.18),rgba(156,134,255,.1));
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.09em;
+}
+#mediaProgress{font-size:10px;color:#718397}
+#mediaDownload{
+  margin-left:auto;
+  color:#a8ffe0;
+  font-size:10px;
+  font-weight:800;
+  text-decoration:none;
+}
+.mediaOutput{
+  display:grid;
+  place-items:center;
+  min-height:0;
+  margin-top:16px;
+}
+.generatedImage,.generatedVideo{
+  display:block;
+  width:100%;
+  max-height:420px;
+  object-fit:contain;
+  border-radius:14px;
+  background:#000;
+  border:1px solid rgba(255,255,255,.06);
+}
+@media(max-width:720px){
+  .toolActions{gap:4px}
+  .toolAction{font-size:7px}
+  .mediaKeyRow label{grid-template-columns:1fr}
+}
