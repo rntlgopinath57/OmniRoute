@@ -2784,3 +2784,169 @@ header{
 @media(max-width:720px){
   .runSignal{max-width:120px}
 }
+
+
+/* Relay animated handoff lane v25 — visible without opening View run */
+.activityLane{
+  --lane-progress:0;
+  flex:0 0 auto;
+  width:min(980px,calc(100% - 48px));
+  height:64px;
+  margin:8px auto 0;
+  position:relative;
+  overflow:hidden;
+  border:1px solid rgba(113,239,255,.08);
+  border-radius:14px;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(113,239,255,.045),transparent 44%),
+    linear-gradient(180deg,rgba(6,14,22,.74),rgba(4,9,15,.48));
+  opacity:.56;
+  transition:opacity .24s ease,border-color .24s ease,box-shadow .24s ease;
+  z-index:23;
+}
+.activityLane[data-mode="busy"],
+.activityLane[data-mode="listening"]{
+  opacity:1;
+  border-color:rgba(113,239,255,.18);
+  box-shadow:0 0 30px rgba(113,239,255,.045),inset 0 0 26px rgba(113,239,255,.025);
+}
+.activityTrack{
+  position:absolute;
+  inset:9px 18px 7px;
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  align-items:center;
+}
+.activityRail{
+  position:absolute;
+  left:6%;right:6%;top:22px;
+  height:1px;
+  background:linear-gradient(90deg,rgba(86,109,132,.20),rgba(113,239,255,.18),rgba(86,109,132,.20));
+}
+.activityBeam{
+  position:absolute;
+  left:6%;top:21px;
+  width:calc((88% * var(--lane-progress)) / 100);
+  height:2px;
+  border-radius:999px;
+  background:linear-gradient(90deg,rgba(113,239,255,.18),rgba(113,239,255,.9),#fff);
+  box-shadow:0 0 9px rgba(113,239,255,.66),0 0 20px rgba(113,239,255,.25);
+  transition:width .38s cubic-bezier(.2,.85,.2,1);
+}
+.activityCourier{
+  position:absolute;
+  left:calc(6% + (88% * var(--lane-progress)) / 100);
+  top:17px;
+  width:10px;height:10px;
+  margin-left:-5px;
+  border-radius:50%;
+  background:#eaffff;
+  box-shadow:0 0 7px #fff,0 0 16px var(--cyan),0 0 34px rgba(113,239,255,.62);
+  transition:left .38s cubic-bezier(.2,.85,.2,1);
+  z-index:4;
+}
+.activityLane[data-mode="busy"] .activityCourier,
+.activityLane[data-mode="listening"] .activityCourier{
+  animation:laneCourier .62s ease-in-out infinite alternate;
+}
+.activityNode{
+  justify-self:center;
+  width:86px;
+  text-align:center;
+  position:relative;
+  z-index:5;
+  color:#607286;
+  transition:transform .26s cubic-bezier(.2,.85,.2,1),color .24s,filter .24s;
+}
+.activityNode b{
+  width:28px;height:28px;
+  margin:0 auto 5px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  border:1px solid rgba(139,167,193,.16);
+  background:rgba(10,18,28,.94);
+  color:#6f8194;
+  font-size:11px;
+  box-shadow:inset 0 0 12px rgba(113,239,255,.025);
+  transition:inherit;
+}
+.activityNode small{
+  display:block;
+  font:800 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.11em;
+  white-space:nowrap;
+}
+.activityNode.completed{color:#659d89}
+.activityNode.completed b{
+  color:#8bf0c3;
+  border-color:rgba(82,242,178,.26);
+  box-shadow:0 0 12px rgba(82,242,178,.10),inset 0 0 12px rgba(82,242,178,.05);
+}
+.activityNode.active{
+  color:#c9fbff;
+  transform:translateY(-3px) scale(1.08);
+  filter:brightness(1.16);
+}
+.activityNode.active b{
+  color:#fff;
+  border-color:rgba(181,250,255,.88);
+  background:radial-gradient(circle,rgba(113,239,255,.18),rgba(8,16,25,.96) 62%);
+  box-shadow:0 0 8px rgba(255,255,255,.42),0 0 22px rgba(113,239,255,.48),0 0 48px rgba(113,239,255,.18);
+  animation:laneNodePulse .52s ease-in-out infinite alternate;
+}
+.activityNode.arrival b{animation:laneArrival .78s cubic-bezier(.2,.9,.25,1)}
+.activityStars{position:absolute;inset:0;pointer-events:none;overflow:hidden;opacity:0}
+.activityLane[data-mode="busy"] .activityStars,
+.activityLane[data-mode="listening"] .activityStars{opacity:1}
+.activityStars i{
+  position:absolute;
+  left:-70px;
+  width:44px;height:1px;
+  border-radius:999px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.18),rgba(113,239,255,.92));
+  box-shadow:0 0 8px rgba(113,239,255,.62);
+  animation:laneStar 1.8s linear infinite;
+}
+.activityStars i:nth-child(1){top:12px;animation-duration:1.45s}
+.activityStars i:nth-child(2){top:27px;animation-delay:.38s;animation-duration:1.9s}
+.activityStars i:nth-child(3){top:43px;animation-delay:.82s;animation-duration:1.58s}
+.activityStars i:nth-child(4){top:54px;animation-delay:1.15s;animation-duration:2.15s}
+.activityLane[data-mode="done"]{
+  border-color:rgba(82,242,178,.14);
+  box-shadow:inset 0 0 22px rgba(82,242,178,.02);
+}
+.activityLane[data-mode="done"] .activityCourier{
+  background:#dffff0;
+  box-shadow:0 0 8px #fff,0 0 18px rgba(82,242,178,.82),0 0 36px rgba(82,242,178,.42);
+}
+@keyframes laneCourier{
+  from{transform:scale(.78);filter:brightness(.9)}
+  to{transform:scale(1.32);filter:brightness(1.35)}
+}
+@keyframes laneNodePulse{
+  from{transform:scale(.96) translateY(1px)}
+  to{transform:scale(1.13) translateY(-1px)}
+}
+@keyframes laneArrival{
+  0%{transform:scale(.7)}
+  45%{transform:scale(1.55);box-shadow:0 0 14px #fff,0 0 36px rgba(82,242,178,.8)}
+  100%{transform:scale(1)}
+}
+@keyframes laneStar{
+  0%{left:-70px;opacity:0;transform:translateX(0) skewX(-18deg)}
+  10%{opacity:.9}
+  84%{opacity:.75}
+  100%{left:calc(100% + 20px);opacity:0;transform:translateX(30px) skewX(-18deg)}
+}
+@media(max-width:780px){
+  .activityLane{width:calc(100% - 28px);height:58px}
+  .activityTrack{inset:7px 8px 5px}
+  .activityNode{width:auto}
+  .activityNode b{width:24px;height:24px;margin-bottom:4px}
+  .activityNode small{font-size:0}
+  .activityNode small:after{content:"";font-size:0}
+  .activityRail{top:19px}
+  .activityBeam{top:18px}
+  .activityCourier{top:14px}
+}

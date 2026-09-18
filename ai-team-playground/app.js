@@ -27,7 +27,7 @@ const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
-const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
@@ -87,6 +87,26 @@ function setStage(name){
     el.classList.toggle('current',i===current);
     el.classList.toggle('complete',current>=0&&i<current);
   });
+
+  if(activityLane){
+    const laneOrder=['start','understand','route','tool','solve','verify','done'];
+    const laneStage=name==='render'?'solve':name;
+    const laneIndex=laneOrder.indexOf(laneStage);
+    activityLane.dataset.stage=laneStage||'ready';
+    activityLane.style.setProperty('--lane-progress',laneIndex<0?'0':String((laneIndex/(laneOrder.length-1))*100));
+    activityLane.querySelectorAll('.activityNode').forEach(node=>{
+      const i=laneOrder.indexOf(node.dataset.laneStage);
+      node.classList.toggle('active',i===laneIndex);
+      node.classList.toggle('completed',i>=0&&laneIndex>=0&&i<laneIndex);
+    });
+    const specialist=activityLane.querySelector('[data-lane-stage="solve"] small');
+    if(specialist)specialist.textContent=name==='render'?'DESIGNER':'SPECIALIST';
+    if(name==='done'){
+      const finalNode=activityLane.querySelector('[data-lane-stage="done"]');
+      finalNode?.classList.add('arrival');
+      setTimeout(()=>finalNode?.classList.remove('arrival'),1500);
+    }
+  }
 }
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
@@ -97,6 +117,7 @@ function setState(text,kind=''){
   if(processRail)processRail.dataset.mode=kind||'ready';
   if(runStripText)runStripText.textContent=text;
   if(runStrip)runStrip.dataset.mode=kind||'ready';
+  if(activityLane)activityLane.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
 }
