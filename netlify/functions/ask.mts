@@ -10,13 +10,14 @@ function classify(text: string) {
 
 function workerFor(taskType: string) {
   if (taskType === "coding" || taskType === "reasoning") return "gpt-5.6-sol";
-  if (taskType === "research" || taskType === "design") return "google/gemini-3.6-flash";
+  if (taskType === "research") return "perplexity/sonar-pro-search";
   if (taskType === "automation") return "deepseek/deepseek-v4-flash";
+  if (taskType === "design") return "qwen/qwen3.5-397b-a17b";
   return "gpt-5.6-luna";
 }
 
 function reviewerFor(worker: string) {
-  return worker.includes("gemini") ? "gpt-5.6-luna" : "google/gemini-3.6-flash";
+  return worker.startsWith("deepseek/") ? "gpt-5.6-luna" : "deepseek/deepseek-v4-flash";
 }
 
 async function callModel(model: string, messages: Array<{ role: string; content: string }>, maxTokens = 1700) {
@@ -24,10 +25,10 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   const apiKey = Netlify.env.get("OPENAI_API_KEY");
 
   if (!baseUrl || !apiKey) {
-    throw new Error("Netlify AI Gateway is not active yet. Publish this site once, then retry.");
+    throw new Error("AI Gateway is not active yet. Complete one production deploy, then retry.");
   }
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -41,13 +42,15 @@ async function callModel(model: string, messages: Array<{ role: string; content:
   });
 
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 240);
+    const detail = (await response.text()).slice(0, 300);
     throw new Error(`${model} failed (${response.status}): ${detail}`);
   }
 
   const json = await response.json();
   const text = json?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== "string") throw new Error(`${model} returned an empty response`);
+  if (!text || typeof text !== "string") {
+    throw new Error(`${model} returned an empty response`);
+  }
   return text.trim();
 }
 
@@ -70,7 +73,8 @@ export default async (request: Request) => {
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      const emit = (payload: unknown) => controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
+      const emit = (payload: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(payload) + "\n"));
 
       try {
         const taskType = classify(question);
@@ -107,7 +111,9 @@ export default async (request: Request) => {
             260,
           );
         } catch {
-          const fallbackReviewer = reviewerModel === "gpt-5.6-luna" ? "google/gemini-3.6-flash" : "gpt-5.6-luna";
+          const fallbackReviewer = reviewerModel === "gpt-5.6-luna"
+            ? "deepseek/deepseek-v4-flash"
+            : "gpt-5.6-luna";
           emit({ type: "reviewer", model: fallbackReviewer });
           review = await callModel(
             fallbackReviewer,
@@ -136,7 +142,14 @@ export default async (request: Request) => {
           emit({ type: "reviewer", model: reviewerModel });
         }
 
-        emit({ type: "done", answer, review: "PASS", model: workerModel, taskType });
+        emit({
+          type: "done",
+          answer,
+          review: "PASS",
+          model: workerModel,
+          reviewer: reviewerModel,
+          taskType,
+        });
       } catch (error) {
         emit({
           type: "error",
@@ -158,9 +171,4 @@ export default async (request: Request) => {
 
 export const config = {
   path: "/api/ask",
-  rateLimit: {
-    windowLimit: 12,
-    windowSize: 60,
-    aggregateBy: ["ip", "domain"],
-  },
 };
