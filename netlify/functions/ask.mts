@@ -20,6 +20,14 @@ function reviewerFor(worker: string) {
   return worker.startsWith("deepseek/") ? "gpt-5.6-luna" : "deepseek/deepseek-v4-flash";
 }
 
+function useFastPath(question: string, taskType: string) {
+  const q = question.toLowerCase();
+  if (question.length > 220) return false;
+  if (taskType === "research") return false;
+  if (/\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news)\b/.test(q)) return false;
+  return true;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function callModel(
@@ -169,11 +177,16 @@ export default async (request: Request) => {
         }
 
         const actualReviewerModel = reviewerFor(actualWorkerModel);
-        emit({ type: "reviewer", model: actualReviewerModel });
 
         let review = "";
-        let reviewStatus: "PASS" | "FAIL" | "SKIPPED" = "SKIPPED";
-        try {
+        let reviewStatus: "PASS" | "FAIL" | "SKIPPED" | "FAST_PATH" = "SKIPPED";
+
+        if (useFastPath(question, taskType)) {
+          reviewStatus = "FAST_PATH";
+          emit({ type: "review_skipped", reason: "simple_fast_path" });
+        } else {
+          emit({ type: "reviewer", model: actualReviewerModel });
+          try {
           review = await callModel(
             actualReviewerModel,
             [
@@ -191,13 +204,14 @@ export default async (request: Request) => {
           reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")
             ? "PASS"
             : "FAIL";
-        } catch (reviewError) {
-          console.warn("Reviewer unavailable; returning worker answer", {
-            model: actualReviewerModel,
-            error: reviewError instanceof Error ? reviewError.message : String(reviewError),
-          });
-          emit({ type: "review_skipped", reason: "timeout_or_provider_error" });
-          reviewStatus = "SKIPPED";
+          } catch (reviewError) {
+            console.warn("Reviewer unavailable; returning worker answer", {
+              model: actualReviewerModel,
+              error: reviewError instanceof Error ? reviewError.message : String(reviewError),
+            });
+            emit({ type: "review_skipped", reason: "timeout_or_provider_error" });
+            reviewStatus = "SKIPPED";
+          }
         }
 
         if (reviewStatus === "FAIL") {
