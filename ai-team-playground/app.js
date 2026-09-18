@@ -617,7 +617,8 @@ async function ask(questionOverride='',isRetry=false){
     followQ.value=''; resizeFollow();
     render();
     try{
-      await window.RelayMediaGenerator.generateFromPrompt(mediaType,question);
+      const mediaOk=await window.RelayMediaGenerator.generateFromPrompt(mediaType,question);
+      if(!mediaOk)throw new Error('Media generation needs attention. Check the media panel for the exact provider or API-key message.');
       completed.add('designer');
       active=new Set(['you']);
       setFlowEdge('designer:reviewer');
