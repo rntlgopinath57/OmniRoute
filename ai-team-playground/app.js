@@ -1,9 +1,8 @@
 const POS={
-  // Left gutter: user + orchestration/tool path, kept outside the conversation card.
-  you:[7,82],planner:[8,23],router:[15,43],github:[14,64],
-  // Right gutter: specialist AI team + reviewer.
-  researcher:[83,21],analyst:[93,21],coder:[82,46],builder:[93,46],designer:[84,72],
-  reviewer:[94,72]
+  // Fixed left rail beside the conversation: command + orchestration.
+  planner:[6,18],router:[6,38],github:[6,58],you:[6,80],
+  // Fixed right rail beside the conversation: AI specialists + reviewer.
+  researcher:[94,12],analyst:[94,27],coder:[94,42],builder:[94,57],designer:[94,72],reviewer:[94,87]
 };
 const INFO={
   you:['YOU','Command center'],
