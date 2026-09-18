@@ -27,6 +27,7 @@ const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),threa
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), activeEdges=new Set();
 let lastWorker='openai', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
+let lastSuccessfulModel='', lastSuccessfulTaskType='';
 
 function classify(t){
   const s=t.toLowerCase();
@@ -319,6 +320,8 @@ async function handleEvent(evt){
   }
   if(evt.type==='done'){
     clearFailedAttempt(currentQuestion);
+    lastSuccessfulModel=String(evt.model||'');
+    lastSuccessfulTaskType=String(evt.taskType||'');
     answered=true; busy=false; setStage('verify'); active=new Set(['you']); activeEdges=new Set(['reviewer:you']); render(); kickNode('you'); validatedBurst();
     setState('ANSWERED','done');
     $('badge').textContent='VALIDATED';
@@ -396,7 +399,12 @@ async function ask(questionOverride='',isRetry=false){
       response=await fetch('/api/ask',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({question,history:conversation.slice(-6)}),
+        body:JSON.stringify({
+          question,
+          history:conversation.slice(-6),
+          preferredModel:lastSuccessfulModel,
+          previousTaskType:lastSuccessfulTaskType
+        }),
         signal:requestController.signal
       });
     }finally{
