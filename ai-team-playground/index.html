@@ -1,11 +1,60 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#05070a"><title>AI Team</title><link rel="stylesheet" href="./app.css"><script src="https://js.puter.com/v2/"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070a">
+<title>OmniRoute AI Team</title>
+<link rel="stylesheet" href="./app.css">
 </head>
 <body>
-<main class="shell"><header><b><i>✦</i> AI TEAM</b><div class="state"><span></span><em id="stateText">READY</em></div></header>
-<section id="workspace"><div id="canvas"><svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div id="stars"></div><div id="nodes"></div><div class="ask"><div><textarea id="q" rows="1" placeholder="Ask your AI Team anything…"></textarea><button id="go">➜</button></div><small>2 specialists → independent reviewer → one validated answer</small></div></div>
-<aside id="answer"><div class="aHead"><span id="tick">✓</span><div><b>AI Team response</b><small id="meta">waiting</small></div><em id="badge">VALIDATED</em></div><div id="body">Your reviewed answer will appear here.</div><div id="agents"></div></aside></section></main>
+<main class="shell">
+  <header>
+    <div class="brand"><span class="brandMark">✦</span><div><b>OMNIROUTE</b><small>AI TEAM</small></div></div>
+    <div class="headRight">
+      <div class="liveChip"><span></span> LIVE ROUTING</div>
+      <div class="state"><span></span><em id="stateText">READY</em></div>
+    </div>
+  </header>
+
+  <section id="workspace">
+    <div id="canvas">
+      <div class="ambient a1"></div><div class="ambient a2"></div><div class="ambient a3"></div>
+      <svg id="edges" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      <div id="stars"></div>
+      <div id="nodes"></div>
+
+      <div class="stagePanel" id="stagePanel">
+        <div class="stage active" data-stage="understand"><span>01</span><b>Understand</b></div>
+        <i></i>
+        <div class="stage" data-stage="route"><span>02</span><b>Route</b></div>
+        <i></i>
+        <div class="stage" data-stage="solve"><span>03</span><b>Solve</b></div>
+        <i></i>
+        <div class="stage" data-stage="verify"><span>04</span><b>Verify</b></div>
+      </div>
+
+      <div class="ask">
+        <div class="inputShell">
+          <button id="mic" class="mic" aria-label="Voice input"><span class="micIcon">●</span><span class="wave"><i></i><i></i><i></i></span></button>
+          <textarea id="q" rows="1" placeholder="Ask your AI Team anything…"></textarea>
+          <button id="go" class="send" aria-label="Send">➜</button>
+        </div>
+        <div class="askMeta"><span id="listenText">Type or speak</span><span>Planner → specialist → independent reviewer</span></div>
+      </div>
+    </div>
+
+    <aside id="answer">
+      <div class="aHead">
+        <span id="tick">✓</span>
+        <div><b>AI Team response</b><small id="meta">WAITING</small></div>
+        <em id="badge">VALIDATED</em>
+      </div>
+      <div id="body">Your reviewed answer will appear here.</div>
+      <div id="agents"></div>
+    </aside>
+  </section>
+</main>
 <script src="./app.js"></script>
-</body></html>
+</body>
+</html>
