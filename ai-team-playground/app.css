@@ -2203,3 +2203,259 @@ header{
     width:calc(100% - 16px)!important;
   }
 }
+
+
+/* Relay flowing workspace v21 */
+/* One continuous surface: conversation first, handoff graph embedded as ambient context. */
+#workspace,
+#workspace.open,
+#workspace.working{
+  --graph-w:clamp(350px,29vw,460px);
+  --content-gap:clamp(28px,4vw,64px);
+  display:block!important;
+  position:relative!important;
+  height:calc(100dvh - 68px)!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(circle at 78% 32%,rgba(37,101,133,.055),transparent 28%),
+    linear-gradient(180deg,rgba(4,9,15,.96),rgba(2,6,10,.99));
+}
+
+/* Remove the hard panel split completely. */
+#workspace.open #answer,
+#workspace.working #answer,
+#answer,
+#answer.open{
+  position:relative!important;
+  inset:auto!important;
+  z-index:20!important;
+  width:100%!important;
+  height:100%!important;
+  max-height:none!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  transform:none!important;
+  opacity:1!important;
+  filter:none!important;
+  overflow:hidden!important;
+  display:flex!important;
+  flex-direction:column!important;
+}
+#answer:before{display:none!important}
+
+/* The graph is now an embedded visual layer, not a second application panel. */
+#workspace.open #canvas,
+#workspace.working #canvas,
+#canvas{
+  position:absolute!important;
+  z-index:3!important;
+  top:0!important;
+  right:-10px!important;
+  bottom:0!important;
+  left:auto!important;
+  width:var(--graph-w)!important;
+  height:100%!important;
+  min-height:0!important;
+  border:0!important;
+  opacity:.92!important;
+  filter:none!important;
+  pointer-events:none!important;
+  background:
+    radial-gradient(circle at 58% 36%,rgba(42,112,145,.18),transparent 34%),
+    radial-gradient(circle at 58% 76%,rgba(82,242,178,.045),transparent 25%)!important;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.22) 9%,#000 27%,#000 100%);
+  mask-image:linear-gradient(90deg,transparent 0%,rgba(0,0,0,.22) 9%,#000 27%,#000 100%);
+}
+#workspace.open #canvas:before,
+#workspace.working #canvas:before{
+  opacity:.34!important;
+  mask-image:linear-gradient(90deg,transparent,#000 32%,#000)!important;
+}
+#workspace.open .ambient,
+#workspace.working .ambient{opacity:.08!important}
+#workspace.open .scanBeam,
+#workspace.working .scanBeam{opacity:.035!important}
+
+/* Keep the conversation on the same surface while naturally leaving room for the graph. */
+#workspace.open .thread,
+#workspace.working .thread{
+  width:min(1080px,calc(100% - var(--graph-w) + 72px))!important;
+  max-width:calc(100% - 260px)!important;
+  margin-left:var(--content-gap)!important;
+  margin-right:auto!important;
+  padding:24px 0 18px!important;
+  position:relative;
+  z-index:22;
+}
+#workspace.open .toolDock,
+#workspace.working .toolDock,
+#workspace.open .followup,
+#workspace.working .followup{
+  width:min(1080px,calc(100% - var(--graph-w) + 72px))!important;
+  max-width:calc(100% - 260px)!important;
+  margin-left:var(--content-gap)!important;
+  margin-right:auto!important;
+  position:relative;
+  z-index:24;
+}
+#workspace.open .toolDock,
+#workspace.working .toolDock{
+  margin-bottom:6px!important;
+}
+#workspace.open .followup,
+#workspace.working .followup{
+  margin-bottom:14px!important;
+}
+
+/* No internal vertical scrollbar inside answer/presentation cards. */
+.presentationBody,
+.presentationExpanded .presentationBody,
+.handwrittenIntro{
+  max-height:none!important;
+  overflow-y:visible!important;
+}
+.presentationResult .messageBubble{
+  width:100%!important;
+  max-width:100%!important;
+}
+
+/* More natural content width: broad enough to read, not a huge full-screen slab. */
+#workspace.open .messageRow.assistant .messageBubble,
+#workspace.working .messageRow.assistant .messageBubble{
+  max-width:92%!important;
+}
+#workspace.open .messageRow.user .messageBubble,
+#workspace.working .messageRow.user .messageBubble{
+  max-width:76%!important;
+}
+
+/* Handoff label becomes part of the canvas rather than a panel title bar. */
+.handoffHead{
+  top:24px!important;
+  left:42px!important;
+  right:20px!important;
+}
+.handoffHead b{
+  color:#cfe2ef!important;
+  font-size:9.5px!important;
+}
+.handoffHead small{
+  color:#71879a!important;
+}
+.handoffHead>span{
+  background:rgba(2,9,14,.44)!important;
+  backdrop-filter:blur(8px);
+}
+
+/* Daylight-readable graph without turning inactive agents into equal-weight noise. */
+#workspace.open .node,
+#workspace.working .node{
+  opacity:.68!important;
+}
+#workspace.open .node.dim,
+#workspace.working .node.dim{
+  opacity:.34!important;
+}
+#workspace.open .node strong,
+#workspace.working .node strong{
+  color:#d7e5ef!important;
+  text-shadow:0 1px 10px rgba(0,0,0,.95),0 0 8px rgba(113,239,255,.09)!important;
+}
+#workspace.open .node small,
+#workspace.working .node small{
+  color:#8ea5b7!important;
+}
+#workspace.open .node .core,
+#workspace.working .node .core{
+  border-color:rgba(153,199,228,.36)!important;
+  background:
+    radial-gradient(circle at 38% 28%,rgba(255,255,255,.20),rgba(69,117,149,.12) 34%,rgba(6,14,22,.97) 72%)!important;
+  box-shadow:
+    0 0 16px rgba(62,130,164,.12),
+    inset 0 0 20px rgba(115,168,202,.06)!important;
+}
+#workspace.open .edge,
+#workspace.working .edge{
+  stroke:rgba(151,184,207,.28)!important;
+  stroke-width:.43!important;
+}
+#workspace.open .edge.complete,
+#workspace.working .edge.complete{
+  stroke:rgba(82,242,178,.58)!important;
+}
+
+/* Trace floats on the same surface; no footer-panel effect. */
+.executionTrace{
+  left:28px!important;
+  right:18px!important;
+  bottom:18px!important;
+  border-color:rgba(113,239,255,.12)!important;
+  background:rgba(2,8,13,.62)!important;
+  backdrop-filter:blur(10px);
+  box-shadow:0 10px 30px rgba(0,0,0,.16)!important;
+}
+
+/* Slightly quieter utility rail so the content + graph remain the main hierarchy. */
+#workspace.open .toolAction,
+#workspace.working .toolAction{
+  background:rgba(113,239,255,.035)!important;
+  border-color:rgba(113,239,255,.14)!important;
+}
+
+/* Preserve a single conversation scrollbar. */
+.thread{
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+
+/* Mid-size desktop: let the graph overlap more softly instead of becoming a column. */
+@media(max-width:1180px) and (min-width:901px){
+  #workspace,
+  #workspace.open,
+  #workspace.working{
+    --graph-w:clamp(320px,32vw,390px);
+    --content-gap:26px;
+  }
+  #workspace.open .thread,
+  #workspace.working .thread,
+  #workspace.open .toolDock,
+  #workspace.working .toolDock,
+  #workspace.open .followup,
+  #workspace.working .followup{
+    width:calc(100% - 300px)!important;
+    max-width:none!important;
+  }
+}
+
+/* Mobile/tablet: conversation wins; handoff graph is intentionally hidden. */
+@media(max-width:900px){
+  #workspace,
+  #workspace.open,
+  #workspace.working{
+    --content-gap:8px;
+  }
+  #workspace.open #canvas,
+  #workspace.working #canvas,
+  #canvas{
+    display:none!important;
+  }
+  #workspace.open .thread,
+  #workspace.working .thread,
+  #workspace.open .toolDock,
+  #workspace.working .toolDock,
+  #workspace.open .followup,
+  #workspace.working .followup{
+    width:calc(100% - 16px)!important;
+    max-width:none!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+}
