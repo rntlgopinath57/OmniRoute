@@ -111,10 +111,9 @@ jobs:
           echo "$html" | grep -q 'id="runStrip"'
           echo "$html" | grep -q 'id="runToggle"'
           echo "$html" | grep -q 'View run'
-          echo "$html" | grep -q 'id="activityLane"'
-          echo "$html" | grep -q 'data-lane-stage="understand"'
-          echo "$html" | grep -q 'data-lane-stage="verify"'
-          echo "Progressive disclosure UI and visible activity lane verified."
+          echo "$html" | grep -q 'id="canvas"'
+          echo "$html" | grep -q 'id="runToggle"'
+          echo "Conversation-first UI with ambient execution canvas verified."
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
