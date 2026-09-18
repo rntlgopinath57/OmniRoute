@@ -1,0 +1,35 @@
+name: Relay Cloudflare Dry Run
+
+on:
+  push:
+    branches:
+      - infra/cloudflare-relay
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-cloudflare-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Validate Wrangler config
+        run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .cloudflare-dry-run
+
+      - name: Verify Relay bundle
+        run: |
+          test -f .cloudflare-dry-run/index.js
+          grep -q "/api/ask" .cloudflare-dry-run/index.js
+          grep -q "/api/media" .cloudflare-dry-run/index.js
+          grep -q "/api/health" .cloudflare-dry-run/index.js
+          echo "Cloudflare Relay dry-run bundle validated."
