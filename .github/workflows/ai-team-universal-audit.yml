@@ -1,0 +1,108 @@
+name: AI Team Universal Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repository:
+        description: Repository to audit (owner/name)
+        required: true
+        default: rntlgopinath57/OmniRoute
+        type: string
+      target_ref:
+        description: Branch, tag, or commit
+        required: true
+        default: release/v3.8.51
+        type: string
+      profile:
+        description: Audit profile
+        required: true
+        default: full
+        type: choice
+        options: [full, security, reliability, architecture, quality]
+      focus:
+        description: Optional audit focus
+        required: false
+        default: ""
+        type: string
+      fail_on:
+        description: Fail job at or above severity
+        required: true
+        default: critical
+        type: choice
+        options: [none, critical, high]
+  push:
+    branches: [release/v3.8.51]
+    paths:
+      - "ai-team/audit/**"
+      - "ai-team/tests/universal-audit.test.mjs"
+      - ".github/workflows/ai-team-universal-audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit-self-test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+      - run: node --test ai-team/tests/universal-audit.test.mjs
+      - name: Audit this repository
+        env:
+          AUDIT_ROOT: .
+          AUDIT_TARGET_NAME: OmniRoute
+          AUDIT_PROFILE: full
+          AUDIT_OUTPUT_DIR: audit-output
+          AUDIT_FAIL_ON: none
+        run: node ai-team/audit/universal-audit.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-audit-self-test
+          path: audit-output/
+
+  audit-target:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout AI Team control plane
+        uses: actions/checkout@v4
+        with:
+          path: control-plane
+          persist-credentials: false
+      - name: Checkout target read-only
+        uses: actions/checkout@v4
+        with:
+          repository: \${{ inputs.target_repository }}
+          ref: \${{ inputs.target_ref }}
+          path: target-project
+          token: \${{ secrets.AUDIT_READ_TOKEN || secrets.BHAROSA_READ_TOKEN || github.token }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+      - name: Run provider-independent evidence scan
+        env:
+          AUDIT_ROOT: target-project
+          AUDIT_TARGET_NAME: \${{ inputs.target_repository }}
+          AUDIT_PROFILE: \${{ inputs.profile }}
+          AUDIT_FOCUS: \${{ inputs.focus }}
+          AUDIT_OUTPUT_DIR: audit-output
+          AUDIT_FAIL_ON: \${{ inputs.fail_on }}
+        run: node control-plane/ai-team/audit/universal-audit.mjs
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f audit-output/audit-report.md ]; then
+            cat audit-output/audit-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Save evidence packs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-\${{ github.run_id }}
+          path: audit-output/
