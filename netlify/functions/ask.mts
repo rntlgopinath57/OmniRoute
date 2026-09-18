@@ -24,6 +24,29 @@ function reviewerFor(worker: string) {
   return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
 }
 
+function disambiguationContext(question: string) {
+  const q = question.toLowerCase();
+  const notes: string[] = [];
+
+  if (/\bgoogle\s+skills\b/.test(q)) {
+    notes.push(
+      '“Google Skills” refers to the GitHub repository google/skills, not Gemini or Google AI products, unless the user explicitly says otherwise.'
+    );
+  }
+  if (/\banthropic\s+skills\b/.test(q)) {
+    notes.push(
+      '“Anthropic Skills” refers to the GitHub repository anthropics/skills, not Claude model capabilities, unless the user explicitly says otherwise.'
+    );
+  }
+  if (/\b(openai\s+plugins|google\s+adk|crawl4ai|playwright[- ]mcp)\b/.test(q)) {
+    notes.push(
+      'Treat named items as software repositories/tools when the user is comparing repos or asking which one fits Relay/AI-Team work.'
+    );
+  }
+
+  return notes.join(" ");
+}
+
 function useFastPath(question: string, taskType: string) {
   const q = question.toLowerCase();
   const highRiskOrFresh = /\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news|verify|fact[- ]?check)\b/.test(q);
@@ -244,11 +267,13 @@ export default async (request: Request) => {
         emit({ type: "worker", taskType, model: workerModel });
 
         let actualWorkerModel = workerModel;
+        const contextNote = disambiguationContext(question);
         const workerMessages = [
           {
             role: "system",
             content:
-              "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture.",
+              "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture."
+              + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : ""),
           },
           ...history,
           { role: "user", content: question },
