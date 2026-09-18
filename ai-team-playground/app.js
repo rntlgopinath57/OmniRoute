@@ -165,29 +165,47 @@ function appendStructuredText(container,text=''){
   const lines=String(text).replace(/^\s*\`\`\`[a-z0-9_-]*\s*$/gmi,'').replace(/^\s*\`\`\`\s*$/gmi,'').split(/\r?\n/);
   let list=null;
   const closeList=()=>{list=null;};
-  for(const rawLine of lines){
-    const line=String(rawLine||'');
-    if(!line.trim()){closeList();continue}
+  const isTableRow=line=>/^\s*\|.*\|\s*$/.test(line);
+  const isDivider=line=>/^\s*\|?\s*:?-{3,}/.test(String(line||'').replace(/^\s*\|/,''));
+  const cells=line=>String(line).trim().replace(/^\||\|$/g,'').split('|').map(x=>cleanPresentationLine(x));
+  for(let i=0;i<lines.length;){
+    const line=String(lines[i]||'');
+    if(isTableRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){
+      closeList();
+      const tableWrap=document.createElement('div');tableWrap.className='artifactTableWrap';
+      const table=document.createElement('table');
+      const thead=document.createElement('thead');const hr=document.createElement('tr');
+      cells(line).forEach(value=>{const th=document.createElement('th');th.textContent=value;hr.appendChild(th)});
+      thead.appendChild(hr);table.appendChild(thead);
+      const tbody=document.createElement('tbody');i+=2;
+      while(i<lines.length&&isTableRow(lines[i])){
+        const tr=document.createElement('tr');
+        cells(lines[i]).forEach(value=>{const td=document.createElement('td');td.textContent=value;tr.appendChild(td)});
+        tbody.appendChild(tr);i++;
+      }
+      table.appendChild(tbody);tableWrap.appendChild(table);container.appendChild(tableWrap);
+      continue;
+    }
+    if(!line.trim()){closeList();i++;continue}
     const heading=line.match(/^\s*(#{1,4})\s+(.+)$/);
     if(heading){
       closeList();
       const h=document.createElement(heading[1].length<=1?'h2':'h3');
       h.textContent=cleanPresentationLine(heading[2]);
-      container.appendChild(h);
-      continue;
+      container.appendChild(h);i++;continue;
     }
     const bullet=line.match(/^\s*[-*•]\s+(.+)$/);
     if(bullet){
       if(!list||list.tagName!=='UL'){list=document.createElement('ul');container.appendChild(list)}
-      const li=document.createElement('li');li.textContent=cleanPresentationLine(bullet[1]);list.appendChild(li);continue;
+      const li=document.createElement('li');li.textContent=cleanPresentationLine(bullet[1]);list.appendChild(li);i++;continue;
     }
     const numbered=line.match(/^\s*\d+[.)]\s+(.+)$/);
     if(numbered){
       if(!list||list.tagName!=='OL'){list=document.createElement('ol');container.appendChild(list)}
-      const li=document.createElement('li');li.textContent=cleanPresentationLine(numbered[1]);list.appendChild(li);continue;
+      const li=document.createElement('li');li.textContent=cleanPresentationLine(numbered[1]);list.appendChild(li);i++;continue;
     }
     closeList();
-    const p=document.createElement('p');p.textContent=cleanPresentationLine(line);container.appendChild(p);
+    const p=document.createElement('p');p.textContent=cleanPresentationLine(line);container.appendChild(p);i++;
   }
 }
 function renderHandwrittenPages(body,text=''){
@@ -269,9 +287,20 @@ function applyPresentation(row,text,presentation){
   bubble.classList.add('presentationBubble','fmt-'+p.format);
   body.classList.add('presentationBody');
   body.textContent='';
-  const oldTag=bubble.querySelector('.presentationTag');if(oldTag)oldTag.remove();
+  bubble.querySelectorAll('.presentationTag,.presentationViewActions').forEach(el=>el.remove());
+
+  const header=document.createElement('div');header.className='presentationHeader';
   const tag=document.createElement('div');tag.className='presentationTag';tag.textContent='FORMAT · '+String(p.label||p.format).toUpperCase();
-  bubble.insertBefore(tag,body);
+  const actions=document.createElement('div');actions.className='presentationViewActions';
+  const expand=document.createElement('button');expand.type='button';expand.className='presentationExpand';expand.textContent='EXPAND';
+  expand.addEventListener('click',()=>{
+    const expanded=bubble.classList.toggle('presentationExpanded');
+    expand.textContent=expanded?'COMPACT':'EXPAND';
+    if(expanded)body.scrollTop=0;
+  });
+  actions.appendChild(expand);header.append(tag,actions);
+  bubble.insertBefore(header,body);
+
   if(p.format==='handwritten')renderHandwrittenPages(body,text);
   else appendStructuredText(body,text);
 }
