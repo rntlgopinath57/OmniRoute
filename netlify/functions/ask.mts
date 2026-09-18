@@ -24,8 +24,10 @@ function isFollowUp(question: string, history: Array<{ role: string; content: st
   if (!history.length) return false;
   const q = question.trim().toLowerCase();
   if (q.length > 220) return false;
-  return /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|evaluate|compare|tell me more|what about|and |also |then |now )/.test(q)
-    || /\b(that|this|it|them|those|same|above|previous)\b/.test(q);
+  if (/^(new topic|different topic|unrelated|start over|ignore previous)\b/.test(q)) return false;
+  if (q.length <= 120) return true;
+  return /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|do more|more|go deeper|expand|elaborate|evaluate|compare|tell me more|what about|and |also |then |now )/.test(q)
+    || /\b(that|this|it|them|those|same|above|previous|further|deeper|more)\b/.test(q);
 }
 
 function allowedStickyModel(model: string) {
@@ -184,6 +186,17 @@ function useFastPath(question: string, taskType: string) {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const providerCooldownUntil = new Map<string, number>();
+
+function providerAvailable(model: string) {
+  return (providerCooldownUntil.get(model) || 0) <= Date.now();
+}
+function coolDownProvider(model: string, ms = 45000) {
+  providerCooldownUntil.set(model, Date.now() + ms);
+}
+function markProviderHealthy(model: string) {
+  providerCooldownUntil.delete(model);
+}
 
 type ChatMessage = { role: string; content: string };
 
@@ -435,14 +448,19 @@ export default async (request: Request) => {
 
         let answer = "";
         const primaryModel = actualWorkerModel;
-        const pool = Array.from(new Set([
+        const candidates = Array.from(new Set([
           primaryModel,
-          "gpt-5.6-luna",
           "claude-haiku-4-5",
           "gemini-3.5-flash",
+          "gpt-5.6-luna",
         ]));
+        let pool = candidates.filter((model, index) => index === 0 || providerAvailable(model));
+        if (!pool.length) pool = candidates;
 
         const failures: string[] = [];
+        let rateLimited = 0;
+        let creditLimited = 0;
+
         for (let index = 0; index < pool.length; index++) {
           const model = pool[index];
           if (index > 0) emit({ type: "fallback", model });
@@ -452,9 +470,10 @@ export default async (request: Request) => {
               model,
               workerMessages,
               model.startsWith("gpt-") ? 1200 : 1000,
-              index === 0 ? 7500 : 6500,
+              index === 0 ? 9000 : 7000,
             );
             actualWorkerModel = model;
+            markProviderHealthy(model);
             emit({ type: "worker_selected", model: actualWorkerModel });
             break;
           } catch (error) {
@@ -462,17 +481,28 @@ export default async (request: Request) => {
             failures.push(`${model}: ${message}`);
             console.warn("Relay provider attempt failed", { model, error: message });
 
-            if (/\b429\b|rate.?limit/i.test(message)) {
-              throw new Error("Relay hit the Netlify AI Gateway per-minute rate limit. Wait about a minute, then retry.");
+            if (/\b429\b|rate.?limit|resource[_ -]?exhausted/i.test(message)) {
+              rateLimited += 1;
+              coolDownProvider(model, 60000);
+              continue;
             }
-            if (/\b402\b|insufficient|credits?/i.test(message)) {
-              throw new Error("Relay's Netlify AI credits are unavailable or exhausted. Check Netlify usage/billing before retrying.");
+            if (/\b402\b|insufficient|credits?|quota/i.test(message)) {
+              creditLimited += 1;
+              coolDownProvider(model, 120000);
+              continue;
             }
+            coolDownProvider(model, 30000);
           }
         }
 
         if (!answer) {
           console.error("All Relay providers failed", { failures });
+          if (rateLimited === pool.length) {
+            throw new Error("Relay's available AI providers are temporarily rate-limited. Wait about a minute, then retry.");
+          }
+          if (creditLimited === pool.length) {
+            throw new Error("Relay's AI gateway credits are unavailable or exhausted. Check Netlify usage/billing.");
+          }
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
