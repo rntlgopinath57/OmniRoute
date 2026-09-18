@@ -2,9 +2,9 @@ function classify(text: string) {
   const q = text.toLowerCase();
   if (/\b(code|coding|coder|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
   if (/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(q)) return "automation";
-  if (/\b(research|find|discover|compare|analyse|analyze|latest|source|news|security|privacy|market)\b/.test(q)) return "research";
+  if (/\b(research|find|discover|latest|source|cite|news|security|privacy|market)\b/.test(q)) return "research";
+  if (/\b(compare|comparison|versus|vs\.?|analyse|analyze|reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(q)) return "reasoning";
   if (/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(q)) return "design";
-  if (/\b(reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(q)) return "reasoning";
   return "general";
 }
 
@@ -22,9 +22,10 @@ function reviewerFor(worker: string) {
 
 function useFastPath(question: string, taskType: string) {
   const q = question.toLowerCase();
-  if (question.length > 220) return false;
-  if (taskType === "research") return false;
-  if (/\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news)\b/.test(q)) return false;
+  const highRiskOrFresh = /\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news|verify|fact[- ]?check)\b/.test(q);
+  const explicitlyComplex = /\b(deep research|comprehensive audit|production deploy|security review|threat model)\b/.test(q);
+  if (highRiskOrFresh || explicitlyComplex) return false;
+  if (question.length > 700) return false;
   return true;
 }
 
@@ -183,7 +184,7 @@ export default async (request: Request) => {
 
         if (useFastPath(question, taskType)) {
           reviewStatus = "FAST_PATH";
-          emit({ type: "review_skipped", reason: "simple_fast_path" });
+          emit({ type: "fast_path", reason: "simple_or_low_risk" });
         } else {
           emit({ type: "reviewer", model: actualReviewerModel });
           try {
