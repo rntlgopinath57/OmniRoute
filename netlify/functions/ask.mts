@@ -302,7 +302,7 @@ function presentationInstruction(presentation: PresentationIntent) {
     flashcards: " Produce repeated QUESTION / ANSWER pairs, one concept per card.",
     mindmap: " Start with one central topic, then branches and sub-branches using concise labels.",
     exploded: " Break the subject into parts, what each part does, inputs/outputs, and how parts connect.",
-    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node.",
+    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node. Do not output Mermaid/Graphviz source, node IDs such as A/B/C, arrows such as A --> B, or code fences; Relay renders the flow visually itself.",
     timeline: " Use dated or ordered milestones with a short event/outcome for each.",
     roadmap: " Use phases or time periods, with objective, actions, and exit criteria for each.",
     framework: " Use named pillars/components with purpose, inputs, outputs, and relationships.",
@@ -339,6 +339,9 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
     return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
   }
   if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
+    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+\s*--?>\s*[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+/i.test(text)) {
+      return false;
+    }
     return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
   }
   return true;
