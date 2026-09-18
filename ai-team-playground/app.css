@@ -2016,3 +2016,190 @@ body.toolModalOpen{
   .mediaTabs{top:54px}
   .mediaKeyRow label{grid-template-columns:1fr!important}
 }
+
+
+/* Relay layout coherence v20 */
+/* One vertical scroll surface, tighter desktop balance, daylight-readable handoff graph. */
+html,body,.shell{
+  height:100%;
+  min-height:0;
+}
+body{
+  overflow:hidden!important;
+}
+.shell{
+  height:100dvh;
+  min-height:100dvh;
+  overflow:hidden;
+}
+header{
+  flex:0 0 68px;
+}
+#workspace,
+#workspace.open,
+#workspace.working{
+  height:calc(100dvh - 68px)!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+
+/* The conversation owns vertical scrolling. Individual messages do not. */
+.thread{
+  min-height:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+}
+.presentationBody{
+  max-height:none!important;
+  overflow-y:visible!important;
+  overflow-x:visible!important;
+}
+.presentationExpanded .presentationBody{
+  max-height:none!important;
+  overflow:visible!important;
+}
+.handwrittenIntro{
+  max-height:none!important;
+  overflow:visible!important;
+}
+.artifactTableWrap{
+  overflow-x:auto!important;
+  overflow-y:visible!important;
+}
+.presentationResult .messageBubble{
+  width:100%!important;
+  max-width:100%!important;
+}
+
+/* Keep conversation, tool rail and composer on one visual axis. */
+#workspace.open .thread,
+#workspace.open .toolDock,
+#workspace.open .followup,
+#workspace.working .thread,
+#workspace.working .toolDock,
+#workspace.working .followup{
+  width:min(1040px,calc(100% - 40px))!important;
+}
+#workspace.open .messageRow.assistant .messageBubble,
+#workspace.working .messageRow.assistant .messageBubble{
+  max-width:94%!important;
+}
+#workspace.open .messageRow.user .messageBubble,
+#workspace.working .messageRow.user .messageBubble{
+  max-width:78%!important;
+}
+
+/* Desktop: cap the handoff pane so wide screens do not create an empty dark slab. */
+@media(min-width:901px){
+  #workspace.open,
+  #workspace.working{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) clamp(360px,28vw,430px)!important;
+    gap:0!important;
+  }
+  #workspace.open #answer,
+  #workspace.working #answer{
+    grid-column:1!important;
+    grid-row:1!important;
+    min-width:0!important;
+    height:100%!important;
+    overflow:hidden!important;
+  }
+  #workspace.open #canvas,
+  #workspace.working #canvas{
+    grid-column:2!important;
+    grid-row:1!important;
+    min-width:0!important;
+    height:100%!important;
+  }
+}
+
+/* Do not wash out the conversation while agents are working. */
+#workspace.working #answer{
+  opacity:.88!important;
+  filter:saturate(.92) brightness(.96)!important;
+}
+
+/* Daylight/readability pass for the agent handoff pane. */
+#workspace.open #canvas,
+#workspace.working #canvas{
+  opacity:1!important;
+  filter:none!important;
+  background:
+    radial-gradient(circle at 50% 42%,rgba(46,112,144,.18),transparent 35%),
+    radial-gradient(circle at 50% 78%,rgba(42,94,119,.08),transparent 38%),
+    linear-gradient(180deg,#081521,#040a11 82%)!important;
+}
+#workspace.open .node,
+#workspace.working .node{
+  opacity:.76!important;
+  filter:none!important;
+}
+#workspace.open .node.dim,
+#workspace.working .node.dim{
+  opacity:.42!important;
+  filter:saturate(.78)!important;
+}
+#workspace.open .node strong,
+#workspace.working .node strong{
+  color:#d9e6f0!important;
+  font-size:8.7px!important;
+  text-shadow:0 1px 8px rgba(0,0,0,.95),0 0 10px rgba(113,239,255,.08)!important;
+}
+#workspace.open .node small,
+#workspace.working .node small{
+  color:#93a8ba!important;
+  font-size:7.2px!important;
+}
+#workspace.open .node .core,
+#workspace.working .node .core{
+  border-color:rgba(157,197,226,.40)!important;
+  box-shadow:0 0 18px rgba(80,139,174,.13),inset 0 0 20px rgba(112,164,198,.06)!important;
+}
+#workspace.open .edge,
+#workspace.working .edge{
+  stroke:rgba(150,180,204,.32)!important;
+  stroke-width:.46!important;
+}
+#workspace.open .edge.complete,
+#workspace.working .edge.complete{
+  stroke:rgba(82,242,178,.66)!important;
+}
+.executionTrace{
+  border-color:rgba(113,239,255,.18)!important;
+  background:rgba(3,9,15,.94)!important;
+}
+.executionTrace span{
+  color:#8da2b4!important;
+}
+.executionTrace i{
+  color:#587084!important;
+}
+
+/* One unobtrusive scrollbar for the whole conversation. */
+.thread::-webkit-scrollbar{width:8px}
+.thread::-webkit-scrollbar-track{background:transparent}
+.thread::-webkit-scrollbar-thumb{
+  background:rgba(125,162,190,.24);
+  border:2px solid transparent;
+  background-clip:padding-box;
+  border-radius:999px;
+}
+.thread:hover::-webkit-scrollbar-thumb{
+  background:rgba(125,185,216,.38);
+  border:2px solid transparent;
+  background-clip:padding-box;
+}
+
+@media(max-width:900px){
+  #workspace.open .thread,
+  #workspace.working .thread,
+  #workspace.open .toolDock,
+  #workspace.working .toolDock,
+  #workspace.open .followup,
+  #workspace.working .followup{
+    width:calc(100% - 16px)!important;
+  }
+}
