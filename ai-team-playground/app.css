@@ -3040,3 +3040,115 @@ header{
     opacity:.24!important;
   }
 }
+
+
+/* Relay balanced side-gutter layout v27 */
+@media(min-width:1281px){
+  #workspace #answer,
+  #workspace.open #answer,
+  #workspace.working #answer,
+  #answer,
+  #answer.open{
+    width:min(980px,calc(100vw - 480px))!important;
+    max-width:980px!important;
+    margin:0 auto!important;
+  }
+
+  #workspace .runStrip,
+  #workspace .thread,
+  #workspace .toolDock,
+  #workspace .followup{
+    width:calc(100% - 24px)!important;
+    max-width:none!important;
+  }
+
+  #workspace:not(.show-run) #canvas .node{
+    gap:4px!important;
+    max-width:110px;
+  }
+  #workspace:not(.show-run) #canvas .node .core{
+    width:42px!important;
+    height:42px!important;
+  }
+  #workspace:not(.show-run) #canvas .node.you .core{
+    width:50px!important;
+    height:50px!important;
+  }
+  #workspace:not(.show-run) #canvas .node strong{
+    max-width:96px;
+    font-size:7px!important;
+    line-height:1.15;
+    letter-spacing:.10em!important;
+    white-space:nowrap;
+  }
+  #workspace:not(.show-run) #canvas .node small{
+    display:none!important;
+  }
+  #workspace:not(.show-run) #canvas .node .halo{
+    top:21px!important;
+  }
+  #workspace:not(.show-run) #canvas .node .orbit{
+    top:21px!important;
+  }
+  #workspace:not(.show-run) #canvas .node.you .halo,
+  #workspace:not(.show-run) #canvas .node.you .orbit{
+    top:25px!important;
+  }
+
+  #workspace:not(.show-run) #nodes:before,
+  #workspace:not(.show-run) #nodes:after{
+    content:"";
+    position:absolute;
+    top:10%;
+    bottom:7%;
+    width:1px;
+    z-index:2;
+    pointer-events:none;
+    background:linear-gradient(
+      180deg,
+      transparent,
+      rgba(113,239,255,.10) 16%,
+      rgba(113,239,255,.18) 50%,
+      rgba(113,239,255,.10) 84%,
+      transparent
+    );
+  }
+  #workspace:not(.show-run) #nodes:before{left:11%}
+  #workspace:not(.show-run) #nodes:after{right:11%}
+
+  #workspace:not(.show-run) #canvas{
+    opacity:.22!important;
+  }
+  #workspace.working:not(.show-run) #canvas{
+    opacity:.42!important;
+  }
+
+  #workspace:not(.show-run) #canvas .node.dim{
+    opacity:.11!important;
+  }
+  #workspace:not(.show-run) #canvas .node.active{
+    opacity:1!important;
+  }
+}
+
+@media(max-width:1280px){
+  #workspace #answer,
+  #workspace.open #answer,
+  #workspace.working #answer,
+  #answer,
+  #answer.open{
+    width:calc(100% - 28px)!important;
+    max-width:none!important;
+    margin:0 auto!important;
+  }
+  #workspace:not(.show-run) #canvas .node strong,
+  #workspace:not(.show-run) #canvas .node small{
+    display:none!important;
+  }
+  #workspace:not(.show-run) #canvas{
+    opacity:.08!important;
+  }
+  #workspace.working:not(.show-run) #canvas{
+    opacity:.17!important;
+  }
+}

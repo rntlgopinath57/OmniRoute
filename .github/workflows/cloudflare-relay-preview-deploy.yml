@@ -115,6 +115,12 @@ jobs:
           echo "$html" | grep -q 'id="runToggle"'
           echo "Conversation-first UI with ambient execution canvas verified."
 
+      - name: Verify Relay side-gutter layout markers
+        run: |
+          grep -q 'planner:\[11,20\]' ai-team-playground/app.js
+          grep -q 'researcher:\[89,14\]' ai-team-playground/app.js
+          grep -q 'Relay balanced side-gutter layout v27' ai-team-playground/app.css
+
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
         run: |

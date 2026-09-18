@@ -1,8 +1,8 @@
 const POS={
-  // Fixed left rail beside the conversation: command + orchestration.
-  planner:[6,18],router:[6,38],github:[6,58],you:[6,80],
-  // Fixed right rail beside the conversation: AI specialists + reviewer.
-  researcher:[94,12],analyst:[94,27],coder:[94,42],builder:[94,57],designer:[94,72],reviewer:[94,87]
+  // Stable side gutters around the conversation panel.
+  // Left = command/orchestration. Right = AI team/reviewer.
+  planner:[11,20],router:[11,40],github:[11,60],you:[11,82],
+  researcher:[89,14],analyst:[89,29],coder:[89,44],builder:[89,59],designer:[89,74],reviewer:[89,89]
 };
 const INFO={
   you:['YOU','Command center'],
