@@ -1,9 +1,9 @@
 const POS={
-  // Left: command / orchestration path.
-  you:[13,82],planner:[16,24],router:[31,43],github:[29,67],
-  // Right: specialist AI team, with reviewer at the exit.
-  researcher:[56,22],analyst:[78,22],coder:[55,49],builder:[76,49],designer:[60,75],
-  reviewer:[84,75]
+  // Left gutter: user + orchestration/tool path, kept outside the conversation card.
+  you:[7,82],planner:[8,23],router:[15,43],github:[14,64],
+  // Right gutter: specialist AI team + reviewer.
+  researcher:[83,21],analyst:[93,21],coder:[82,46],builder:[93,46],designer:[84,72],
+  reviewer:[94,72]
 };
 const INFO={
   you:['YOU','Command center'],
