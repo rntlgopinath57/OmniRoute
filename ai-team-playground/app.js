@@ -266,6 +266,11 @@ async function handleEvent(evt){
     selected.add(lastWorker);
     active=new Set([lastWorker]); activeEdges=new Set([`router:${lastWorker}`]); render(); kickNode(lastWorker); return;
   }
+  if(evt.type==='hedge'){
+    setState('ACCELERATING','busy');
+    updatePending(`Relay opened a faster backup path with ${friendlyModel(evt.model)}…`);
+    return;
+  }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
     updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
@@ -366,11 +371,19 @@ async function ask(questionOverride='',isRetry=false){
     if(/raw\.githack\.com|raw\.githubusercontent\.com/.test(location.hostname)){
       throw new Error('This static preview cannot execute the secure AI backend. Open the deployed Relay URL for live answers.');
     }
-    const response=await fetch('/api/ask',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({question,history:conversation.slice(-6)})
-    });
+    const requestController=new AbortController();
+    const requestTimeout=setTimeout(()=>requestController.abort(),22000);
+    let response;
+    try{
+      response=await fetch('/api/ask',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({question,history:conversation.slice(-6)}),
+        signal:requestController.signal
+      });
+    }finally{
+      clearTimeout(requestTimeout);
+    }
     if(!response.ok)throw new Error(`AI endpoint returned ${response.status}`);
     if(!response.body)throw new Error('Streaming response is unavailable in this browser');
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -387,7 +400,10 @@ async function ask(questionOverride='',isRetry=false){
     }
     if(buffer.trim())await handleEvent(JSON.parse(buffer));
   }catch(e){
-    finishError(e?.message||String(e));
+    const message=e?.name==='AbortError'
+      ? 'Relay took too long on this route. Please retry — the next run will use the faster fallback path.'
+      : (e?.message||String(e));
+    finishError(message);
   }finally{
     if(busy){busy=false;render()}
   }
