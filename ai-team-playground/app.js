@@ -1,8 +1,8 @@
 const POS={
-  you:[50,91],planner:[50,76],router:[50,61],
-  qwen:[10,38],openai:[23,24],gemini:[38,38],claude:[50,14],
-  deepseek:[62,38],grok:[77,24],mistral:[90,38],kimi:[31,8],perplexity:[69,8],
-  reviewer:[50,47]
+  you:[8,78],planner:[8,57],router:[9,36],
+  qwen:[20,18],openai:[32,10],gemini:[45,16],claude:[58,9],
+  deepseek:[70,16],grok:[82,12],mistral:[92,30],kimi:[32,4],perplexity:[68,4],
+  reviewer:[92,72]
 };
 const INFO={
   you:['YOU','Command center'],planner:['PLANNER','Understands intent'],router:['ROUTER','Selects specialist'],
@@ -71,7 +71,7 @@ function draw(){
       ? '<span class="youMark">◉</span>'
       : id==='reviewer'
         ? '<span class="reviewMark">✓</span>'
-        : '<span class="nodeSignal"><i></i><i></i><i></i></span>';
+        : '<svg class="seismo" viewBox="0 0 42 20" aria-hidden="true"><polyline points="0,10 5,10 8,6 11,14 14,9 17,10 20,3 23,17 26,8 29,11 32,6 35,13 38,10 42,10"></polyline></svg>';
     n.innerHTML=`<div class="halo"></div><div class="orbit"></div><div class="energy"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="core">${mark}</div><strong>${INFO[id][0]}</strong><small>${INFO[id][1]}</small>`;
     nodes.appendChild(n);
   });
@@ -83,6 +83,10 @@ function setStage(name){
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
   $('stateText').textContent=text;
+  const processText=$('processText');
+  const processRail=$('processRail');
+  if(processText)processText.textContent=text;
+  if(processRail)processRail.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
 }
 function render(){
@@ -299,9 +303,29 @@ async function handleEvent(evt){
   }
   if(evt.type==='error') throw new Error(evt.message||'AI Team failed');
 }
+function isVideoEditIntent(text=''){
+  const s=text.toLowerCase();
+  return /\b(video|clip|footage)\b/.test(s) && /\b(edit|trim|cut|crop|resize|reframe|mute|remove audio|aspect|convert)\b/.test(s);
+}
+function openVideoEditorForPrompt(question){
+  if(!window.RelayVideoEditor?.openFromPrompt)return false;
+  if(!chatStarted){chatStarted=true;openAnswer(true)}
+  appendMessage('user',question);
+  appendMessage('assistant','Video editor ready. Choose a video, set trim, aspect ratio or mute options, then process it locally in your browser. Your source video stays on your device.');
+  $('badge').textContent='LOCAL TOOL';
+  $('meta').textContent='VIDEO EDITOR';
+  setState('VIDEO EDITOR','done');
+  q.value=''; resizeInput();
+  followQ.value=''; resizeFollow();
+  window.RelayVideoEditor.openFromPrompt(question);
+  render();
+  return true;
+}
+
 async function ask(questionOverride='',isRetry=false){
   const question=(questionOverride||q.value).trim();
   if(!question||busy)return;
+  if(!isRetry&&isVideoEditIntent(question)&&openVideoEditorForPrompt(question))return;
   q.value=question;
   resizeInput();
   if(listening&&recognition){try{recognition.stop()}catch{}}
