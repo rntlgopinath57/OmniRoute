@@ -47,7 +47,7 @@ async function ensureFFmpeg(){
   ]);
   const instance=new FFmpeg();
   const wrapper='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm';
-  const core='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+  const core='https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
   instance.on('progress',({progress})=>{
     if(Number.isFinite(progress)){
       setProgress(`Processing… ${Math.max(0,Math.min(100,Math.round(progress*100)))}%`);
