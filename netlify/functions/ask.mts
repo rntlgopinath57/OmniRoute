@@ -275,7 +275,8 @@ function detectPresentationIntent(text: string): PresentationIntent {
   if (/\barchitecture|system design|components?|layers?|topology\b/.test(lower)) {
     return { format: "blueprint", visual: true, explicit: false, label: "BLUEPRINT" };
   }
-  if (/\bprocess|workflow|how .* works|steps?\b/.test(lower)) {
+  const workflowInventory = /\b(list|show|find|count|inventory|files?)\b.*\b(?:github\s+)?workflows?\b|\b(?:github\s+)?workflows?\b.*\b(list|show|find|count|inventory|files?)\b/.test(lower);
+  if (!workflowInventory && /\bprocess|workflow|how .* works|steps?\b/.test(lower)) {
     return { format: "flowchart", visual: true, explicit: false, label: "FLOWCHART" };
   }
   if (/\bweek[- ]by[- ]week|month[- ]by[- ]month|milestones?|implementation plan\b/.test(lower)) {
@@ -339,7 +340,7 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
     return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
   }
   if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
-    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+\s*--?>\s*[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+/i.test(text)) {
+    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+\s*--?>\s*[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
       return false;
     }
     return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
@@ -837,7 +838,11 @@ export default async (request: Request) => {
                 {
                   role: "system",
                   content:
-                    "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful.",
+                    "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful."
+                    + presentationInstruction(presentation)
+                    + (presentation.format === "flowchart"
+                      ? " Do not use ASCII diagram characters, box drawing, Mermaid, Graphviz, node IDs, or arrow syntax. Use numbered steps and short decision bullets only."
+                      : ""),
                 },
                 ...history,
                 { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
@@ -850,6 +855,10 @@ export default async (request: Request) => {
               error: retryError instanceof Error ? retryError.message : String(retryError),
             });
             reviewStatus = "SKIPPED";
+          }
+
+          if (presentation.format !== "default" && reviewStatus !== "SKIPPED") {
+            reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "FAIL";
           }
         }
 
