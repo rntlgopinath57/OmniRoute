@@ -10,17 +10,23 @@ function classify(text: string) {
   return "general";
 }
 
-function workerFor(taskType: string, question: string) {
-  const q = question.toLowerCase();
-  const heavy =
-    question.length > 900 ||
-    /\b(deep|complex|architecture|architect|production|root cause|large refactor|security audit|performance audit)\b/.test(q);
+const FREE_MODELS = Object.freeze({
+  coding: "deepseek/deepseek-v4-flash-0731:free",
+  automation: "qwen/qwen3.8-27b:free",
+  reasoning: "qwen/qwen3.8-27b:free",
+  general: "deepseek/deepseek-v4-flash-0731:free",
+  researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  universalFallback: "openrouter/free",
+});
 
-  if ((taskType === "coding" || taskType === "automation") && heavy) return "gpt-5.6-sol";
-  if (taskType === "coding" || taskType === "automation") return "gpt-5.6-luna";
+function workerFor(taskType: string, question: string) {
+  // Route by job, not by whichever credential happens to be available.
+  // Gemini stays specialized for research/design instead of becoming the universal fallback.
+  if (taskType === "coding") return FREE_MODELS.coding;
+  if (taskType === "automation") return FREE_MODELS.automation;
+  if (taskType === "reasoning") return FREE_MODELS.reasoning;
   if (taskType === "research" || taskType === "design") return "gemini-3.5-flash-lite";
-  if (taskType === "reasoning") return "qwen/qwen3.8-flash";
-  return "gpt-5.6-luna";
+  return FREE_MODELS.general;
 }
 
 function isFollowUp(question: string, history: Array<{ role: string; content: string }>) {
@@ -44,13 +50,21 @@ function allowedStickyModel(model: string) {
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731:free",
     "qwen/qwen3.8-flash",
+    "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter/free",
     "x-ai/grok-4.6",
   ]).has(model);
 }
 
 function reviewerFor(worker: string) {
-  return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
+  const family = modelFamily(worker);
+  if (family === "qwen") return FREE_MODELS.coding;
+  if (family === "deepseek") return FREE_MODELS.automation;
+  if (family === "gemini") return FREE_MODELS.coding;
+  return FREE_MODELS.reasoning;
 }
 
 const OPENROUTER_ALIASES: Record<string, string> = {
@@ -100,12 +114,11 @@ function resolveWorkerModel(requested: string) {
   const requestedRuntime = runtimeVariant(requested);
   if (requestedRuntime) return requestedRuntime;
   return firstConfiguredModel([
+    FREE_MODELS.general,
+    FREE_MODELS.reasoning,
+    FREE_MODELS.researchFallback,
     "gemini-3.5-flash-lite",
-    "qwen/qwen3.8-flash",
-    "openai/gpt-5.6-luna",
-    "anthropic/claude-haiku-4.5",
-    "deepseek/deepseek-v4-flash",
-    "x-ai/grok-4.6",
+    FREE_MODELS.universalFallback,
   ]) || requested;
 }
 
@@ -113,12 +126,11 @@ function resolveReviewerModel(worker: string) {
   const workerFamily = modelFamily(worker);
   const candidates = [
     runtimeVariant(reviewerFor(worker)),
-    "anthropic/claude-haiku-4.5",
-    "gemini-3.5-flash",
-    "openai/gpt-5.6-luna",
-    "qwen/qwen3.8-flash",
-    "deepseek/deepseek-v4-flash",
-    "x-ai/grok-4.6",
+    FREE_MODELS.reasoning,
+    FREE_MODELS.coding,
+    FREE_MODELS.researchFallback,
+    "gemini-3.5-flash-lite",
+    FREE_MODELS.universalFallback,
   ].filter(Boolean);
   return candidates.find((model) =>
     modelConfigured(model) && modelFamily(model) !== workerFamily
@@ -713,7 +725,7 @@ export default async (request: Request) => {
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
-        const requestedWorkerModel = stickyModel || (presentation.visual ? "gpt-5.6-luna" : routedWorkerModel);
+        const requestedWorkerModel = stickyModel || routedWorkerModel;
         const workerModel = resolveWorkerModel(requestedWorkerModel);
 
         emit({ type: "planner", taskType, presentation });
@@ -754,21 +766,19 @@ export default async (request: Request) => {
         const candidates = longForm
           ? Array.from(new Set([
               primaryModel,
+              FREE_MODELS.researchFallback,
+              FREE_MODELS.coding,
+              FREE_MODELS.reasoning,
               "gemini-3.5-flash-lite",
-              "qwen/qwen3.8-flash",
-              "anthropic/claude-haiku-4.5",
-              "openai/gpt-5.6-luna",
-              "deepseek/deepseek-v4-flash",
-              "x-ai/grok-4.6",
+              FREE_MODELS.universalFallback,
             ]))
           : Array.from(new Set([
               primaryModel,
-              "openai/gpt-5.6-luna",
+              FREE_MODELS.coding,
+              FREE_MODELS.reasoning,
+              FREE_MODELS.researchFallback,
               "gemini-3.5-flash-lite",
-              "qwen/qwen3.8-flash",
-              "anthropic/claude-haiku-4.5",
-              "deepseek/deepseek-v4-flash",
-              "x-ai/grok-4.6",
+              FREE_MODELS.universalFallback,
             ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         let pool = (configuredCandidates.length ? configuredCandidates : candidates)
@@ -829,12 +839,11 @@ export default async (request: Request) => {
 
         if (!answer && longForm && timedOut > 0) {
           const rescueModel = firstConfiguredModel([
-            "deepseek/deepseek-v4-flash",
-            "qwen/qwen3.8-flash",
+            FREE_MODELS.coding,
+            FREE_MODELS.reasoning,
+            FREE_MODELS.researchFallback,
             "gemini-3.5-flash-lite",
-            "openai/gpt-5.6-luna",
-            "anthropic/claude-haiku-4.5",
-            "x-ai/grok-4.6",
+            FREE_MODELS.universalFallback,
           ]);
           if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
