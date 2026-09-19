@@ -540,11 +540,13 @@ function markProviderHealthy(model: string) {
 
 type ChatMessage = { role: string; content: string };
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const text = await response.text();
+    return { response, text };
   } finally {
     clearTimeout(timeout);
   }
@@ -555,7 +557,7 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
   const apiKey = envGet("OPENAI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenAI gateway is unavailable.");
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`,
     {
       method: "POST",
@@ -571,8 +573,6 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`OpenAI ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = json?.choices?.[0]?.message?.content;
@@ -590,7 +590,7 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role, content: m.content }));
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1/messages`,
     {
       method: "POST",
@@ -608,8 +608,6 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`Anthropic ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = (json?.content || [])
@@ -633,7 +631,7 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
       parts: [{ text: m.content }],
     }));
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
@@ -649,8 +647,6 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`Gemini ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = (json?.candidates?.[0]?.content?.parts || [])
@@ -665,7 +661,7 @@ async function callGroq(model: string, messages: ChatMessage[], maxTokens: numbe
   if (!apiKey) throw new Error("Groq gateway is unavailable.");
 
   const actualModel = model.replace(/^groq:/, "");
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     "https://api.groq.com/openai/v1/chat/completions",
     {
       method: "POST",
@@ -681,8 +677,6 @@ async function callGroq(model: string, messages: ChatMessage[], maxTokens: numbe
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`Groq ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = json?.choices?.[0]?.message?.content;
@@ -727,7 +721,7 @@ async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens:
   const apiKey = envGet("OPENROUTER_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenRouter gateway is unavailable.");
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/chat/completions`,
     {
       method: "POST",
@@ -743,8 +737,6 @@ async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens:
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`OpenRouter ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = json?.choices?.[0]?.message?.content;
@@ -842,9 +834,10 @@ export default async (request: Request) => {
           .join(" ");
         const contextualQuestion = recentUserContext ? `${recentUserContext} ${question}` : question;
         const followUp = isFollowUp(question, history);
-        const taskType = followUp && previousTaskType
-          ? previousTaskType
-          : classify(contextualQuestion);
+        const explicitRoute = explicitModelRoute(question);
+        const taskType = explicitRoute.comparison
+          ? "reasoning"
+          : (followUp && previousTaskType ? previousTaskType : classify(contextualQuestion));
         let presentation = detectPresentationIntent(question);
         if (followUp && presentation.format === "default" && previousPresentation) {
           const stickyPresentation = PRESENTATION_PATTERNS.find((item) => item.format === previousPresentation);
@@ -857,12 +850,13 @@ export default async (request: Request) => {
             };
           }
         }
-        const explicitRoute = explicitModelRoute(question);
-        const stickyModel = !explicitRoute.explicit && followUp && allowedStickyModel(preferredModel)
+        const stickyModel = !explicitRoute.explicit && !explicitRoute.comparison && followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
-        const requestedWorkerModel = explicitRoute.model || stickyModel || routedWorkerModel;
+        const requestedWorkerModel = explicitRoute.comparison
+          ? GROQ_MODELS.strong
+          : (explicitRoute.model || stickyModel || routedWorkerModel);
         const workerModel = resolveWorkerModel(requestedWorkerModel);
 
         emit({
@@ -957,9 +951,13 @@ export default async (request: Request) => {
           const maxTokens = longForm
             ? (model.startsWith("gpt-") ? 2000 : 1700)
             : (model.startsWith("gpt-") ? 1200 : 1000);
-          const timeoutMs = longForm
-            ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
-            : (index === 0 ? 10000 : 7000);
+          const isExplicitOpenRouterPrimary =
+            index === 0 && explicitRoute.explicit && providerForModel(model) === "openrouter";
+          const timeoutMs = isExplicitOpenRouterPrimary
+            ? (longForm ? 12000 : 8000)
+            : longForm
+              ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
+              : (index === 0 ? 10000 : 7000);
 
           try {
             answer = await callModelWithProgress(
