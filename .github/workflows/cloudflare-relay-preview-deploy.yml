@@ -142,7 +142,7 @@ jobs:
         run: |
           response="$(curl --fail --show-error --silent --max-time 25 \
             -H 'Content-Type: application/json' \
-            -d '{"question":"Explain what an API is in two short sentences.","history":[]}' \
+            -d '{"question":"Explain why the sky looks blue in two short sentences.","history":[]}' \
             "${{ steps.deploy.outputs.url }}/api/ask")"
           printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
           grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
