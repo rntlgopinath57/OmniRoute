@@ -27,7 +27,7 @@ function roleForTask(type='general'){
 const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
-const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
+const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer'),followup=document.querySelector('.followup'),toolDockEl=$('toolDock');
 const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
@@ -991,9 +991,39 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>setParallax(0,0));
 
+function mountViewportComposer(){
+  if(toolDockEl && toolDockEl.parentElement!==workspace){
+    workspace.appendChild(toolDockEl);
+    toolDockEl.classList.add('viewportToolDock');
+  }
+  if(followup && followup.parentElement!==workspace){
+    workspace.appendChild(followup);
+    followup.classList.add('viewportComposer');
+  }
+}
+function verifyComposerInViewport(){
+  if(!followup)return;
+  const rect=followup.getBoundingClientRect();
+  const ok=rect.width>160 && rect.height>40 && rect.top>=0 && rect.bottom<=window.innerHeight;
+  if(!ok){
+    followup.style.setProperty('position','fixed','important');
+    followup.style.setProperty('left','50vw','important');
+    followup.style.setProperty('right','auto','important');
+    followup.style.setProperty('bottom',window.innerWidth>=1200?'14px':'10px','important');
+    followup.style.setProperty('transform','translateX(-50%)','important');
+    followup.style.setProperty('width',window.innerWidth>=1200?'min(900px, calc(100vw - 420px))':'calc(100vw - 24px)','important');
+    followup.style.setProperty('display','flex','important');
+    followup.style.setProperty('visibility','visible','important');
+    followup.style.setProperty('opacity','1','important');
+    followup.style.setProperty('z-index','120','important');
+  }
+}
 workspace.classList.remove('show-run','working');
 if(runToggle){
   runToggle.setAttribute('aria-expanded','false');
   runToggle.textContent='View run';
 }
+mountViewportComposer();
 draw(); initVoice(); initProviderRoster(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
+requestAnimationFrame(verifyComposerInViewport);
+window.addEventListener('resize',verifyComposerInViewport);
