@@ -25,14 +25,20 @@ const CLOUDFLARE_MODELS = Object.freeze({
   reasoning: "@cf/nvidia/nemotron-3-120b-a12b",
 });
 
+const GROQ_MODELS = Object.freeze({
+  fast: "groq:openai/gpt-oss-20b",
+  strong: "groq:openai/gpt-oss-120b",
+  reasoning: "groq:qwen/qwen3.8-27b",
+});
+
 function workerFor(taskType: string, question: string) {
-  // Route by job, not by whichever credential happens to be available.
-  // Gemini stays specialized for research/design instead of becoming the universal fallback.
-  if (taskType === "coding") return FREE_MODELS.coding;
-  if (taskType === "automation") return FREE_MODELS.automation;
-  if (taskType === "reasoning") return FREE_MODELS.reasoning;
+  // Prefer Groq for high-volume routine work when configured. It has an
+  // independent quota pool, so OpenRouter is preserved as a later fallback.
+  if (taskType === "coding") return GROQ_MODELS.fast;
+  if (taskType === "automation") return GROQ_MODELS.reasoning;
+  if (taskType === "reasoning") return GROQ_MODELS.reasoning;
   if (taskType === "research" || taskType === "design") return "gemini-3.5-flash-lite";
-  return FREE_MODELS.general;
+  return GROQ_MODELS.fast;
 }
 
 function isFollowUp(question: string, history: Array<{ role: string; content: string }>) {
@@ -70,15 +76,19 @@ function allowedStickyModel(model: string) {
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "openrouter/free",
     "x-ai/grok-4.6",
+    GROQ_MODELS.fast,
+    GROQ_MODELS.strong,
+    GROQ_MODELS.reasoning,
   ]).has(model);
 }
 
 function reviewerFor(worker: string) {
   const family = modelFamily(worker);
+  if (family === "groq") return CLOUDFLARE_MODELS.reasoning;
   if (family === "qwen") return CLOUDFLARE_MODELS.fast;
-  if (family === "deepseek") return CLOUDFLARE_MODELS.reasoning;
-  if (family === "gemini") return CLOUDFLARE_MODELS.fast;
-  if (family === "cloudflare") return FREE_MODELS.reasoning;
+  if (family === "deepseek") return GROQ_MODELS.reasoning;
+  if (family === "gemini") return GROQ_MODELS.fast;
+  if (family === "cloudflare") return GROQ_MODELS.reasoning;
   return CLOUDFLARE_MODELS.fast;
 }
 
@@ -89,6 +99,7 @@ const OPENROUTER_ALIASES: Record<string, string> = {
 };
 
 function providerForModel(model: string) {
+  if (model.startsWith("groq:")) return "groq";
   if (model.startsWith("@cf/")) return "cloudflare";
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gemini-")) return "gemini";
@@ -98,6 +109,7 @@ function providerForModel(model: string) {
 
 function modelFamily(model: string) {
   const m = String(model || "").toLowerCase();
+  if (m.startsWith("groq:")) return "groq";
   if (m.startsWith("@cf/")) return "cloudflare";
   if (m.includes("gemini") || m.includes("google")) return "gemini";
   if (m.includes("claude") || m.includes("anthropic")) return "claude";
@@ -114,6 +126,7 @@ function modelConfigured(model: string) {
     const ai = envGetRaw("AI") as any;
     return Boolean(ai && typeof ai.run === "function");
   }
+  if (provider === "groq") return Boolean(envGet("GROQ_API_KEY"));
   if (provider === "anthropic") return Boolean(envGet("ANTHROPIC_API_KEY"));
   if (provider === "gemini") return Boolean(envGet("GEMINI_API_KEY"));
   if (provider === "openrouter") return Boolean(envGet("OPENROUTER_API_KEY"));
@@ -135,9 +148,11 @@ function resolveWorkerModel(requested: string) {
   const requestedRuntime = runtimeVariant(requested);
   if (requestedRuntime) return requestedRuntime;
   return firstConfiguredModel([
+    GROQ_MODELS.fast,
+    GROQ_MODELS.reasoning,
     FREE_MODELS.general,
-    CLOUDFLARE_MODELS.fast,
     FREE_MODELS.reasoning,
+    CLOUDFLARE_MODELS.fast,
     CLOUDFLARE_MODELS.reasoning,
     "gemini-3.5-flash-lite",
   ]) || requested;
@@ -147,6 +162,7 @@ function resolveReviewerModel(worker: string) {
   const workerFamily = modelFamily(worker);
   const candidates = [
     runtimeVariant(reviewerFor(worker)),
+    GROQ_MODELS.reasoning,
     CLOUDFLARE_MODELS.fast,
     CLOUDFLARE_MODELS.reasoning,
     FREE_MODELS.reasoning,
@@ -621,6 +637,36 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
   return answer.trim();
 }
 
+async function callGroq(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  const apiKey = envGet("GROQ_API_KEY");
+  if (!apiKey) throw new Error("Groq gateway is unavailable.");
+
+  const actualModel = model.replace(/^groq:/, "");
+  const response = await fetchWithTimeout(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: actualModel,
+        messages,
+        max_tokens: maxTokens,
+      }),
+    },
+    timeoutMs,
+  );
+
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Groq ${response.status}: ${text.slice(0, 220)}`);
+  const json = JSON.parse(text);
+  const answer = json?.choices?.[0]?.message?.content;
+  if (!answer || typeof answer !== "string") throw new Error(`${actualModel} returned an empty response`);
+  return answer.trim();
+}
+
 async function callCloudflareAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
   const ai = envGetRaw("AI") as any;
   if (!ai || typeof ai.run !== "function") throw new Error("Cloudflare Workers AI is unavailable.");
@@ -689,6 +735,9 @@ async function callModel(
   maxTokens = 1700,
   timeoutMs = 12000,
 ) {
+  if (model.startsWith("groq:")) {
+    return callGroq(model, messages, maxTokens, timeoutMs);
+  }
   if (model.startsWith("@cf/")) {
     return callCloudflareAI(model, messages, maxTokens, timeoutMs);
   }
@@ -828,13 +877,20 @@ export default async (request: Request) => {
         const longForm = isLongFormPresentation(question, presentation);
         const primaryModel = actualWorkerModel;
         const researchOrDesign = taskType === "research" || taskType === "design";
+        const groqFallback = taskType === "automation" || taskType === "reasoning"
+          ? GROQ_MODELS.reasoning
+          : GROQ_MODELS.fast;
         const cloudflareFallback = taskType === "automation" || taskType === "reasoning"
           ? CLOUDFLARE_MODELS.reasoning
           : CLOUDFLARE_MODELS.fast;
+        const openRouterFallback = researchOrDesign
+          ? FREE_MODELS.researchFallback
+          : (taskType === "automation" || taskType === "reasoning" ? FREE_MODELS.reasoning : FREE_MODELS.general);
         const candidates = Array.from(new Set([
           primaryModel,
+          groqFallback,
           cloudflareFallback,
-          ...(researchOrDesign ? [FREE_MODELS.researchFallback] : []),
+          openRouterFallback,
           ...(primaryModel.startsWith("gemini-") ? [] : ["gemini-3.5-flash-lite"]),
         ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
@@ -888,6 +944,11 @@ export default async (request: Request) => {
               rateLimited += 1;
               coolDownProvider(model, 60000);
               const provider = providerForModel(model);
+              if (provider === "groq") {
+                coolDownProviderFamily(model, 60000);
+                emit({ type: "quota", provider: "groq", model, status: "rate_limited" });
+                continue;
+              }
               if (provider === "openrouter") {
                 // Free-tier failures count against the shared allowance. Do not
                 // burn more requests by blindly trying every OpenRouter model.
@@ -906,6 +967,11 @@ export default async (request: Request) => {
             if (/\b402\b|insufficient|credits?|quota/i.test(message)) {
               creditLimited += 1;
               coolDownProvider(model, 120000);
+              if (providerForModel(model) === "groq") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "groq", model, status: "credits_or_quota" });
+                continue;
+              }
               if (providerForModel(model) === "openrouter") {
                 coolDownProviderFamily(model, 300000);
                 emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
@@ -919,10 +985,12 @@ export default async (request: Request) => {
 
         if (!answer && longForm && timedOut > 0) {
           const rescueModel = firstConfiguredModel([
+            GROQ_MODELS.fast,
+            GROQ_MODELS.reasoning,
             CLOUDFLARE_MODELS.fast,
             CLOUDFLARE_MODELS.reasoning,
             ...(researchOrDesign ? [] : ["gemini-3.5-flash-lite"]),
-          ]);
+          ].filter(providerAvailable));
           if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
             if (!rescueModel) throw new Error("No configured rescue provider.");
