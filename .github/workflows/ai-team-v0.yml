@@ -1,10 +1,34 @@
 name: AI Team v0 Core
 
 on:
+  pull_request:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/**"
+      - ".github/workflows/ai-team-activation.yml"
+      - ".github/workflows/ai-team-bharosa-controlled.yml"
+      - ".github/workflows/ai-team-project-automation.yml"
+      - ".github/workflows/ai-team-universal-audit.yml"
+      - ".github/workflows/ai-team-v0.yml"
+  push:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/**"
+      - ".github/workflows/ai-team-activation.yml"
+      - ".github/workflows/ai-team-bharosa-controlled.yml"
+      - ".github/workflows/ai-team-project-automation.yml"
+      - ".github/workflows/ai-team-universal-audit.yml"
+      - ".github/workflows/ai-team-v0.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ai-team-core-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   core-test:
@@ -13,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

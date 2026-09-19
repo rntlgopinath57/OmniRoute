@@ -1,6 +1,20 @@
 name: AI Team Universal Audit
 
 on:
+  pull_request:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/audit/**"
+      - "ai-team/tests/universal-audit.test.mjs"
+      - ".github/workflows/ai-team-universal-audit.yml"
+  push:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/audit/**"
+      - "ai-team/tests/universal-audit.test.mjs"
+      - ".github/workflows/ai-team-universal-audit.yml"
   workflow_dispatch:
     inputs:
       target_repository:
@@ -34,10 +48,45 @@ on:
 permissions:
   contents: read
 
-jobs:
+concurrency:
+  group: ai-team-universal-audit-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  audit-self-test:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.22.2"
+      - name: Run universal audit regression tests
+        run: node --test ai-team/tests/universal-audit.test.mjs
+      - name: Audit this repository
+        env:
+          AUDIT_ROOT: .
+          AUDIT_TARGET_NAME: OmniRoute
+          AUDIT_PROFILE: full
+          AUDIT_OUTPUT_DIR: audit-output
+          AUDIT_FAIL_ON: none
+        run: node ai-team/audit/universal-audit.mjs
+      - name: Save self-test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: universal-audit-self-test-${{ github.run_id }}
+          path: audit-output/
+          retention-days: 7
+          if-no-files-found: ignore
 
   audit-target:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -54,7 +103,8 @@ jobs:
           path: target-project
           token: ${{ secrets.AUDIT_READ_TOKEN || secrets.BHAROSA_READ_TOKEN || github.token }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22.22.2"
       - name: Run provider-independent evidence scan
@@ -78,3 +128,5 @@ jobs:
         with:
           name: audit-${{ github.run_id }}
           path: audit-output/
+          retention-days: 7
+          if-no-files-found: ignore

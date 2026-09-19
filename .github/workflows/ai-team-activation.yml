@@ -1,0 +1,69 @@
+name: AI Team Read-only Activation
+
+on:
+  pull_request:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/activation/**"
+      - ".github/workflows/ai-team-activation.yml"
+  push:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/activation/**"
+      - ".github/workflows/ai-team-activation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-team-activation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  activate-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      OMNIROUTE_NO_UPDATE_NOTIFIER: "1"
+      OMNIROUTE_BASE_URL: "http://127.0.0.1:20128"
+      OMNIROUTE_SERVER_HOST: "127.0.0.1"
+      REQUIRE_API_KEY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.22.2"
+
+      - name: Install latest published OmniRoute release
+        # release/v3.8.51 is the source branch; npm currently publishes 3.8.50.
+        # Keep this explicit instead of using @latest so CI cannot drift silently.
+        run: npm install --global omniroute@3.8.50
+
+      - name: Start local OmniRoute gateway
+        run: omniroute serve --no-open --daemon
+
+      - name: Wait for local gateway
+        run: |
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent --show-error --max-time 5 \
+              http://127.0.0.1:20128/api/health > /tmp/omniroute-health.json; then
+              cat /tmp/omniroute-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "OmniRoute health endpoint did not become reachable within 90 seconds" >&2
+          exit 1
+
+      - name: Run bounded read-only project job
+        run: node ai-team/activation/read-only-smoke.mjs
