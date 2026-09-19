@@ -575,15 +575,27 @@ async function handleEvent(evt){
     setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
     completed.add('router');
-    setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
-    setActiveProvider(evt.model);
-    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
+
     currentPresentation=evt.presentation||currentPresentation;
     lastWorker=roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
+
+    // Preserve the real visual handoff: router -> specialist -> provider.
+    activeProviderNode='';
+    setStage('solve');
+    setState(`${INFO[lastWorker]?.[0]||'SPECIALIST'} · ACTIVATED`,'busy');
+    updatePending(`${INFO[lastWorker]?.[0]||'Specialist'} selected for this task…`);
+    active=new Set([lastWorker]);
+    setFlowEdge(`router:${lastWorker}`);
+    render(); kickNode(lastWorker);
+    await wait(220);
+
     setActiveProvider(evt.model);
-    active=new Set([lastWorker]); setFlowEdge(`router:${lastWorker}`); render(); kickNode(lastWorker); return;
+    setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
+    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
+    render();
+    return;
   }
   if(evt.type==='tool'&&evt.tool==='github'){
     if(evt.status==='complete'){
@@ -647,9 +659,21 @@ async function handleEvent(evt){
   if(evt.type==='reviewer'){
     if(activeProviderNode)completedProviders.add(activeProviderNode);
     activeProviderNode='';
-    completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
+    completed.add(lastWorker);
+    setStage('verify');
+    setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
-    active=new Set(['reviewer']); setFlowEdge(`${lastWorker}:reviewer`); render(); kickNode('reviewer'); return;
+    active=new Set(['reviewer']);
+    setFlowEdge(`${lastWorker}:reviewer`);
+    updateRoleModel('reviewer',evt.model);
+    render(); kickNode('reviewer');
+    await wait(220);
+
+    // Then show the independent review provider as a second real handoff.
+    setActiveProvider(evt.model);
+    setState(`REVIEW · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
+    render();
+    return;
   }
   if(evt.type==='fast_path'){
     completed.add(lastWorker); setState('FINALIZING','busy');
