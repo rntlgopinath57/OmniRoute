@@ -641,6 +641,16 @@ async function handleEvent(evt){
     setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     render(); kickNode(lastWorker); return;
   }
+  if(evt.type==='quota'){
+    const provider=String(evt.provider||'provider');
+    const node=document.querySelector(`[data-provider-node="${provider}"]`);
+    node?.classList.add('limited');
+    const small=node?.querySelector('small');
+    if(small)small.textContent=evt.status==='rate_limited'?'LIMITED · RATE LIMIT':'LIMITED · QUOTA';
+    setState(`${provider.toUpperCase()} · LIMITED`,'busy');
+    updatePending('Provider limit reached — Relay stopped repeated attempts to protect the remaining quota.');
+    return;
+  }
   if(evt.type==='render'){
     const source=lastWorker;
     completed.add(source);
