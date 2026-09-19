@@ -186,19 +186,20 @@ function resolveWorkerModel(requested: string) {
   ]) || requested;
 }
 
-function resolveReviewerModel(worker: string) {
+function resolveReviewerModels(worker: string) {
   const workerFamily = modelFamily(worker);
   const candidates = [
     runtimeVariant(reviewerFor(worker)),
-    GROQ_MODELS.reasoning,
+    GROQ_MODELS.fast,
     CLOUDFLARE_MODELS.fast,
+    GROQ_MODELS.reasoning,
     CLOUDFLARE_MODELS.reasoning,
     FREE_MODELS.reasoning,
     "gemini-3.5-flash-lite",
   ].filter(Boolean);
-  return candidates.find((model) =>
+  return [...new Set(candidates)].filter((model) =>
     modelConfigured(model) && modelFamily(model) !== workerFamily
-  ) || "";
+  );
 }
 
 function disambiguationContext(question: string) {
@@ -1096,7 +1097,8 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
-        const actualReviewerModel = resolveReviewerModel(actualWorkerModel);
+        const reviewerCandidates = resolveReviewerModels(actualWorkerModel);
+        let actualReviewerModel = reviewerCandidates[0] || "";
 
         if (presentation.visual) {
           emit({ type: "render", presentation });
@@ -1123,23 +1125,29 @@ export default async (request: Request) => {
         } else {
           emit({ type: "reviewer", model: actualReviewerModel });
           try {
-          review = await callModel(
-            actualReviewerModel,
-            [
-              {
-                role: "system",
-                content:
-                  "You are an independent reviewer. Evaluate relevance, correctness, completeness, unsupported claims, and presentation-format compliance. The required presentation format is " + presentation.label + ". A requested visual format must not be replaced by ASCII art, generic prose, or a code block. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
-              },
-              ...history,
-              { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
-            ],
-            220,
-            4500,
-          );
-          reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")
-            ? "PASS"
-            : "FAIL";
+          const reviewMessages = [
+            {
+              role: "system",
+              content:
+                "You are an independent reviewer. Evaluate relevance, correctness, completeness, unsupported claims, and presentation-format compliance. The required presentation format is " + presentation.label + ". First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
+            },
+            { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
+          ];
+          let reviewError: unknown = null;
+          for (const candidate of reviewerCandidates.slice(0, 2)) {
+            actualReviewerModel = candidate;
+            emit({ type: "reviewer", model: actualReviewerModel });
+            try {
+              review = await callModel(actualReviewerModel, reviewMessages, 120, 2500);
+              reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS") ? "PASS" : "FAIL";
+              reviewError = null;
+              break;
+            } catch (candidateError) {
+              reviewError = candidateError;
+              emit({ type: "reviewer_fallback", model: actualReviewerModel, reason: "timeout_or_provider_error" });
+            }
+          }
+          if (reviewError) throw reviewError;
           } catch (reviewError) {
             console.warn("Reviewer unavailable; returning worker answer", {
               model: actualReviewerModel,
