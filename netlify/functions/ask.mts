@@ -1,4 +1,5 @@
 import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
+import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routing-policy.mjs";
 
 function classify(text: string) {
   const q = text.toLowerCase();
@@ -127,6 +128,7 @@ const OPENROUTER_ALIASES: Record<string, string> = {
 };
 
 function providerForModel(model: string) {
+  if (model.startsWith("freellmapi:")) return "freellmapi";
   if (model.startsWith("groq:")) return "groq";
   if (model.startsWith("@cf/")) return "cloudflare";
   if (model.startsWith("claude-")) return "anthropic";
@@ -137,6 +139,7 @@ function providerForModel(model: string) {
 
 function modelFamily(model: string) {
   const m = String(model || "").toLowerCase();
+  if (m.startsWith("freellmapi:")) return "freellmapi";
   if (m.startsWith("groq:")) return "groq";
   if (m.startsWith("@cf/")) return "cloudflare";
   if (m.includes("gemini") || m.includes("google")) return "gemini";
@@ -150,6 +153,7 @@ function modelFamily(model: string) {
 
 function modelConfigured(model: string) {
   const provider = providerForModel(model);
+  if (provider === "freellmapi") return true;
   if (provider === "cloudflare") {
     const ai = envGetRaw("AI") as any;
     return Boolean(ai && typeof ai.run === "function");
@@ -762,12 +766,44 @@ async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens:
   return answer.trim();
 }
 
+async function callFreeLlmApiPublic(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  // This is the proven keyless public lane surfaced by FreeLLMAPI. Kilo's free
+  // tier may log prompts/outputs for training, so routing-policy.mjs must block
+  // private, sensitive, high-risk, or fresh/current prompts from this path.
+  const actualModel = model.replace(/^freellmapi:kilo\//, "");
+  const { response, text } = await fetchTextWithTimeout(
+    "https://api.kilo.ai/api/gateway/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "relay-ai-team-public-free-lane",
+      },
+      body: JSON.stringify({
+        model: actualModel,
+        messages,
+        max_tokens: Math.min(maxTokens, 1200),
+        temperature: 0.2,
+      }),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) throw new Error(`FreeLLMAPI public lane ${response.status}: ${text.slice(0, 220)}`);
+  const json = JSON.parse(text);
+  const answer = json?.choices?.[0]?.message?.content;
+  if (!answer || typeof answer !== "string") throw new Error(`${actualModel} returned an empty response`);
+  return answer.trim();
+}
+
 async function callModel(
   model: string,
   messages: ChatMessage[],
   maxTokens = 1700,
   timeoutMs = 12000,
 ) {
+  if (model.startsWith("freellmapi:")) {
+    return callFreeLlmApiPublic(model, messages, maxTokens, timeoutMs);
+  }
   if (model.startsWith("groq:")) {
     return callGroq(model, messages, maxTokens, timeoutMs);
   }
@@ -868,13 +904,24 @@ export default async (request: Request) => {
             };
           }
         }
+        const routingPolicy = assessRoutingLane({
+          question,
+          contextualQuestion,
+          taskType,
+          history,
+        });
         const stickyModel = !explicitRoute.explicit && !explicitRoute.comparison && followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
+        const usePublicFreePrimary =
+          !explicitRoute.explicit
+          && !explicitRoute.comparison
+          && !followUp
+          && routingPolicy.lane === "public_free";
         const requestedWorkerModel = explicitRoute.comparison
           ? GROQ_MODELS.strong
-          : (explicitRoute.model || stickyModel || routedWorkerModel);
+          : (explicitRoute.model || stickyModel || (usePublicFreePrimary ? PUBLIC_FREE_MODEL : routedWorkerModel));
         const workerModel = explicitRoute.explicit
           ? runtimeVariant(requestedWorkerModel)
           : resolveWorkerModel(requestedWorkerModel);
@@ -893,8 +940,12 @@ export default async (request: Request) => {
               ? "multi_model_comparison"
               : stickyModel
                 ? "follow_up"
-                : "task_route",
+                : usePublicFreePrimary
+                  ? "public_free_lane"
+                  : "task_route",
           requestedFamily: explicitRoute.family || undefined,
+          routingLane: routingPolicy.lane,
+          routingReason: routingPolicy.reason,
         });
         await new Promise((resolve) => setTimeout(resolve, 180));
         if (presentation.format !== "default") {
@@ -905,8 +956,13 @@ export default async (request: Request) => {
           taskType,
           model: workerModel,
           presentation,
-          routeReason: explicitRoute.explicit ? "explicit_model" : "task_route",
+          routeReason: explicitRoute.explicit
+            ? "explicit_model"
+            : usePublicFreePrimary
+              ? "public_free_lane"
+              : "task_route",
           requestedFamily: explicitRoute.family || undefined,
+          routingLane: routingPolicy.lane,
         });
 
         let actualWorkerModel = workerModel;
@@ -953,6 +1009,7 @@ export default async (request: Request) => {
           cloudflareFallback,
           openRouterFallback,
           ...(primaryModel.startsWith("gemini-") ? [] : ["gemini-3.5-flash-lite"]),
+          ...(primaryModel !== PUBLIC_FREE_MODEL && routingPolicy.publicFreeAllowed ? [PUBLIC_FREE_MODEL] : []),
         ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         // Explicit provider intent is strict: never silently answer with another family.
@@ -984,11 +1041,13 @@ export default async (request: Request) => {
             : (model.startsWith("gpt-") ? 1200 : 1000);
           const isExplicitOpenRouterPrimary =
             index === 0 && explicitRoute.explicit && providerForModel(model) === "openrouter";
-          const timeoutMs = isExplicitOpenRouterPrimary
-            ? (longForm ? 12000 : 8000)
-            : longForm
-              ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
-              : (index === 0 ? 10000 : 7000);
+          const timeoutMs = providerForModel(model) === "freellmapi"
+            ? 9000
+            : isExplicitOpenRouterPrimary
+              ? (longForm ? 12000 : 8000)
+              : longForm
+                ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
+                : (index === 0 ? 10000 : 7000);
 
           try {
             answer = await callModelWithProgress(
@@ -1034,6 +1093,11 @@ export default async (request: Request) => {
                 emit({ type: "quota", provider: "cloudflare", model, status: daily ? "daily_allocation" : "capacity" });
                 continue;
               }
+              if (provider === "freellmapi") {
+                coolDownProviderFamily(model, 120000);
+                emit({ type: "quota", provider: "freellmapi", model, status: "keyless_capacity" });
+                continue;
+              }
               continue;
             }
             if (/\b402\b|insufficient|credits?|quota/i.test(message)) {
@@ -1047,6 +1111,11 @@ export default async (request: Request) => {
               if (providerForModel(model) === "openrouter") {
                 coolDownProviderFamily(model, 300000);
                 emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
+                continue;
+              }
+              if (providerForModel(model) === "freellmapi") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "freellmapi", model, status: "free_pool_unavailable" });
                 continue;
               }
               continue;
