@@ -155,6 +155,22 @@ jobs:
           echo "$response" | grep -q '"model":"groq:'
           echo "Groq live routing smoke: PASS"
 
+      - name: Opt-in explicit-model affinity smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[affinity-smoke]') && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is gemini famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"worker"'
+          echo "$response" | grep -q '"model":"gemini-3.5-flash-lite"'
+          echo "$response" | grep -q '"routeReason":"explicit_model"'
+          echo "$response" | grep -q '"type":"reviewer"'
+          if echo "$response" | grep -q '"type":"reviewer".*"model":"gemini'; then
+            echo "Reviewer incorrectly reused Gemini."
+            exit 1
+          fi
+          echo "$response" | grep -q '"type":"done"'
+          echo "Explicit Gemini affinity smoke: PASS"
+
       - name: Verify static security header configuration
         run: |
           grep -q 'X-Content-Type-Options: nosniff' ai-team-playground/_headers
@@ -519,7 +535,11 @@ jobs:
           assert 'GROQ_API_KEY' in ask, "Groq credential route missing"
           assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
           assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
-          print("Task-specific routing, independent quota pools and visible fallback guards: PASS")
+          assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
+          assert 'const requestedWorkerModel = explicitRoute.model || stickyModel || routedWorkerModel' in ask, "Explicit model must override sticky/default routing"
+          assert '{ family: "gemini", pattern:' in ask, "Gemini explicit route missing"
+          assert 'families.length !== 1' in ask, "Multi-model comparison neutrality guard missing"
+          print("Task routing, explicit model affinity, independent quota pools and fallback guards: PASS")
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
