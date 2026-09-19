@@ -146,6 +146,18 @@ jobs:
           echo "$response" | grep -q '"type":"done"'
           echo "$response" | grep -q 'CLOUDFLARE_RELAY_OK'
 
+      - name: Opt-in live Groq routing smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[groq-smoke]') && env.GROQ_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent \\
+            -H 'Content-Type: application/json' \\
+            -d '{"question":"Explain in one sentence why a circuit breaker helps an AI router.","history":[]}' \\
+            "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q '"model":"groq:'
+          echo "Groq live routing smoke: PASS"
+
       - name: Verify static security header configuration
         run: |
           grep -q 'X-Content-Type-Options: nosniff' ai-team-playground/_headers
