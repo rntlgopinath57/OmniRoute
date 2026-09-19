@@ -552,6 +552,17 @@ async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: n
   }
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
 async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
   const baseUrl = envGet("OPENAI_BASE_URL") || "https://api.openai.com";
   const apiKey = envGet("OPENAI_API_KEY");
