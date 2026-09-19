@@ -32,11 +32,19 @@ function workerFor(taskType: string, question: string) {
 function isFollowUp(question: string, history: Array<{ role: string; content: string }>) {
   if (!history.length) return false;
   const q = question.trim().toLowerCase();
-  if (q.length > 220) return false;
+  if (!q || q.length > 220) return false;
   if (/^(new topic|different topic|unrelated|start over|ignore previous)\b/.test(q)) return false;
-  if (q.length <= 120) return true;
-  return /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|do more|more|go deeper|expand|elaborate|evaluate|compare|tell me more|what about|and |also |then |now )/.test(q)
-    || /\b(that|this|it|them|those|same|above|previous|further|deeper|more)\b/.test(q);
+
+  // Short does not automatically mean follow-up. A follow-up must actually
+  // refer to the previous turn or explicitly continue it.
+  const explicitContinuation =
+    /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|do more|more|go deeper|expand|elaborate|tell me more|what about|and |also |then |now )/.test(q);
+  const referential =
+    /\b(that|this|it|them|those|same|above|previous|further|deeper)\b/.test(q);
+  const elliptical =
+    /^(why|how so|which one|what next|anything else|more details?)\??$/.test(q);
+
+  return explicitContinuation || referential || elliptical;
 }
 
 function allowedStickyModel(model: string) {
