@@ -206,6 +206,23 @@ jobs:
           grep -q 'Relay truthful data-flow animation v30' ai-team-playground/app.css
           grep -q '.fxStreak,.fxField{display:none!important}' ai-team-playground/app.css
 
+      - name: Verify composer and first-handoff UI contract
+        shell: python
+        run: |
+          from pathlib import Path
+          css = Path("ai-team-playground/app.css").read_text(encoding="utf-8")
+          js = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
+          html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
+
+          assert '#answer .followup{' in css
+          assert 'display:flex!important;' in css[css.index('#answer .followup{'):css.index('#answer .followup{') + 500]
+          assert "workspace.classList.remove('show-run')" in js
+          assert "runToggle.textContent='View run'" in js
+          assert "await travel('you','planner',420)" in js
+          assert './app.css?v=33' in html
+          assert './app.js?v=44' in html
+          print("Composer visibility, closed run view and first YOU -> PLANNER handoff: PASS")
+
       - name: Verify real provider roster
         run: |
           grep -q 'data-provider-node="gemini"' ai-team-playground/index.html
