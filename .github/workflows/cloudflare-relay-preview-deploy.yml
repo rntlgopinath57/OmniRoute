@@ -193,15 +193,32 @@ jobs:
           ! grep -q 'Check Netlify usage/billing' netlify/functions/ask.mts
 
       - name: Verify multi-model switching support
+        shell: python
         run: |
-          grep -q 'qwen/qwen3.8-flash' netlify/functions/ask.mts
-          grep -q 'x-ai/grok-4.6' netlify/functions/ask.mts
-          grep -q 'openai/gpt-5.6-luna' netlify/functions/ask.mts
-          grep -q 'anthropic/claude-haiku-4.5' netlify/functions/ask.mts
-          grep -q 'function runtimeVariant' netlify/functions/ask.mts
-          grep -q 'function modelFamily' netlify/functions/ask.mts
-          grep -q 'models = {' netlify/functions/health.mts
-          grep -q 'models=health?.models' ai-team-playground/app.js
+          from pathlib import Path
+          ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
+          health = Path("netlify/functions/health.mts").read_text(encoding="utf-8")
+
+          required = [
+              'coding: "deepseek/deepseek-v4-flash-0731:free"',
+              'general: "deepseek/deepseek-v4-flash-0731:free"',
+              'automation: "qwen/qwen3.8-27b:free"',
+              'reasoning: "qwen/qwen3.8-27b:free"',
+              'researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free"',
+              'universalFallback: "openrouter/free"',
+              'function runtimeVariant',
+              'function modelFamily',
+          ]
+          for item in required:
+              assert item in ask, f"Missing routing invariant: {item}"
+
+          # Gemini is intentionally specialized, not the universal worker.
+          assert ask.count('return "gemini-3.5-flash-lite"') == 1, "Gemini route dominance regressed"
+          assert 'presentation.visual ? "gpt-5.6-luna"' not in ask, "Visual prompts must not force paid GPT"
+          assert 'openai: providers.openai,' in health
+          assert 'claude: providers.anthropic,' in health
+          assert 'grok: false,' in health
+          print("Task-specific free routing and Gemini specialization: PASS")
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
