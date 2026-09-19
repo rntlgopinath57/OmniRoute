@@ -14,6 +14,7 @@ type Env = {
   GEMINI_API_KEY?: string;
   OPENROUTER_BASE_URL?: string;
   OPENROUTER_API_KEY?: string;
+  GROQ_API_KEY?: string;
   RELAY_GITHUB_TOKEN?: string;
   GITHUB_TOKEN?: string;
 };
