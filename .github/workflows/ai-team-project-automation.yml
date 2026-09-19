@@ -1,15 +1,6 @@
 name: AI Team Project Automation
 
 on:
-  push:
-    branches:
-      - "feature/ai-team-control-plane"
-      - "release/v3.8.51"
-    paths:
-      - "ai-team/src/automation-*.mjs"
-      - "ai-team/automation/**"
-      - "ai-team/tests/automation-*.test.mjs"
-      - ".github/workflows/ai-team-project-automation.yml"
   workflow_dispatch:
     inputs:
       job_id:

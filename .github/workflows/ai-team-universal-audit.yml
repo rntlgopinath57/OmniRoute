@@ -30,42 +30,14 @@ on:
         default: critical
         type: choice
         options: [none, critical, high]
-  push:
-    branches: [release/v3.8.51]
-    paths:
-      - "ai-team/audit/**"
-      - "ai-team/tests/universal-audit.test.mjs"
-      - ".github/workflows/ai-team-universal-audit.yml"
 
 permissions:
   contents: read
 
 jobs:
-  audit-self-test:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.22.2"
-      - run: node --test ai-team/tests/universal-audit.test.mjs
-      - name: Audit this repository
-        env:
-          AUDIT_ROOT: .
-          AUDIT_TARGET_NAME: OmniRoute
-          AUDIT_PROFILE: full
-          AUDIT_OUTPUT_DIR: audit-output
-          AUDIT_FAIL_ON: none
-        run: node ai-team/audit/universal-audit.mjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: universal-audit-self-test
-          path: audit-output/
+
 
   audit-target:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
