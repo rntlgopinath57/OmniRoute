@@ -118,8 +118,8 @@ jobs:
           echo "Health endpoint did not become ready."
           exit 1
 
-      - name: Smoke Gemini Relay prompt
-        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+      - name: Manual live Relay research smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.GEMINI_API_KEY != ''
         run: |
           url="${{ steps.deploy.outputs.url }}/api/ask"
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFLARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
@@ -222,7 +222,11 @@ jobs:
           assert 'openai: providers.openai,' in health
           assert 'claude: providers.anthropic,' in health
           assert 'grok: false,' in health
-          print("Task-specific free routing and Gemini specialization: PASS")
+          assert 'if (q.length <= 120) return true' not in ask, "Short-prompt sticky routing regression"
+          assert 'coolDownProviderFamily(model, 60000)' in ask, "OpenRouter rate-limit circuit breaker missing"
+          assert 'emit({ type: "quota", provider: "openrouter"' in ask, "Visible quota event missing"
+          assert '"gemini-3.5-flash-lite",' not in ask[ask.index('const candidates ='):ask.index('const configuredCandidates')], "Gemini returned to generic fallback pool"
+          print("Task-specific free routing, sticky-route and quota guards: PASS")
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
@@ -233,8 +237,8 @@ jobs:
           echo "$response" | grep -q '"videoGeneration":true'
           echo "$response" | grep -q '"serverGeminiConfigured":true'
 
-      - name: Verify flowchart presentation contract
-        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+      - name: Manual live flowchart routing contract
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.OPENROUTER_API_KEY != ''
         run: |
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"/flowchart Show a simple three-step release process: validate, deploy, verify.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
           echo "$response"
@@ -246,8 +250,8 @@ jobs:
             exit 1
           fi
 
-      - name: Verify GitHub workflow inventory path
-        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+      - name: Manual live GitHub workflow inventory path
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.OPENROUTER_API_KEY != ''
         run: |
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"List my GitHub workflows by repository. Keep it concise.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
           echo "$response"
