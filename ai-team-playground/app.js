@@ -526,6 +526,11 @@ function openAnswer(ok=true){
   $('tick').classList.toggle('bad',!ok);
 }
 function resetForRun(question,isRetry=false){
+  workspace.classList.remove('show-run');
+  if(runToggle){
+    runToggle.setAttribute('aria-expanded','false');
+    runToggle.textContent='View run';
+  }
   activeProviderNode='';
   completedProviders=new Set();
   ambientLastNode='you';
@@ -561,7 +566,7 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
+    completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',420); return;
   }
 
   if(evt.type==='presentation'){
@@ -986,4 +991,9 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>setParallax(0,0));
 
+workspace.classList.remove('show-run','working');
+if(runToggle){
+  runToggle.setAttribute('aria-expanded','false');
+  runToggle.textContent='View run';
+}
 draw(); initVoice(); initProviderRoster(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
