@@ -31,6 +31,29 @@ const GROQ_MODELS = Object.freeze({
   reasoning: "groq:qwen/qwen3.8-27b",
 });
 
+const EXPLICIT_MODEL_ROUTES: Array<{ family: string; pattern: RegExp; model: string }> = [
+  { family: "gemini", pattern: /\b(?:google\s+)?gemini\b/i, model: "gemini-3.5-flash-lite" },
+  { family: "claude", pattern: /\bclaude\b|\banthropic\b/i, model: "claude-haiku-4-5" },
+  { family: "openai", pattern: /\bopenai\b|\bchatgpt\b|\bgpt[-\s]?5(?:\.6)?\b/i, model: "gpt-5.6-luna" },
+  { family: "deepseek", pattern: /\bdeepseek\b/i, model: FREE_MODELS.coding },
+  { family: "qwen", pattern: /\bqwen\b/i, model: FREE_MODELS.reasoning },
+  { family: "groq", pattern: /\bgroq\b/i, model: GROQ_MODELS.fast },
+  { family: "cloudflare", pattern: /\bcloudflare(?:\s+workers?\s+ai)?\b/i, model: CLOUDFLARE_MODELS.fast },
+  { family: "grok", pattern: /\bgrok\b|\bxai\b|\bx-ai\b/i, model: "x-ai/grok-4.6" },
+];
+
+function explicitModelRoute(question: string) {
+  const hits = EXPLICIT_MODEL_ROUTES.filter((item) => item.pattern.test(question));
+  const families = [...new Set(hits.map((item) => item.family))];
+
+  // One named model/provider means the user is explicitly talking to/about
+  // that lane. Multiple named models are a comparison and stay neutral.
+  if (families.length !== 1) return { model: "", family: "", explicit: false, comparison: families.length > 1 };
+
+  const hit = hits.find((item) => item.family === families[0])!;
+  return { model: hit.model, family: hit.family, explicit: true, comparison: false };
+}
+
 function workerFor(taskType: string, question: string) {
   // Prefer Groq for high-volume routine work when configured. It has an
   // independent quota pool, so OpenRouter is preserved as a later fallback.
@@ -834,19 +857,39 @@ export default async (request: Request) => {
             };
           }
         }
-        const stickyModel = followUp && allowedStickyModel(preferredModel)
+        const explicitRoute = explicitModelRoute(question);
+        const stickyModel = !explicitRoute.explicit && followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
-        const requestedWorkerModel = stickyModel || routedWorkerModel;
+        const requestedWorkerModel = explicitRoute.model || stickyModel || routedWorkerModel;
         const workerModel = resolveWorkerModel(requestedWorkerModel);
 
-        emit({ type: "planner", taskType, presentation });
+        emit({
+          type: "planner",
+          taskType,
+          presentation,
+          routeReason: explicitRoute.explicit
+            ? "explicit_model"
+            : explicitRoute.comparison
+              ? "multi_model_comparison"
+              : stickyModel
+                ? "follow_up"
+                : "task_route",
+          requestedFamily: explicitRoute.family || undefined,
+        });
         await new Promise((resolve) => setTimeout(resolve, 180));
         if (presentation.format !== "default") {
           emit({ type: "presentation", presentation });
         }
-        emit({ type: "worker", taskType, model: workerModel, presentation });
+        emit({
+          type: "worker",
+          taskType,
+          model: workerModel,
+          presentation,
+          routeReason: explicitRoute.explicit ? "explicit_model" : "task_route",
+          requestedFamily: explicitRoute.family || undefined,
+        });
 
         let actualWorkerModel = workerModel;
         const contextNote = disambiguationContext(contextualQuestion);
