@@ -110,6 +110,7 @@ jobs:
           for attempt in 1 2 3 4 5 6; do
             if body="$(curl --fail --show-error --silent "$url")"; then
               echo "$body"
+              echo "$body" | grep -q '"cloudflare":true'
               exit 0
             fi
             echo "Health check attempt $attempt failed; waiting for Worker propagation..."
@@ -182,6 +183,7 @@ jobs:
         run: |
           grep -q 'data-provider-node="gemini"' ai-team-playground/index.html
           grep -q 'data-provider-node="qwen"' ai-team-playground/index.html
+          grep -q 'data-provider-node="cloudflare"' ai-team-playground/index.html
           grep -q 'data-provider-node="grok"' ai-team-playground/index.html
           grep -q 'function providerNodeForModel' ai-team-playground/app.js
           grep -q 'function initProviderRoster' ai-team-playground/app.js
@@ -210,6 +212,9 @@ jobs:
               'reasoning: "qwen/qwen3.8-27b:free"',
               'researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free"',
               'universalFallback: "openrouter/free"',
+              'fast: "@cf/zai-org/glm-4.7-flash"',
+              'reasoning: "@cf/nvidia/nemotron-3-120b-a12b"',
+              'function callCloudflareAI',
               'function runtimeVariant',
               'function modelFamily',
           ]
@@ -224,9 +229,13 @@ jobs:
           assert 'grok: false,' in health
           assert 'if (q.length <= 120) return true' not in ask, "Short-prompt sticky routing regression"
           assert 'coolDownProviderFamily(model, 60000)' in ask, "OpenRouter rate-limit circuit breaker missing"
-          assert 'emit({ type: "quota", provider: "openrouter"' in ask, "Visible quota event missing"
-          assert '"gemini-3.5-flash-lite",' not in ask[ask.index('const candidates ='):ask.index('const configuredCandidates')], "Gemini returned to generic fallback pool"
-          print("Task-specific free routing, sticky-route and quota guards: PASS")
+          assert 'emit({ type: "quota", provider: "openrouter"' in ask, "Visible OpenRouter quota event missing"
+          assert 'provider: "cloudflare"' in ask, "Visible Cloudflare quota event missing"
+          candidate_block = ask[ask.index('const candidates ='):ask.index('const configuredCandidates')]
+          assert 'cloudflareFallback' in candidate_block, "Cloudflare independent fallback missing"
+          assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
+          assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
+          print("Task-specific routing, independent quota pools and visible fallback guards: PASS")
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
