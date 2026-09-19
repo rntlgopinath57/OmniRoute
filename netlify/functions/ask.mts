@@ -1087,7 +1087,7 @@ export default async (request: Request) => {
             review = "FAIL\nReturn the requested visual format as concise structured content. Do not emit Mermaid/Graphviz source or raw diagram code.";
             emit({ type: "review_failed", reason: "format_structure_incomplete" });
           }
-        } else if (useFastPath(question, taskType, presentation)) {
+        } else if (useFastPath(question, taskType, presentation) && !explicitRoute.explicit) {
           reviewStatus = "FAST_PATH";
           emit({ type: "fast_path", reason: "simple_or_low_risk" });
         } else if (!actualReviewerModel) {
@@ -1161,7 +1161,7 @@ export default async (request: Request) => {
           answer,
           review: reviewStatus,
           model: actualWorkerModel,
-          reviewer: actualReviewerModel,
+          reviewer: reviewStatus === "FAST_PATH" || reviewStatus === "SKIPPED" ? "" : actualReviewerModel,
           taskType,
           presentation,
         });
