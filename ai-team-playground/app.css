@@ -3754,3 +3754,47 @@ header{
   }
   .providerRail .railNode.limited b{opacity:.86}
 }
+
+
+/* Relay viewport + first-handoff regression guard v33 */
+#answer,
+#answer.open{
+  display:flex!important;
+  flex-direction:column!important;
+  min-height:0!important;
+  overflow:hidden!important;
+}
+#answer .thread{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+}
+#answer .toolDock{
+  flex:0 0 auto!important;
+}
+#answer .followup{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  flex:0 0 auto!important;
+  position:relative!important;
+  bottom:auto!important;
+  z-index:35!important;
+  margin-bottom:12px!important;
+}
+@media(min-width:1200px){
+  #workspace:not(.show-run) .ambientRail{
+    opacity:.72!important;
+    filter:none!important;
+  }
+  #workspace.working:not(.show-run) .ambientRail{
+    opacity:1!important;
+    filter:none!important;
+  }
+  #workspace.working:not(.show-run) .railNode.active,
+  #workspace.working:not(.show-run) .railNode.sending,
+  #workspace.working:not(.show-run) .railNode.receiving{
+    opacity:1!important;
+    filter:none!important;
+  }
+}
