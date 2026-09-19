@@ -214,20 +214,130 @@ jobs:
           js = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
           html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
 
-          assert '#answer .followup{' in css
-          composer = css[css.rindex('/* Relay deterministic bottom composer v34 */'):]
-          assert 'position:absolute!important;' in composer
-          assert 'bottom:12px!important;' in composer
-          assert 'z-index:60!important;' in composer
+          composer = css[css.rindex('/* Relay authoritative viewport composer v35 */'):]
+          assert '.followup.viewportComposer' in composer
+          assert 'position:fixed!important;' in composer
+          assert 'bottom:14px!important;' in composer
+          assert 'z-index:120!important;' in composer
           assert 'pointer-events:auto!important;' in composer
-          assert '#answer .toolDock{' in composer
-          assert 'bottom:78px!important;' in composer
+          assert 'mountViewportComposer()' in js
+          assert 'verifyComposerInViewport()' in js
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=34' in html
-          assert './app.js?v=44' in html
-          print("Composer visibility, closed run view and first YOU -> PLANNER handoff: PASS")
+          assert './app.css?v=35' in html
+          assert './app.js?v=45' in html
+          print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
+
+      - name: Browser-rendered Relay UI smoke
+        if: steps.deploy.outputs.url != ''
+        run: |
+          npm install --no-save --no-package-lock puppeteer-core@24
+          RELAY_URL="${{ steps.deploy.outputs.url }}" node <<'NODE'
+          const puppeteer = require('puppeteer-core');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              executablePath: process.env.CHROME_BIN || '/usr/bin/google-chrome',
+              headless: true,
+              args: ['--no-sandbox','--disable-dev-shm-usage'],
+            });
+
+            try {
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1600, height: 900, deviceScaleFactor: 1 });
+              await page.setCacheEnabled(false);
+
+              await page.setRequestInterception(true);
+              page.on('request', req => {
+                if (req.url().includes('/api/ask') && req.method() === 'POST') {
+                  const body = [
+                    'data: {"type":"planner"}',
+                    '',
+                    'data: {"type":"worker","model":"groq:qwen/qwen3.8-27b","taskType":"reasoning"}',
+                    '',
+                    'data: {"type":"reviewer","model":"@cf/nvidia/nemotron-3-120b-a12b"}',
+                    '',
+                    'data: {"type":"done","model":"groq:qwen/qwen3.8-27b","answer":"UI smoke complete."}',
+                    '',
+                  ].join('\n');
+                  req.respond({
+                    status: 200,
+                    contentType: 'text/event-stream',
+                    headers: {'cache-control':'no-store'},
+                    body,
+                  });
+                } else {
+                  req.continue();
+                }
+              });
+
+              const url = process.env.RELAY_URL + '/?ui_smoke=' + Date.now();
+              await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+              await page.waitForSelector('#followQ', { visible: true, timeout: 15000 });
+
+              const initial = await page.evaluate(() => {
+                const composer = document.querySelector('.followup');
+                const input = document.querySelector('#followQ');
+                const tools = document.querySelector('#toolDock');
+                const c = composer?.getBoundingClientRect();
+                const i = input?.getBoundingClientRect();
+                const t = tools?.getBoundingClientRect();
+                return {
+                  viewport: { width: innerWidth, height: innerHeight },
+                  composer: c && { top:c.top, bottom:c.bottom, left:c.left, right:c.right, width:c.width, height:c.height },
+                  input: i && { top:i.top, bottom:i.bottom, width:i.width, height:i.height },
+                  tools: t && { top:t.top, bottom:t.bottom },
+                  composerParent: composer?.parentElement?.id || composer?.parentElement?.className || '',
+                  display: composer ? getComputedStyle(composer).display : 'missing',
+                  visibility: composer ? getComputedStyle(composer).visibility : 'missing',
+                  opacity: composer ? getComputedStyle(composer).opacity : 'missing',
+                  runOpen: document.querySelector('#workspace')?.classList.contains('show-run'),
+                };
+              });
+              console.log('INITIAL_UI', JSON.stringify(initial));
+
+              if (!initial.composer || initial.display === 'none' || initial.visibility === 'hidden' || Number(initial.opacity) === 0) {
+                throw new Error('Composer is not rendered.');
+              }
+              if (initial.composer.top < 0 || initial.composer.bottom > initial.viewport.height) {
+                throw new Error('Composer is outside viewport: ' + JSON.stringify(initial));
+              }
+              if (!initial.input || initial.input.width < 250 || initial.input.height < 35) {
+                throw new Error('Ask Relay input is not usable: ' + JSON.stringify(initial));
+              }
+              if (initial.runOpen) {
+                throw new Error('Run graph must start closed.');
+              }
+
+              await page.click('#followQ');
+              await page.type('#followQ', 'Why do circuit breakers help resilient routing?');
+              await page.click('#followGo');
+
+              await page.waitForFunction(() => {
+                const you = document.querySelector('[data-ambient-node="you"]');
+                const planner = document.querySelector('[data-ambient-node="planner"]');
+                return you?.classList.contains('sending') && planner?.classList.contains('receiving');
+              }, { timeout: 5000 });
+
+              console.log('FIRST_HANDOFF_VISIBLE PASS');
+              await page.screenshot({ path: 'relay-ui-smoke.png', fullPage: false });
+            } finally {
+              await browser.close();
+            }
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload Relay UI smoke screenshot
+        if: always() && steps.deploy.outputs.url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-ui-smoke
+          path: relay-ui-smoke.png
+          if-no-files-found: ignore
 
       - name: Verify real provider roster
         run: |
