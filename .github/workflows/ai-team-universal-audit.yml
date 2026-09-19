@@ -49,10 +49,10 @@ jobs:
       - name: Checkout target read-only
         uses: actions/checkout@v4
         with:
-          repository: \${{ inputs.target_repository }}
-          ref: \${{ inputs.target_ref }}
+          repository: ${{ inputs.target_repository }}
+          ref: ${{ inputs.target_ref }}
           path: target-project
-          token: \${{ secrets.AUDIT_READ_TOKEN || secrets.BHAROSA_READ_TOKEN || github.token }}
+          token: ${{ secrets.AUDIT_READ_TOKEN || secrets.BHAROSA_READ_TOKEN || github.token }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -60,11 +60,11 @@ jobs:
       - name: Run provider-independent evidence scan
         env:
           AUDIT_ROOT: target-project
-          AUDIT_TARGET_NAME: \${{ inputs.target_repository }}
-          AUDIT_PROFILE: \${{ inputs.profile }}
-          AUDIT_FOCUS: \${{ inputs.focus }}
+          AUDIT_TARGET_NAME: ${{ inputs.target_repository }}
+          AUDIT_PROFILE: ${{ inputs.profile }}
+          AUDIT_FOCUS: ${{ inputs.focus }}
           AUDIT_OUTPUT_DIR: audit-output
-          AUDIT_FAIL_ON: \${{ inputs.fail_on }}
+          AUDIT_FAIL_ON: ${{ inputs.fail_on }}
         run: node control-plane/ai-team/audit/universal-audit.mjs
       - name: Publish summary
         if: always()
@@ -76,5 +76,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: audit-\${{ github.run_id }}
+          name: audit-${{ github.run_id }}
           path: audit-output/
