@@ -188,14 +188,15 @@ function resolveWorkerModel(requested: string) {
 
 function resolveReviewerModels(worker: string) {
   const workerFamily = modelFamily(worker);
+  // Review is latency-sensitive. Prefer the local Cloudflare binding first:
+  // it avoids an extra network/API hop in the Worker. External providers are
+  // bounded fallbacks, never an unbounded retry chain.
   const candidates = [
+    CLOUDFLARE_MODELS.fast,
     runtimeVariant(reviewerFor(worker)),
     GROQ_MODELS.fast,
-    CLOUDFLARE_MODELS.fast,
-    GROQ_MODELS.reasoning,
-    CLOUDFLARE_MODELS.reasoning,
-    FREE_MODELS.reasoning,
     "gemini-3.5-flash-lite",
+    FREE_MODELS.reasoning,
   ].filter(Boolean);
   return [...new Set(candidates)].filter((model) =>
     modelConfigured(model) && modelFamily(model) !== workerFamily
@@ -1138,7 +1139,7 @@ export default async (request: Request) => {
             actualReviewerModel = candidate;
             emit({ type: "reviewer", model: actualReviewerModel });
             try {
-              review = await callModel(actualReviewerModel, reviewMessages, 120, 2500);
+              review = await callModel(actualReviewerModel, reviewMessages, 48, 5000);
               reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS") ? "PASS" : "FAIL";
               reviewError = null;
               break;
