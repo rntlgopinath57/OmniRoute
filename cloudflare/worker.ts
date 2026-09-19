@@ -5,6 +5,7 @@ import { setRuntimeEnv } from "../relay-runtime/env.mts";
 
 type Env = {
   ASSETS: Fetcher;
+  AI?: Ai;
   OPENAI_BASE_URL?: string;
   OPENAI_API_KEY?: string;
   ANTHROPIC_BASE_URL?: string;
