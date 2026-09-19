@@ -1,6 +1,17 @@
 name: Relay Safety Check
 
 on:
+  push:
+    branches:
+      - infra/cloudflare-relay
+    paths:
+      - "ai-team-playground/**"
+      - "netlify/functions/**"
+      - "cloudflare/**"
+      - "relay-runtime/**"
+      - "docs/relay/**"
+      - ".github/workflows/cloudflare-relay-preview-deploy.yml"
+      - ".github/workflows/relay-safety-check.yml"
   pull_request:
     branches:
       - infra/cloudflare-relay
@@ -49,9 +60,11 @@ jobs:
           app = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
           css = Path("ai-team-playground/app.css").read_text(encoding="utf-8")
           ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
+          media = Path("netlify/functions/media.mts").read_text(encoding="utf-8")
           worker = Path("cloudflare/worker.ts").read_text(encoding="utf-8")
 
-          for item in ["Ask Relay anything", "GENERATE IMAGE", "GENERATE VIDEO", "EDIT VIDEO"]:
+          for item in ["Ask Relay anything", "GENERATE IMAGE", "GENERATE VIDEO", "EDIT VIDEO",
+                       "media-generator.js", "video-editor.js"]:
               assert item in html, f"Missing UI capability: {item}"
 
           for item in ["explicitModelRoute", "callGroq", "callGemini", "callOpenRouter",
@@ -62,6 +75,11 @@ jobs:
           assert 'provider === "groq"' in ask and 'GROQ_API_KEY' in ask
           assert "GROQ_API_KEY?: string;" in worker, "Cloudflare runtime must expose Groq secret"
           assert "/api/ask" in app
+          assert "video-start" in media and "image" in media, "Media generation routes missing"
+          assert '"rntlgopinath57/freellmapi"' in ask, "FreeLLMAPI repository context regression"
+          assert "function useFastPath" in ask, "Fast-path contract disappeared"
+          assert "if (question.length > 700) return false" in ask, "Current bounded fast-path rule changed"
+          assert "if (q.length <= 120) return true" not in ask, "Old short-prompt sticky-routing regression returned"
           assert "scroll" in app.lower() or "scroll" in css.lower(), "Conversation scrolling regression"
           assert "handwritten" in ask.lower(), "Presentation routing regression"
           assert "resolveReviewerModels" in ask, "Reviewer candidate resolver missing"
@@ -93,6 +111,7 @@ jobs:
             echo "## Relay Safety Gate"
             echo "- Syntax/parse: PASS"
             echo "- Routing/fallback/reviewer invariants: PASS"
+            echo "- Media + FreeLLMAPI repo-context guardrails: PASS"
             echo "- Prompt/UI/scroll/presentation invariants: PASS"
             echo "- Cloudflare Groq binding contract: PASS"
             echo "- Secret scan: PASS"
