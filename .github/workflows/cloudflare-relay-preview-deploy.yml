@@ -277,11 +277,22 @@ jobs:
           CHROME_PID=$!
           trap 'kill "$CHROME_PID" 2>/dev/null || true' EXIT
 
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null && break
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null; then
+              break
+            fi
+            if ! kill -0 "$CHROME_PID" 2>/dev/null; then
+              echo "Chrome exited before DevTools became ready."
+              cat /tmp/relay-chrome.log || true
+              exit 1
+            fi
             sleep 1
           done
-          curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null
+          if ! curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null; then
+            echo "Chrome DevTools did not become ready within 30 seconds."
+            cat /tmp/relay-chrome.log || true
+            exit 1
+          fi
 
           RELAY_URL="${{ steps.deploy.outputs.url }}" node <<'NODE'
           const fs = require('node:fs');
