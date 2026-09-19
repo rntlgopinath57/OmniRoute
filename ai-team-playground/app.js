@@ -841,13 +841,14 @@ async function initProviderRoster(){
     if(!response.ok)return;
     const health=await response.json();
     const providers=health?.providers||{};
+    const models=health?.models||{};
     const state={
-      gemini:Boolean(providers.gemini),
-      openai:Boolean(providers.openai),
-      claude:Boolean(providers.anthropic),
-      deepseek:Boolean(providers.openrouter),
-      qwen:Boolean(providers.openrouter),
-      grok:Boolean(providers.openrouter)
+      gemini:Boolean(models.gemini ?? providers.gemini),
+      openai:Boolean(models.openai ?? providers.openai),
+      claude:Boolean(models.claude ?? providers.anthropic),
+      deepseek:Boolean(models.deepseek ?? providers.openrouter),
+      qwen:Boolean(models.qwen ?? providers.openrouter),
+      grok:Boolean(models.grok ?? providers.openrouter)
     };
     document.querySelectorAll('[data-provider-node]').forEach(node=>{
       const id=node.dataset.providerNode;

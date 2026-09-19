@@ -192,6 +192,17 @@ jobs:
           grep -q 'no_independent_provider' netlify/functions/ask.mts
           ! grep -q 'Check Netlify usage/billing' netlify/functions/ask.mts
 
+      - name: Verify multi-model switching support
+        run: |
+          grep -q 'qwen/qwen3.8-flash' netlify/functions/ask.mts
+          grep -q 'x-ai/grok-4.6' netlify/functions/ask.mts
+          grep -q 'openai/gpt-5.6-luna' netlify/functions/ask.mts
+          grep -q 'anthropic/claude-haiku-4.5' netlify/functions/ask.mts
+          grep -q 'function runtimeVariant' netlify/functions/ask.mts
+          grep -q 'function modelFamily' netlify/functions/ask.mts
+          grep -q 'models = {' netlify/functions/health.mts
+          grep -q 'models=health?.models' ai-team-playground/app.js
+
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
         run: |

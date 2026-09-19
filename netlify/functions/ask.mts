@@ -18,7 +18,8 @@ function workerFor(taskType: string, question: string) {
 
   if ((taskType === "coding" || taskType === "automation") && heavy) return "gpt-5.6-sol";
   if (taskType === "coding" || taskType === "automation") return "gpt-5.6-luna";
-  if (taskType === "research" || taskType === "design" || taskType === "reasoning") return "gemini-3.5-flash-lite";
+  if (taskType === "research" || taskType === "design") return "gemini-3.5-flash-lite";
+  if (taskType === "reasoning") return "qwen/qwen3.8-flash";
   return "gpt-5.6-luna";
 }
 
@@ -36,10 +37,15 @@ function allowedStickyModel(model: string) {
   return new Set([
     "gpt-5.6-luna",
     "gpt-5.6-sol",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
     "claude-haiku-4-5",
+    "anthropic/claude-haiku-4.5",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "deepseek/deepseek-v4-flash",
+    "qwen/qwen3.8-flash",
+    "x-ai/grok-4.6",
   ]).has(model);
 }
 
@@ -47,11 +53,28 @@ function reviewerFor(worker: string) {
   return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
 }
 
+const OPENROUTER_ALIASES: Record<string, string> = {
+  "gpt-5.6-luna": "openai/gpt-5.6-luna",
+  "gpt-5.6-sol": "openai/gpt-5.6-sol",
+  "claude-haiku-4-5": "anthropic/claude-haiku-4.5",
+};
+
 function providerForModel(model: string) {
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gemini-")) return "gemini";
   if (model.includes("/")) return "openrouter";
   return "openai";
+}
+
+function modelFamily(model: string) {
+  const m = String(model || "").toLowerCase();
+  if (m.includes("gemini") || m.includes("google")) return "gemini";
+  if (m.includes("claude") || m.includes("anthropic")) return "claude";
+  if (m.includes("deepseek")) return "deepseek";
+  if (m.includes("qwen") || m.includes("alibaba")) return "qwen";
+  if (m.includes("grok") || m.includes("x-ai")) return "grok";
+  if (m.includes("gpt") || m.includes("openai")) return "openai";
+  return "other";
 }
 
 function modelConfigured(model: string) {
@@ -66,27 +89,39 @@ function firstConfiguredModel(models: string[]) {
   return models.find((model) => modelConfigured(model)) || "";
 }
 
+function runtimeVariant(model: string) {
+  if (modelConfigured(model)) return model;
+  const openRouterAlias = OPENROUTER_ALIASES[model] || "";
+  if (openRouterAlias && modelConfigured(openRouterAlias)) return openRouterAlias;
+  return "";
+}
+
 function resolveWorkerModel(requested: string) {
-  if (modelConfigured(requested)) return requested;
+  const requestedRuntime = runtimeVariant(requested);
+  if (requestedRuntime) return requestedRuntime;
   return firstConfiguredModel([
     "gemini-3.5-flash-lite",
-    "gpt-5.6-luna",
-    "claude-haiku-4-5",
+    "qwen/qwen3.8-flash",
+    "openai/gpt-5.6-luna",
+    "anthropic/claude-haiku-4.5",
     "deepseek/deepseek-v4-flash",
+    "x-ai/grok-4.6",
   ]) || requested;
 }
 
 function resolveReviewerModel(worker: string) {
-  const workerProvider = providerForModel(worker);
+  const workerFamily = modelFamily(worker);
   const candidates = [
-    reviewerFor(worker),
-    "claude-haiku-4-5",
+    runtimeVariant(reviewerFor(worker)),
+    "anthropic/claude-haiku-4.5",
     "gemini-3.5-flash",
-    "gpt-5.6-luna",
+    "openai/gpt-5.6-luna",
+    "qwen/qwen3.8-flash",
     "deepseek/deepseek-v4-flash",
-  ];
+    "x-ai/grok-4.6",
+  ].filter(Boolean);
   return candidates.find((model) =>
-    modelConfigured(model) && providerForModel(model) !== workerProvider
+    modelConfigured(model) && modelFamily(model) !== workerFamily
   ) || "";
 }
 
@@ -720,16 +755,20 @@ export default async (request: Request) => {
           ? Array.from(new Set([
               primaryModel,
               "gemini-3.5-flash-lite",
-              "gemini-3.5-flash",
-              "claude-haiku-4-5",
+              "qwen/qwen3.8-flash",
+              "anthropic/claude-haiku-4.5",
+              "openai/gpt-5.6-luna",
               "deepseek/deepseek-v4-flash",
+              "x-ai/grok-4.6",
             ]))
           : Array.from(new Set([
               primaryModel,
-              "gpt-5.6-luna",
-              "claude-haiku-4-5",
+              "openai/gpt-5.6-luna",
               "gemini-3.5-flash-lite",
+              "qwen/qwen3.8-flash",
+              "anthropic/claude-haiku-4.5",
               "deepseek/deepseek-v4-flash",
+              "x-ai/grok-4.6",
             ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         let pool = (configuredCandidates.length ? configuredCandidates : candidates)
@@ -791,9 +830,11 @@ export default async (request: Request) => {
         if (!answer && longForm && timedOut > 0) {
           const rescueModel = firstConfiguredModel([
             "deepseek/deepseek-v4-flash",
+            "qwen/qwen3.8-flash",
             "gemini-3.5-flash-lite",
-            "gpt-5.6-luna",
-            "claude-haiku-4-5",
+            "openai/gpt-5.6-luna",
+            "anthropic/claude-haiku-4.5",
+            "x-ai/grok-4.6",
           ]);
           if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
