@@ -469,12 +469,19 @@ function useFastPath(question: string, taskType: string, presentation: Presentat
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const providerCooldownUntil = new Map<string, number>();
+const providerFamilyCooldownUntil = new Map<string, number>();
 
 function providerAvailable(model: string) {
-  return (providerCooldownUntil.get(model) || 0) <= Date.now();
+  const now = Date.now();
+  const provider = providerForModel(model);
+  return (providerCooldownUntil.get(model) || 0) <= now
+    && (providerFamilyCooldownUntil.get(provider) || 0) <= now;
 }
 function coolDownProvider(model: string, ms = 45000) {
   providerCooldownUntil.set(model, Date.now() + ms);
+}
+function coolDownProviderFamily(model: string, ms = 60000) {
+  providerFamilyCooldownUntil.set(providerForModel(model), Date.now() + ms);
 }
 function markProviderHealthy(model: string) {
   providerCooldownUntil.delete(model);
@@ -773,23 +780,14 @@ export default async (request: Request) => {
         let answer = "";
         const longForm = isLongFormPresentation(question, presentation);
         const primaryModel = actualWorkerModel;
-        const candidates = longForm
-          ? Array.from(new Set([
-              primaryModel,
-              FREE_MODELS.researchFallback,
-              FREE_MODELS.coding,
-              FREE_MODELS.reasoning,
-              "gemini-3.5-flash-lite",
-              FREE_MODELS.universalFallback,
-            ]))
-          : Array.from(new Set([
-              primaryModel,
-              FREE_MODELS.coding,
-              FREE_MODELS.reasoning,
-              FREE_MODELS.researchFallback,
-              "gemini-3.5-flash-lite",
-              FREE_MODELS.universalFallback,
-            ]));
+        const openRouterFallbacks = taskType === "automation" || taskType === "reasoning"
+          ? [FREE_MODELS.coding, FREE_MODELS.researchFallback, FREE_MODELS.universalFallback]
+          : [FREE_MODELS.reasoning, FREE_MODELS.researchFallback, FREE_MODELS.universalFallback];
+        const researchOrDesign = taskType === "research" || taskType === "design";
+        const candidates = Array.from(new Set([
+          primaryModel,
+          ...(researchOrDesign ? openRouterFallbacks : openRouterFallbacks),
+        ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         let pool = (configuredCandidates.length ? configuredCandidates : candidates)
           .filter((model, index) => index === 0 || providerAvailable(model));
@@ -836,11 +834,23 @@ export default async (request: Request) => {
             if (/\b429\b|rate.?limit|resource[_ -]?exhausted/i.test(message)) {
               rateLimited += 1;
               coolDownProvider(model, 60000);
+              if (providerForModel(model) === "openrouter") {
+                // Free-tier failures count against the shared allowance. Do not
+                // burn more requests by blindly trying every OpenRouter model.
+                coolDownProviderFamily(model, 60000);
+                emit({ type: "quota", provider: "openrouter", model, status: "rate_limited" });
+                break;
+              }
               continue;
             }
             if (/\b402\b|insufficient|credits?|quota/i.test(message)) {
               creditLimited += 1;
               coolDownProvider(model, 120000);
+              if (providerForModel(model) === "openrouter") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
+                break;
+              }
               continue;
             }
             coolDownProvider(model, 30000);
@@ -852,7 +862,6 @@ export default async (request: Request) => {
             FREE_MODELS.coding,
             FREE_MODELS.reasoning,
             FREE_MODELS.researchFallback,
-            "gemini-3.5-flash-lite",
             FREE_MODELS.universalFallback,
           ]);
           if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
