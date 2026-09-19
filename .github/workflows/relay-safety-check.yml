@@ -64,6 +64,12 @@ jobs:
           assert "/api/ask" in app
           assert "scroll" in app.lower() or "scroll" in css.lower(), "Conversation scrolling regression"
           assert "handwritten" in ask.lower(), "Presentation routing regression"
+          assert "Explicit provider intent is strict" in ask, "Explicit provider strictness regression"
+          assert "Relay will not silently switch providers for an explicit request." in ask, "Explicit provider failsafe missing"
+          assert "let pool = explicitRoute.explicit" in ask, "Explicit provider must use a strict candidate pool"
+          assert "const strictIntent =" in ask, "Provider mention must not force strict routing"
+          for provider in ["gemini", "claude", "openai", "deepseek", "qwen", "groq", "cloudflare", "grok"]:
+              assert f'family: "{provider}"' in ask, f"Missing explicit route for {provider}"
           print("Relay safety invariants: PASS")
 
       - name: Secret guard
