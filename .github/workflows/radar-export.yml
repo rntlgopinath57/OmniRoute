@@ -9,19 +9,6 @@ name: Radar Export
 
 on:
   workflow_dispatch: # o operador pode publicar sob demanda (de qualquer ref)
-  push:
-    # `main` e a release ativa (default branch) publicam no mesmo asset estável: o
-    # radar-server só consome o asset, então um merge de catálogo na release que ficasse
-    # à espera do cron semanal deixava o feed até 7 dias atrás do README (2026-09-14: a
-    # linha da Together removida em d6e62ae só saiu do feed com dispatch manual).
-    branches: [main, "release/**"]
-    paths:
-      - open-sse/config/freeModelCatalog.data.ts
-      - open-sse/config/freeModelCatalog.ts
-      - open-sse/config/providerRegistry.ts
-      - open-sse/config/providers/**
-      - scripts/release/radar-export.mjs
-      - .github/workflows/radar-export.yml
 
 permissions:
   contents: read
