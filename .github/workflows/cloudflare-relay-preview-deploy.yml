@@ -155,6 +155,28 @@ jobs:
           echo "$response" | grep -q '"model":"groq:'
           echo "Groq live routing smoke: PASS"
 
+      - name: Opt-in DeepSeek/comparison latency smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[deepseek-smoke]')
+        run: |
+          start="$(date +%s)"
+          comparison="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what do qwen and deepseek do","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "$comparison"
+          echo "Comparison elapsed: ${elapsed}s"
+          echo "$comparison" | grep -q '"type":"worker"'
+          echo "$comparison" | grep -q '"model":"groq:openai/gpt-oss-120b"'
+          test "$elapsed" -lt 25 || { echo "Comparison route exceeded 25s"; exit 1; }
+
+          start="$(date +%s)"
+          deepseek="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is deepseek famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "$deepseek"
+          echo "DeepSeek explicit route elapsed: ${elapsed}s"
+          echo "$deepseek" | grep -q '"type":"worker"'
+          echo "$deepseek" | grep -q '"requestedFamily":"deepseek"'
+          test "$elapsed" -lt 25 || { echo "DeepSeek route exceeded 25s"; exit 1; }
+          echo "DeepSeek/comparison live latency smoke: PASS"
+
       - name: Opt-in explicit-model affinity smoke
         if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[affinity-smoke]') && env.GEMINI_API_KEY != ''
         run: |
@@ -536,10 +558,13 @@ jobs:
           assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
           assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
           assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
-          assert 'const requestedWorkerModel = explicitRoute.model || stickyModel || routedWorkerModel' in ask, "Explicit model must override sticky/default routing"
+          assert 'explicitRoute.comparison' in ask, "Multi-model comparison branch missing"
+          assert 'GROQ_MODELS.strong' in ask, "Neutral comparison worker missing"
+          assert 'function fetchTextWithTimeout' in ask, "Full response-body timeout helper missing"
+          assert 'isExplicitOpenRouterPrimary' in ask, "Explicit OpenRouter latency cap missing"
           assert '{ family: "gemini", pattern:' in ask, "Gemini explicit route missing"
           assert 'families.length !== 1' in ask, "Multi-model comparison neutrality guard missing"
-          print("Task routing, explicit model affinity, independent quota pools and fallback guards: PASS")
+          print("Task routing, explicit affinity, comparison neutrality and latency guards: PASS")
 
       - name: Verify media capabilities
         if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
