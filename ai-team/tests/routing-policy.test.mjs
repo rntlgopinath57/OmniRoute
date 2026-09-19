@@ -5,8 +5,8 @@ import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routin
 
 test("simple public questions use the keyless FreeLLMAPI lane", () => {
   const route = assessRoutingLane({
-    question: "Explain what an API is in two sentences",
-    contextualQuestion: "Explain what an API is in two sentences",
+    question: "Explain why the sky looks blue in two sentences",
+    contextualQuestion: "Explain why the sky looks blue in two sentences",
     taskType: "general",
     history: [],
   });
