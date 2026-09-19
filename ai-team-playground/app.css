@@ -3740,3 +3740,17 @@ header{
     color:#d9fcff!important;
   }
 }
+
+
+/* Provider quota guard v32 */
+@media(min-width:1200px){
+  .providerRail .railNode.limited{
+    opacity:.82!important;
+    filter:saturate(.72)!important;
+  }
+  .providerRail .railNode.limited .railCore{
+    border-style:dashed!important;
+    box-shadow:0 0 14px rgba(255,255,255,.10),inset 0 0 12px rgba(255,255,255,.03)!important;
+  }
+  .providerRail .railNode.limited b{opacity:.86}
+}
