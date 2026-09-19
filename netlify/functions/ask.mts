@@ -868,7 +868,13 @@ export default async (request: Request) => {
         const requestedWorkerModel = explicitRoute.comparison
           ? GROQ_MODELS.strong
           : (explicitRoute.model || stickyModel || routedWorkerModel);
-        const workerModel = resolveWorkerModel(requestedWorkerModel);
+        const workerModel = explicitRoute.explicit
+          ? runtimeVariant(requestedWorkerModel)
+          : resolveWorkerModel(requestedWorkerModel);
+
+        if (explicitRoute.explicit && !workerModel) {
+          throw new Error(`Requested ${explicitRoute.family} provider is not configured. Relay will not silently switch providers for an explicit request.`);
+        }
 
         emit({
           type: "planner",
@@ -942,9 +948,16 @@ export default async (request: Request) => {
           ...(primaryModel.startsWith("gemini-") ? [] : ["gemini-3.5-flash-lite"]),
         ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
-        let pool = (configuredCandidates.length ? configuredCandidates : candidates)
-          .filter((model, index) => index === 0 || providerAvailable(model));
-        if (!pool.length) pool = configuredCandidates.length ? configuredCandidates : candidates;
+        // Explicit provider intent is strict: never silently answer with another family.
+        // Automatic/task routes retain the bounded multi-provider fallback pool.
+        let pool = explicitRoute.explicit
+          ? [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model))
+          : (configuredCandidates.length ? configuredCandidates : candidates)
+              .filter((model, index) => index === 0 || providerAvailable(model));
+        if (!pool.length && !explicitRoute.explicit) pool = configuredCandidates.length ? configuredCandidates : candidates;
+        if (!pool.length && explicitRoute.explicit) {
+          throw new Error(`Requested ${explicitRoute.family} provider is temporarily unavailable. Relay will not silently switch providers for an explicit request.`);
+        }
 
         const failures: string[] = [];
         let rateLimited = 0;
