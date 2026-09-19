@@ -215,11 +215,17 @@ jobs:
           html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
 
           assert '#answer .followup{' in css
-          assert 'display:flex!important;' in css[css.index('#answer .followup{'):css.index('#answer .followup{') + 500]
+          composer = css[css.rindex('/* Relay deterministic bottom composer v34 */'):]
+          assert 'position:absolute!important;' in composer
+          assert 'bottom:12px!important;' in composer
+          assert 'z-index:60!important;' in composer
+          assert 'pointer-events:auto!important;' in composer
+          assert '#answer .toolDock{' in composer
+          assert 'bottom:78px!important;' in composer
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=33' in html
+          assert './app.css?v=34' in html
           assert './app.js?v=44' in html
           print("Composer visibility, closed run view and first YOU -> PLANNER handoff: PASS")
 
