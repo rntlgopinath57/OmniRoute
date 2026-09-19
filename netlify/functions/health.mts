@@ -9,12 +9,14 @@ export default async () => {
   };
 
   const models = {
+    // Only advertise paid families when their native credential exists.
+    // OpenRouter is used here for the explicitly free DeepSeek/Qwen routes.
     gemini: providers.gemini,
-    openai: providers.openai || providers.openrouter,
-    claude: providers.anthropic || providers.openrouter,
+    openai: providers.openai,
+    claude: providers.anthropic,
     deepseek: providers.openrouter,
     qwen: providers.openrouter,
-    grok: providers.openrouter,
+    grok: false,
   };
 
   return Response.json({
