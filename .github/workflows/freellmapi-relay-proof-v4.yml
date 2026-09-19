@@ -1,11 +1,11 @@
-name: FreeLLMAPI Relay Proof v3
+name: FreeLLMAPI Relay Proof v4
 
 on:
   push:
     branches:
       - probe/freellmapi-relay-20260919
     paths:
-      - ".github/workflows/freellmapi-relay-proof-v3.yml"
+      - ".github/workflows/freellmapi-relay-proof-v4.yml"
 
 permissions:
   contents: read
