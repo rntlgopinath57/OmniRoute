@@ -876,6 +876,8 @@ async function initProviderRoster(){
     const health=await response.json();
     const providers=health?.providers||{};
     const models=health?.models||{};
+    const limits=health?.limits||{};
+    const openrouterLimit=limits?.openrouter||{};
     const state={
       gemini:Boolean(models.gemini ?? providers.gemini),
       openai:Boolean(models.openai ?? providers.openai),
@@ -895,6 +897,7 @@ async function initProviderRoster(){
         if(id==='gemini')small.textContent='READY · Gemini';
         else if(id==='openai')small.textContent='READY · OpenAI';
         else if(id==='claude')small.textContent='READY · Anthropic';
+        else if(openrouterLimit?.freeTier)small.textContent='READY · FREE · 50/DAY SHARED';
         else small.textContent='READY · OpenRouter';
       }else{
         small.textContent=(id==='deepseek'||id==='qwen'||id==='grok')?'STANDBY · OpenRouter':'STANDBY';
