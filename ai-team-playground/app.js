@@ -52,6 +52,7 @@ function friendlyModel(model=''){
 }
 function providerNodeForModel(model=''){
   const m=String(model||'').toLowerCase();
+  if(m.startsWith('@cf/'))return'cloudflare';
   if(m.includes('gemini')||m.includes('google'))return'gemini';
   if(m.includes('claude')||m.includes('anthropic'))return'claude';
   if(m.includes('deepseek'))return'deepseek';
@@ -634,7 +635,16 @@ async function handleEvent(evt){
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
-    updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
+    updatePending(`Switching to ${friendlyModel(evt.model)} on another provider pool…`);
+    updateRoleModel(lastWorker,evt.model);
+    setActiveProvider(evt.model);
+    active=new Set([lastWorker]);
+    setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
+    render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='emergency_fallback'){
+    setState('EMERGENCY SWITCH','busy');
+    updatePending(`Primary pools are limited — using ${friendlyModel(evt.model)} as the emergency lane…`);
     updateRoleModel(lastWorker,evt.model);
     setActiveProvider(evt.model);
     active=new Set([lastWorker]);
@@ -884,7 +894,8 @@ async function initProviderRoster(){
       claude:Boolean(models.claude ?? providers.anthropic),
       deepseek:Boolean(models.deepseek ?? providers.openrouter),
       qwen:Boolean(models.qwen ?? providers.openrouter),
-      grok:Boolean(models.grok ?? providers.openrouter)
+      cloudflare:Boolean(models.cloudflare ?? providers.cloudflare),
+      grok:Boolean(models.grok ?? false)
     };
     document.querySelectorAll('[data-provider-node]').forEach(node=>{
       const id=node.dataset.providerNode;
@@ -894,9 +905,10 @@ async function initProviderRoster(){
       const small=node.querySelector('small');
       if(!small)return;
       if(enabled){
-        if(id==='gemini')small.textContent='READY · Gemini';
+        if(id==='gemini')small.textContent='READY · Gemini pool';
         else if(id==='openai')small.textContent='READY · OpenAI';
         else if(id==='claude')small.textContent='READY · Anthropic';
+        else if(id==='cloudflare')small.textContent='READY · 10K NEURONS/DAY';
         else if(openrouterLimit?.freeTier)small.textContent='READY · FREE · 50/DAY SHARED';
         else small.textContent='READY · OpenRouter';
       }else{
