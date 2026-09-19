@@ -884,14 +884,21 @@ export default async (request: Request) => {
               coolDownProvider(model, 20000);
               continue;
             }
-            if (/\b429\b|rate.?limit|resource[_ -]?exhausted/i.test(message)) {
+            if (/\b429\b|rate.?limit|resource[_ -]?exhausted|account limited|out of capacity|3040|3036/i.test(message)) {
               rateLimited += 1;
               coolDownProvider(model, 60000);
-              if (providerForModel(model) === "openrouter") {
+              const provider = providerForModel(model);
+              if (provider === "openrouter") {
                 // Free-tier failures count against the shared allowance. Do not
                 // burn more requests by blindly trying every OpenRouter model.
                 coolDownProviderFamily(model, 60000);
                 emit({ type: "quota", provider: "openrouter", model, status: "rate_limited" });
+                continue;
+              }
+              if (provider === "cloudflare") {
+                const daily = /3036|account limited/i.test(message);
+                coolDownProviderFamily(model, daily ? 300000 : 60000);
+                emit({ type: "quota", provider: "cloudflare", model, status: daily ? "daily_allocation" : "capacity" });
                 continue;
               }
               continue;
@@ -904,16 +911,6 @@ export default async (request: Request) => {
                 emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
                 continue;
               }
-              continue;
-            }
-            if (providerForModel(model) === "cloudflare" && /\b429\b|account limited|out of capacity|3040|3036/i.test(message)) {
-              coolDownProviderFamily(model, /3036|account limited/i.test(message) ? 300000 : 60000);
-              emit({
-                type: "quota",
-                provider: "cloudflare",
-                model,
-                status: /3036|account limited/i.test(message) ? "daily_allocation" : "capacity",
-              });
               continue;
             }
             coolDownProvider(model, 30000);
