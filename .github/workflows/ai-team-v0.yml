@@ -1,48 +1,26 @@
 name: AI Team v0 Core
 
 on:
-  push:
-    branches: [release/v3.8.51]
-    paths:
-      - '.github/workflows/ai-team-v0.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
-  cleanup-obsolete-history:
+  core-test:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Prune obsolete workflow runs until stable
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CURRENT_RUN_ID: ${{ github.run_id }}
-        shell: python
-        run: |
-          import json, os, urllib.request
-          repo=os.environ["GITHUB_REPOSITORY"]
-          token=os.environ["GH_TOKEN"]
-          current=int(os.environ["CURRENT_RUN_ID"])
-          keep={
-            "AI Team Bharosa Controlled Test",
-            "AI Team Project Automation",
-            "AI Team Universal Audit",
-            "AI Team v0 Core",
-            "Relay Cloudflare Preview Deploy",
-            "Relay Safety Check",
-          }
-          headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
-          deleted=0
-          while True:
-            req=urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/runs?per_page=100&page=1",headers=headers)
-            with urllib.request.urlopen(req,timeout=20) as resp:
-              runs=json.load(resp).get("workflow_runs",[])
-            victims=[x for x in runs if x.get("id")!=current and x.get("status")=="completed" and x.get("name") not in keep]
-            if not victims: break
-            for run in victims:
-              req=urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/runs/{run['id']}",headers=headers,method="DELETE")
-              with urllib.request.urlopen(req,timeout=20): pass
-              deleted+=1
-          print(f"Deleted {deleted} additional obsolete workflow runs.")
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.22.2"
+
+      - name: Run isolated AI Team tests
+        run: node --test ai-team/tests/*.test.mjs
+
+      - name: Smoke test task intake
+        run: node ai-team/src/main.mjs '{"task":"Review Bharosa security","type":"analysis"}'
