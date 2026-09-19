@@ -1,4 +1,5 @@
 const POS={
+  // Full execution graph used only by View run.
   you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
   researcher:[50,45],analyst:[79,43],coder:[28,64],builder:[57,64],designer:[82,63],
   reviewer:[70,82]
@@ -26,12 +27,15 @@ function roleForTask(type='general'){
 const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
-const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer');
-const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle');
+const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer'),followup=document.querySelector('.followup'),toolDockEl=$('toolDock');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
 let lastSuccessfulModel='', lastSuccessfulTaskType='', lastPresentation='default';
+let ambientLastNode='you';
+let activeProviderNode='';
+let completedProviders=new Set();
 let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
 
 function classify(t){
@@ -45,6 +49,23 @@ function classify(t){
 }
 function friendlyModel(model=''){
   return model.replace(/^.*\//,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function providerNodeForModel(model=''){
+  const m=String(model||'').toLowerCase();
+  if(m.startsWith('groq:'))return'groq';
+  if(m.startsWith('@cf/'))return'cloudflare';
+  if(m.includes('gemini')||m.includes('google'))return'gemini';
+  if(m.includes('claude')||m.includes('anthropic'))return'claude';
+  if(m.includes('deepseek'))return'deepseek';
+  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
+  if(m.includes('grok')||m.includes('xai'))return'grok';
+  if(m.includes('gpt')||m.includes('openai'))return'openai';
+  return'';
+}
+function setActiveProvider(model=''){
+  const next=providerNodeForModel(model);
+  if(activeProviderNode&&activeProviderNode!==next)completedProviders.add(activeProviderNode);
+  activeProviderNode=next;
 }
 function draw(){
   edges.innerHTML=''; nodes.innerHTML='';
@@ -77,6 +98,13 @@ function updateRoleModel(role,model=''){
   const n=$(`n-${role}`);
   const small=n?.querySelector('small');
   if(small&&model)small.textContent=friendlyModel(model);
+
+  const ambient=document.querySelector(`[data-ambient-node="${role}"] small`);
+  if(ambient&&model)ambient.textContent=friendlyModel(model);
+
+  const provider=providerNodeForModel(model);
+  const providerSmall=provider?document.querySelector(`[data-provider-node="${provider}"] small`):null;
+  if(providerSmall&&model)providerSmall.textContent=friendlyModel(model);
 }
 function setStage(name){
   canvas.dataset.stage=name;
@@ -87,6 +115,26 @@ function setStage(name){
     el.classList.toggle('current',i===current);
     el.classList.toggle('complete',current>=0&&i<current);
   });
+
+  if(activityLane){
+    const laneOrder=['start','understand','route','tool','solve','verify','done'];
+    const laneStage=name==='render'?'solve':name;
+    const laneIndex=laneOrder.indexOf(laneStage);
+    activityLane.dataset.stage=laneStage||'ready';
+    activityLane.style.setProperty('--lane-progress',laneIndex<0?'0':String((laneIndex/(laneOrder.length-1))*100));
+    activityLane.querySelectorAll('.activityNode').forEach(node=>{
+      const i=laneOrder.indexOf(node.dataset.laneStage);
+      node.classList.toggle('active',i===laneIndex);
+      node.classList.toggle('completed',i>=0&&laneIndex>=0&&i<laneIndex);
+    });
+    const specialist=activityLane.querySelector('[data-lane-stage="solve"] small');
+    if(specialist)specialist.textContent=name==='render'?'DESIGNER':'SPECIALIST';
+    if(name==='done'){
+      const finalNode=activityLane.querySelector('[data-lane-stage="done"]');
+      finalNode?.classList.add('arrival');
+      setTimeout(()=>finalNode?.classList.remove('arrival'),1500);
+    }
+  }
 }
 function setState(text,kind=''){
   document.querySelector('.state').className=`state ${kind}`.trim();
@@ -97,6 +145,7 @@ function setState(text,kind=''){
   if(processRail)processRail.dataset.mode=kind||'ready';
   if(runStripText)runStripText.textContent=text;
   if(runStrip)runStrip.dataset.mode=kind||'ready';
+  if(activityLane)activityLane.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
 }
@@ -124,7 +173,77 @@ function render(){
   followGo.disabled=busy||!followQ.value.trim();
   mic.classList.toggle('listening',listening);
   followMic.classList.toggle('listening',listening&&voiceTarget===followQ);
+
+  document.querySelectorAll('[data-ambient-node]').forEach(node=>{
+    const id=node.dataset.ambientNode;
+    const isActive=active.has(id);
+    const isComplete=completed.has(id)||(answered&&id==='you');
+    const isEnergized=busy&&selected.has(id);
+    node.classList.toggle('active',isActive);
+    node.classList.toggle('completed',isComplete);
+    node.classList.toggle('energized',isEnergized);
+    node.classList.toggle('listening',listening&&id==='you');
+  });
+
+  document.querySelectorAll('[data-provider-node]').forEach(node=>{
+    const id=node.dataset.providerNode;
+    node.classList.toggle('active',busy&&id===activeProviderNode);
+    node.classList.toggle('completed',completedProviders.has(id));
+    node.classList.toggle('energized',busy&&id===activeProviderNode);
+  });
+
+  const logicalAmbient=[...active].find(id=>document.querySelector(`[data-ambient-node="${id}"]`));
+  const ambientActive=(busy&&activeProviderNode)||logicalAmbient;
+  if(ambientActive && ambientActive!==ambientLastNode && (busy||answered)){
+    animateAmbientFlight(ambientLastNode,ambientActive);
+    ambientLastNode=ambientActive;
+  }
 }
+function animateAmbientFlight(fromId,toId){
+  if(!handoffFx||!workspace||!fromId||!toId||fromId===toId)return;
+
+  const sourceNode=document.querySelector(`[data-ambient-node="${fromId}"],[data-provider-node="${fromId}"]`);
+  const destinationNode=document.querySelector(`[data-ambient-node="${toId}"],[data-provider-node="${toId}"]`);
+  const from=sourceNode?.querySelector('.railCore');
+  const to=destinationNode?.querySelector('.railCore');
+  if(!from||!to)return;
+
+  // Only real handoffs animate: source = sending, destination = receiving.
+  document.querySelectorAll('.railNode.sending,.railNode.receiving').forEach(node=>{
+    node.classList.remove('sending','receiving');
+  });
+  sourceNode.classList.add('sending');
+  destinationNode.classList.add('receiving');
+
+  const wr=workspace.getBoundingClientRect();
+  const a=from.getBoundingClientRect();
+  const b=to.getBoundingClientRect();
+  const x1=a.left+a.width/2-wr.left;
+  const y1=a.top+a.height/2-wr.top;
+  const x2=b.left+b.width/2-wr.left;
+  const y2=b.top+b.height/2-wr.top;
+  const dx=x2-x1,dy=y2-y1;
+  const distance=Math.hypot(dx,dy);
+  const angle=Math.atan2(dy,dx)*180/Math.PI;
+
+  const flight=document.createElement('div');
+  flight.className='ambientFlight';
+  flight.dataset.from=fromId;
+  flight.dataset.to=toId;
+  flight.style.left=x1+'px';
+  flight.style.top=y1+'px';
+  flight.style.width=Math.max(24,distance)+'px';
+  flight.style.transform=`rotate(${angle}deg)`;
+  flight.innerHTML='<span class="flightLine"></span><i class="flightPacket"></i><b class="flightTail"></b>';
+  handoffFx.appendChild(flight);
+
+  setTimeout(()=>{
+    sourceNode.classList.remove('sending');
+    destinationNode.classList.remove('receiving');
+  },780);
+  setTimeout(()=>flight.remove(),900);
+}
+
 function burstAt(id,kind='route'){
   const p=POS[id];
   if(!p||!burstLayer)return;
@@ -407,6 +526,14 @@ function openAnswer(ok=true){
   $('tick').classList.toggle('bad',!ok);
 }
 function resetForRun(question,isRetry=false){
+  workspace.classList.remove('show-run');
+  if(runToggle){
+    runToggle.setAttribute('aria-expanded','false');
+    runToggle.textContent='View run';
+  }
+  activeProviderNode='';
+  completedProviders=new Set();
+  ambientLastNode='you';
   currentQuestion=question;
   currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
@@ -439,7 +566,7 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
-    completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',260); return;
+    completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',420); return;
   }
 
   if(evt.type==='presentation'){
@@ -455,13 +582,27 @@ async function handleEvent(evt){
     setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
     completed.add('router');
-    setStage('solve'); setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
-    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
+
     currentPresentation=evt.presentation||currentPresentation;
     lastWorker=roleForTask(evt.taskType);
     selected=new Set([lastWorker]);
     updateRoleModel(lastWorker,evt.model);
-    active=new Set([lastWorker]); setFlowEdge(`router:${lastWorker}`); render(); kickNode(lastWorker); return;
+
+    // Preserve the real visual handoff: router -> specialist -> provider.
+    activeProviderNode='';
+    setStage('solve');
+    setState(`${INFO[lastWorker]?.[0]||'SPECIALIST'} · ACTIVATED`,'busy');
+    updatePending(`${INFO[lastWorker]?.[0]||'Specialist'} selected for this task…`);
+    active=new Set([lastWorker]);
+    setFlowEdge(`router:${lastWorker}`);
+    render(); kickNode(lastWorker);
+    await wait(220);
+
+    setActiveProvider(evt.model);
+    setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
+    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
+    render();
+    return;
   }
   if(evt.type==='tool'&&evt.tool==='github'){
     if(evt.status==='complete'){
@@ -500,11 +641,31 @@ async function handleEvent(evt){
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
-    updatePending(`Switching to ${friendlyModel(evt.model)} for a faster response…`);
+    updatePending(`Switching to ${friendlyModel(evt.model)} on another provider pool…`);
     updateRoleModel(lastWorker,evt.model);
+    setActiveProvider(evt.model);
     active=new Set([lastWorker]);
     setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='emergency_fallback'){
+    setState('EMERGENCY SWITCH','busy');
+    updatePending(`Primary pools are limited — using ${friendlyModel(evt.model)} as the emergency lane…`);
+    updateRoleModel(lastWorker,evt.model);
+    setActiveProvider(evt.model);
+    active=new Set([lastWorker]);
+    setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
+    render(); kickNode(lastWorker); return;
+  }
+  if(evt.type==='quota'){
+    const provider=String(evt.provider||'provider');
+    const node=document.querySelector(`[data-provider-node="${provider}"]`);
+    node?.classList.add('limited');
+    const small=node?.querySelector('small');
+    if(small)small.textContent=evt.status==='rate_limited'?'LIMITED · RATE LIMIT':'LIMITED · QUOTA';
+    setState(`${provider.toUpperCase()} · LIMITED`,'busy');
+    updatePending('Provider limit reached — Relay stopped repeated attempts to protect the remaining quota.');
+    return;
   }
   if(evt.type==='render'){
     const source=lastWorker;
@@ -522,9 +683,23 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='reviewer'){
-    completed.add(lastWorker); setStage('verify'); setState('REVIEWER · VERIFYING','busy');
+    if(activeProviderNode)completedProviders.add(activeProviderNode);
+    activeProviderNode='';
+    completed.add(lastWorker);
+    setStage('verify');
+    setState('REVIEWER · VERIFYING','busy');
     updatePending('Independent reviewer is checking the answer…');
-    active=new Set(['reviewer']); setFlowEdge(`${lastWorker}:reviewer`); render(); kickNode('reviewer'); return;
+    active=new Set(['reviewer']);
+    setFlowEdge(`${lastWorker}:reviewer`);
+    updateRoleModel('reviewer',evt.model);
+    render(); kickNode('reviewer');
+    await wait(220);
+
+    // Then show the independent review provider as a second real handoff.
+    setActiveProvider(evt.model);
+    setState(`REVIEW · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
+    render();
+    return;
   }
   if(evt.type==='fast_path'){
     completed.add(lastWorker); setState('FINALIZING','busy');
@@ -542,6 +717,8 @@ async function handleEvent(evt){
     setState('REFINING','busy'); $('badge').textContent='REFINING'; updatePending('Reviewer requested a refinement…'); return;
   }
   if(evt.type==='done'){
+    if(activeProviderNode)completedProviders.add(activeProviderNode);
+    activeProviderNode='';
     clearFailedAttempt(currentQuestion);
     lastSuccessfulModel=String(evt.model||'');
     lastSuccessfulTaskType=String(evt.taskType||'');
@@ -708,6 +885,48 @@ function submitFollow(){
   resizeFollow();
   ask(text,false);
 }
+async function initProviderRoster(){
+  try{
+    const response=await fetch('/api/health',{headers:{Accept:'application/json'}});
+    if(!response.ok)return;
+    const health=await response.json();
+    const providers=health?.providers||{};
+    const models=health?.models||{};
+    const limits=health?.limits||{};
+    const openrouterLimit=limits?.openrouter||{};
+    const state={
+      gemini:Boolean(models.gemini ?? providers.gemini),
+      openai:Boolean(models.openai ?? providers.openai),
+      claude:Boolean(models.claude ?? providers.anthropic),
+      deepseek:Boolean(models.deepseek ?? providers.openrouter),
+      qwen:Boolean(models.qwen ?? providers.openrouter),
+      groq:Boolean(models.groq ?? providers.groq),
+      cloudflare:Boolean(models.cloudflare ?? providers.cloudflare),
+      grok:Boolean(models.grok ?? false)
+    };
+    document.querySelectorAll('[data-provider-node]').forEach(node=>{
+      const id=node.dataset.providerNode;
+      const enabled=Boolean(state[id]);
+      node.classList.toggle('available',enabled);
+      node.classList.toggle('offline',!enabled);
+      const small=node.querySelector('small');
+      if(!small)return;
+      if(enabled){
+        if(id==='gemini')small.textContent='READY · Gemini pool';
+        else if(id==='openai')small.textContent='READY · OpenAI';
+        else if(id==='claude')small.textContent='READY · Anthropic';
+        else if(id==='groq')small.textContent='READY · 1K REQUESTS/DAY';
+        else if(id==='cloudflare')small.textContent='READY · 10K NEURONS/DAY';
+        else if(openrouterLimit?.freeTier)small.textContent='READY · FREE · 50/DAY SHARED';
+        else small.textContent='READY · OpenRouter';
+      }else{
+        if(id==='groq')small.textContent='STANDBY · ADD GROQ KEY';
+        else small.textContent=(id==='deepseek'||id==='qwen'||id==='grok')?'STANDBY · OpenRouter':'STANDBY';
+      }
+    });
+  }catch{}
+}
+
 function initVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){mic.disabled=true;mic.title='Voice input is not supported in this browser';return}
@@ -772,4 +991,39 @@ canvas.addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('pointerleave',()=>setParallax(0,0));
 
-draw(); initVoice(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
+function mountViewportComposer(){
+  if(toolDockEl && toolDockEl.parentElement!==workspace){
+    workspace.appendChild(toolDockEl);
+    toolDockEl.classList.add('viewportToolDock');
+  }
+  if(followup && followup.parentElement!==workspace){
+    workspace.appendChild(followup);
+    followup.classList.add('viewportComposer');
+  }
+}
+function verifyComposerInViewport(){
+  if(!followup)return;
+  const rect=followup.getBoundingClientRect();
+  const ok=rect.width>160 && rect.height>40 && rect.top>=0 && rect.bottom<=window.innerHeight;
+  if(!ok){
+    followup.style.setProperty('position','fixed','important');
+    followup.style.setProperty('left','50vw','important');
+    followup.style.setProperty('right','auto','important');
+    followup.style.setProperty('bottom',window.innerWidth>=1200?'14px':'10px','important');
+    followup.style.setProperty('transform','translateX(-50%)','important');
+    followup.style.setProperty('width',window.innerWidth>=1200?'min(900px, calc(100vw - 420px))':'calc(100vw - 24px)','important');
+    followup.style.setProperty('display','flex','important');
+    followup.style.setProperty('visibility','visible','important');
+    followup.style.setProperty('opacity','1','important');
+    followup.style.setProperty('z-index','120','important');
+  }
+}
+workspace.classList.remove('show-run','working');
+if(runToggle){
+  runToggle.setAttribute('aria-expanded','false');
+  runToggle.textContent='View run';
+}
+mountViewportComposer();
+draw(); initVoice(); initProviderRoster(); setStage('understand'); setState('READY'); resizeInput(); resizeFollow();
+requestAnimationFrame(verifyComposerInViewport);
+window.addEventListener('resize',verifyComposerInViewport);

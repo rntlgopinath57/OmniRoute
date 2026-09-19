@@ -1,0 +1,647 @@
+name: Relay Cloudflare Preview Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - infra/cloudflare-relay
+    paths:
+      - "cloudflare/**"
+      - "relay-runtime/**"
+      - "netlify/functions/**"
+      - "ai-team-playground/**"
+      - "wrangler.jsonc"
+      - ".github/workflows/cloudflare-relay-preview-deploy.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-cloudflare-preview
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GOOGLE_GEMINI_BASE_URL: ${{ secrets.GOOGLE_GEMINI_BASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      RELAY_GITHUB_TOKEN: ${{ secrets.RELAY_GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      - name: Require Cloudflare credentials
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+
+      - name: Run AI Team core suite
+        run: |
+          node --test ai-team/tests/*.test.mjs
+          node ai-team/src/main.mjs '{"task":"Review Bharosa security","type":"analysis"}'
+
+      - name: Validate Relay browser extensions
+        run: |
+          node --check ai-team-playground/app.js
+          node --check ai-team-playground/media-generator.js
+          node --check ai-team-playground/video-editor.js
+          grep -q 'video-editor.js' ai-team-playground/index.html
+          grep -q 'media-generator.js' ai-team-playground/index.html
+          grep -q 'id="imageGenBtn"' ai-team-playground/index.html
+          grep -q 'id="videoGenBtn"' ai-team-playground/index.html
+          grep -q 'id="videoEditBtn"' ai-team-playground/index.html
+          grep -q 'SpeechRecognition' ai-team-playground/app.js
+          grep -q 'window.RelayMediaGenerator' ai-team-playground/media-generator.js
+          grep -q 'window.RelayVideoEditor' ai-team-playground/video-editor.js
+
+      - name: Validate bundle before deploy
+        run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .cloudflare-dry-run
+
+      - name: Deploy preview worker
+        id: deploy
+        run: |
+          set -o pipefail
+          npx --yes wrangler@latest deploy             --config wrangler.jsonc             --name relay-ai-team-preview | tee deploy.log
+          url="$(grep -Eo 'https://[^ ]+\.workers\.dev' deploy.log | tail -1 || true)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Preview URL: ${url:-not detected}"
+
+      - name: Sync configured Relay secrets
+        run: |
+          put_secret () {
+            key="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "Skipped $key (not configured in GitHub Actions secrets)"
+              return 0
+            fi
+
+            for attempt in 1 2 3; do
+              if printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-ai-team-preview >/dev/null; then
+                echo "Synced $key"
+                return 0
+              fi
+              echo "::warning::Secret sync for $key failed on attempt $attempt"
+              sleep $((attempt * 2))
+            done
+
+            echo "::warning::Could not refresh $key after 3 attempts; continuing to health verification because existing Worker secrets are preserved across deploys."
+            return 0
+          }
+
+          put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
+          put_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+          put_secret ANTHROPIC_BASE_URL "$ANTHROPIC_BASE_URL"
+          put_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          put_secret GOOGLE_GEMINI_BASE_URL "$GOOGLE_GEMINI_BASE_URL"
+          put_secret GEMINI_API_KEY "$GEMINI_API_KEY"
+          put_secret OPENROUTER_BASE_URL "$OPENROUTER_BASE_URL"
+          put_secret OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
+          put_secret GROQ_API_KEY "$GROQ_API_KEY"
+          put_secret RELAY_GITHUB_TOKEN "$RELAY_GITHUB_TOKEN"
+
+      - name: Smoke health endpoint
+        if: steps.deploy.outputs.url != ''
+        run: |
+          url="${{ steps.deploy.outputs.url }}/api/health"
+          for attempt in 1 2 3 4 5 6; do
+            if body="$(curl --fail --show-error --silent "$url")"; then
+              echo "$body"
+              echo "$body" | grep -q '"cloudflare":true'
+              if [ -n "$GROQ_API_KEY" ]; then
+                echo "$body" | grep -q '"groq":true' || {
+                  echo "Groq key exists in GitHub but is not active in the Worker."
+                  exit 1
+                }
+              fi
+              exit 0
+            fi
+            echo "Health check attempt $attempt failed; waiting for Worker propagation..."
+            sleep 5
+          done
+          echo "Health endpoint did not become ready."
+          exit 1
+
+      - name: Verify live keyless FreeLLMAPI lane
+        if: steps.deploy.outputs.url != ''
+        run: |
+          response="$(curl --fail --show-error --silent --max-time 25 \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"Write a friendly two-sentence greeting for a new user.","history":[]}' \
+            "${{ steps.deploy.outputs.url }}/api/ask")"
+          printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
+          cat /tmp/relay-freellmapi-smoke.ndjson
+          grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
+          grep -Eq '"type":"worker".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
+          grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
+          grep -Eq '"type":"done".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
+          ! grep -q '"type":"error"' /tmp/relay-freellmapi-smoke.ndjson
+          echo "Live keyless FreeLLMAPI lane: PASS"
+
+      - name: Manual live Relay research smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.GEMINI_API_KEY != ''
+        run: |
+          url="${{ steps.deploy.outputs.url }}/api/ask"
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFLARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q 'CLOUDFLARE_RELAY_OK'
+
+      - name: Opt-in live Groq routing smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[groq-smoke]') && env.GROQ_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"Explain in one sentence why a circuit breaker helps an AI router.","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q '"model":"groq:'
+          echo "Groq live routing smoke: PASS"
+
+      - name: Opt-in DeepSeek/comparison latency smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[deepseek-smoke]')
+        run: |
+          start="$(date +%s)"
+          comparison="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what do qwen and deepseek do","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "$comparison"
+          echo "Comparison elapsed: ${elapsed}s"
+          echo "$comparison" | grep -q '"type":"worker"'
+          echo "$comparison" | grep -q '"model":"groq:openai/gpt-oss-120b"'
+          test "$elapsed" -lt 25 || { echo "Comparison route exceeded 25s"; exit 1; }
+
+          start="$(date +%s)"
+          deepseek="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is deepseek famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          elapsed="$(( $(date +%s) - start ))"
+          echo "$deepseek"
+          echo "DeepSeek explicit route elapsed: ${elapsed}s"
+          echo "$deepseek" | grep -q '"type":"worker"'
+          echo "$deepseek" | grep -q '"requestedFamily":"deepseek"'
+          test "$elapsed" -lt 25 || { echo "DeepSeek route exceeded 25s"; exit 1; }
+          echo "DeepSeek/comparison live latency smoke: PASS"
+
+      - name: Opt-in explicit-model affinity smoke
+        if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[affinity-smoke]') && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is gemini famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"worker"'
+          echo "$response" | grep -q '"model":"gemini-3.5-flash-lite"'
+          echo "$response" | grep -q '"routeReason":"explicit_model"'
+          echo "$response" | grep -q '"type":"reviewer"'
+          if echo "$response" | grep -q '"type":"reviewer".*"model":"gemini'; then
+            echo "Reviewer incorrectly reused Gemini."
+            exit 1
+          fi
+          echo "$response" | grep -q '"type":"done"'
+          echo "Explicit Gemini affinity smoke: PASS"
+
+      - name: Verify static security header configuration
+        run: |
+          grep -q 'X-Content-Type-Options: nosniff' ai-team-playground/_headers
+          grep -q 'Referrer-Policy: strict-origin-when-cross-origin' ai-team-playground/_headers
+          grep -q 'X-Frame-Options: SAMEORIGIN' ai-team-playground/_headers
+
+      - name: Verify Cloudflare security header parity
+        if: steps.deploy.outputs.url != ''
+        run: |
+          headers="$(curl --fail --show-error --silent -D - -o /dev/null "${{ steps.deploy.outputs.url }}/")"
+          echo "$headers"
+          echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+          echo "$headers" | grep -qi '^referrer-policy: strict-origin-when-cross-origin'
+          echo "$headers" | grep -qi '^x-frame-options: SAMEORIGIN'
+
+      - name: Verify Relay presentation extensions
+        run: |
+          for format in handwritten cheatsheet blueprint flashcards mindmap exploded flowchart timeline roadmap framework comparison before_after hierarchy matrix cycle sticky infographic whiteboard sketchnote notion goodnotes; do
+            grep -q "format: \"$format\"" netlify/functions/ask.mts
+          done
+
+      - name: Verify progressive Relay UI
+        if: steps.deploy.outputs.url != ''
+        run: |
+          html="$(curl --fail --show-error --silent "${{ steps.deploy.outputs.url }}/")"
+          echo "$html" | grep -q 'id="runStrip"'
+          echo "$html" | grep -q 'id="runToggle"'
+          echo "$html" | grep -q 'View run'
+          echo "$html" | grep -q 'id="canvas"'
+          echo "$html" | grep -q 'id="runToggle"'
+          echo "Conversation-first UI with ambient execution canvas verified."
+
+      - name: Verify Relay three-column side rails
+        run: |
+          grep -q 'id="leftRail"' ai-team-playground/index.html
+          grep -q 'id="rightRail"' ai-team-playground/index.html
+          grep -q 'data-ambient-node="planner"' ai-team-playground/index.html
+          grep -q 'data-ambient-node="reviewer"' ai-team-playground/index.html
+          grep -q 'grid-template-columns:minmax(150px,1fr) minmax(720px,980px) minmax(150px,1fr)' ai-team-playground/app.css
+          grep -q 'Relay structural three-column workspace v28' ai-team-playground/app.css
+
+      - name: Verify Relay immersive rail animation
+        run: |
+          grep -q 'id="handoffFx"' ai-team-playground/index.html
+          grep -q 'function animateAmbientFlight' ai-team-playground/app.js
+          grep -q 'function animateAmbientFlight' ai-team-playground/app.js
+          grep -q "classList.add('sending')" ai-team-playground/app.js
+          grep -q "classList.add('receiving')" ai-team-playground/app.js
+          grep -q 'Relay truthful data-flow animation v30' ai-team-playground/app.css
+          grep -q '.fxStreak,.fxField{display:none!important}' ai-team-playground/app.css
+
+      - name: Verify composer and first-handoff UI contract
+        shell: python
+        run: |
+          from pathlib import Path
+          css = Path("ai-team-playground/app.css").read_text(encoding="utf-8")
+          js = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
+          html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
+
+          composer = css[css.rindex('/* Relay authoritative viewport composer v35 */'):]
+          assert '.followup.viewportComposer' in composer
+          assert 'position:fixed!important;' in composer
+          assert 'bottom:14px!important;' in composer
+          assert 'z-index:120!important;' in composer
+          assert 'pointer-events:auto!important;' in composer
+          assert 'mountViewportComposer()' in js
+          assert 'verifyComposerInViewport()' in js
+          assert "workspace.classList.remove('show-run')" in js
+          assert "runToggle.textContent='View run'" in js
+          assert "await travel('you','planner',420)" in js
+          assert './app.css?v=35' in html
+          assert './app.js?v=45' in html
+          print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
+
+      - name: Browser-rendered Relay UI smoke
+        if: steps.deploy.outputs.url != ''
+        run: |
+          CHROME="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$CHROME" || { echo "Chrome not found on runner"; exit 1; }
+
+          "$CHROME"             --headless=new             --no-sandbox             --disable-dev-shm-usage             --remote-debugging-address=127.0.0.1             --remote-debugging-port=9222             --remote-allow-origins='*'             --user-data-dir=/tmp/relay-chrome             about:blank >/tmp/relay-chrome.log 2>&1 &
+          CHROME_PID=$!
+          trap 'kill "$CHROME_PID" 2>/dev/null || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null; then
+              break
+            fi
+            if ! kill -0 "$CHROME_PID" 2>/dev/null; then
+              echo "Chrome exited before DevTools became ready."
+              cat /tmp/relay-chrome.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+          if ! curl --silent --fail http://127.0.0.1:9222/json/version >/dev/null; then
+            echo "Chrome DevTools did not become ready within 30 seconds."
+            cat /tmp/relay-chrome.log || true
+            exit 1
+          fi
+
+          RELAY_URL="${{ steps.deploy.outputs.url }}" node <<'NODE'
+          const fs = require('node:fs');
+
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+          (async () => {
+            if (typeof WebSocket === 'undefined') throw new Error('Node WebSocket API is unavailable.');
+
+            const targetUrl = process.env.RELAY_URL + '/?ui_smoke=' + Date.now();
+            const target = await fetch(
+              'http://127.0.0.1:9222/json/new?' + encodeURIComponent(targetUrl),
+              { method: 'PUT' },
+            ).then(r => {
+              if (!r.ok) throw new Error('Could not create Chrome target: ' + r.status);
+              return r.json();
+            });
+
+            const ws = new WebSocket(target.webSocketDebuggerUrl);
+            let seq = 0;
+            const pending = new Map();
+            const eventWaiters = new Map();
+
+            const opened = new Promise((resolve, reject) => {
+              ws.onopen = resolve;
+              ws.onerror = reject;
+            });
+            await opened;
+
+            function send(method, params = {}) {
+              return new Promise((resolve, reject) => {
+                const id = ++seq;
+                pending.set(id, { resolve, reject, method });
+                ws.send(JSON.stringify({ id, method, params }));
+              });
+            }
+
+            function waitEvent(method, timeout = 15000) {
+              return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                  const list = eventWaiters.get(method) || [];
+                  eventWaiters.set(method, list.filter(x => x.resolve !== resolve));
+                  reject(new Error('Timed out waiting for ' + method));
+                }, timeout);
+                const item = {
+                  resolve: params => {
+                    clearTimeout(timer);
+                    resolve(params);
+                  }
+                };
+                const list = eventWaiters.get(method) || [];
+                list.push(item);
+                eventWaiters.set(method, list);
+              });
+            }
+
+            ws.onmessage = async event => {
+              const msg = JSON.parse(String(event.data));
+
+              if (msg.id) {
+                const item = pending.get(msg.id);
+                if (!item) return;
+                pending.delete(msg.id);
+                if (msg.error) item.reject(new Error(item.method + ': ' + JSON.stringify(msg.error)));
+                else item.resolve(msg.result || {});
+                return;
+              }
+
+              if (msg.method === 'Fetch.requestPaused') {
+                const req = msg.params.request;
+                if (req.url.includes('/api/ask')) {
+                  const body = [
+                    JSON.stringify({ type:'planner' }),
+                    JSON.stringify({ type:'worker', model:'groq:qwen/qwen3.8-27b', taskType:'reasoning' }),
+                    JSON.stringify({ type:'reviewer', model:'@cf/nvidia/nemotron-3-120b-a12b' }),
+                    JSON.stringify({ type:'done', model:'groq:qwen/qwen3.8-27b', answer:'UI smoke complete.' }),
+                  ].join('\n');
+
+                  send('Fetch.fulfillRequest', {
+                    requestId: msg.params.requestId,
+                    responseCode: 200,
+                    responseHeaders: [
+                      { name:'Content-Type', value:'application/x-ndjson; charset=utf-8' },
+                      { name:'Cache-Control', value:'no-store' },
+                    ],
+                    body: Buffer.from(body).toString('base64'),
+                  }).catch(err => console.error('fulfill failed', err));
+                }
+              }
+
+              const list = eventWaiters.get(msg.method);
+              if (list?.length) {
+                const item = list.shift();
+                item.resolve(msg.params);
+              }
+            };
+
+            async function evaluate(expression) {
+              const out = await send('Runtime.evaluate', {
+                expression,
+                returnByValue: true,
+                awaitPromise: true,
+              });
+              if (out.exceptionDetails) throw new Error('Browser evaluation failed: ' + JSON.stringify(out.exceptionDetails));
+              return out.result?.value;
+            }
+
+            await send('Page.enable');
+            await send('Runtime.enable');
+            await send('Network.enable');
+            await send('Fetch.enable', {
+              patterns: [{ urlPattern:'*/api/ask', requestStage:'Request' }],
+            });
+            await send('Emulation.setDeviceMetricsOverride', {
+              width: 1600,
+              height: 900,
+              deviceScaleFactor: 1,
+              mobile: false,
+            });
+
+            const loaded = waitEvent('Page.loadEventFired', 30000);
+            await send('Page.navigate', { url: targetUrl });
+            await loaded;
+            await sleep(1400);
+
+            const initial = await evaluate(`(() => {
+              const composer = document.querySelector('.followup');
+              const input = document.querySelector('#followQ');
+              const tools = document.querySelector('#toolDock');
+              const c = composer?.getBoundingClientRect();
+              const i = input?.getBoundingClientRect();
+              const t = tools?.getBoundingClientRect();
+              return {
+                viewport:{width:innerWidth,height:innerHeight},
+                composer:c&&{top:c.top,bottom:c.bottom,left:c.left,right:c.right,width:c.width,height:c.height},
+                input:i&&{top:i.top,bottom:i.bottom,left:i.left,right:i.right,width:i.width,height:i.height},
+                tools:t&&{top:t.top,bottom:t.bottom,width:t.width,height:t.height},
+                composerParent:composer?.parentElement?.id||composer?.parentElement?.className||'',
+                composerClasses:composer?.className||'',
+                display:composer?getComputedStyle(composer).display:'missing',
+                visibility:composer?getComputedStyle(composer).visibility:'missing',
+                opacity:composer?getComputedStyle(composer).opacity:'missing',
+                position:composer?getComputedStyle(composer).position:'missing',
+                runOpen:document.querySelector('#workspace')?.classList.contains('show-run'),
+              };
+            })()`);
+            console.log('INITIAL_UI', JSON.stringify(initial));
+
+            if (!initial.composer || initial.display === 'none' || initial.visibility === 'hidden' || Number(initial.opacity) === 0) {
+              throw new Error('Composer is not rendered: ' + JSON.stringify(initial));
+            }
+            if (initial.composer.top < 0 || initial.composer.bottom > initial.viewport.height) {
+              throw new Error('Composer is outside viewport: ' + JSON.stringify(initial));
+            }
+            if (!initial.input || initial.input.width < 250 || initial.input.height < 35) {
+              throw new Error('Ask Relay input is not usable: ' + JSON.stringify(initial));
+            }
+            if (initial.runOpen) {
+              throw new Error('Run graph must start closed.');
+            }
+
+            await evaluate(`(() => {
+              const input=document.querySelector('#followQ');
+              input.focus();
+              input.value='Why do circuit breakers help resilient routing?';
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              document.querySelector('#followGo').click();
+              return true;
+            })()`);
+
+            let firstHandoff = null;
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+              firstHandoff = await evaluate(`(() => {
+                const you=document.querySelector('[data-ambient-node="you"]');
+                const planner=document.querySelector('[data-ambient-node="planner"]');
+                return {
+                  sending:!!you?.classList.contains('sending'),
+                  receiving:!!planner?.classList.contains('receiving'),
+                  youClass:you?.className||'',
+                  plannerClass:planner?.className||''
+                };
+              })()`);
+              if (firstHandoff.sending && firstHandoff.receiving) break;
+              await sleep(30);
+            }
+
+            console.log('FIRST_HANDOFF', JSON.stringify(firstHandoff));
+            if (!firstHandoff?.sending || !firstHandoff?.receiving) {
+              throw new Error('YOU -> PLANNER handoff was not visibly rendered.');
+            }
+
+            const shot = await send('Page.captureScreenshot', { format:'png', fromSurface:true });
+            fs.writeFileSync('relay-ui-smoke.png', Buffer.from(shot.data, 'base64'));
+            console.log('BROWSER_RENDERED_UI PASS');
+
+            ws.close();
+          })().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload Relay UI smoke screenshot
+        if: always() && steps.deploy.outputs.url != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: relay-ui-smoke
+          path: relay-ui-smoke.png
+          if-no-files-found: ignore
+
+      - name: Verify real provider roster
+        run: |
+          grep -q 'data-provider-node="gemini"' ai-team-playground/index.html
+          grep -q 'data-provider-node="qwen"' ai-team-playground/index.html
+          grep -q 'data-provider-node="groq"' ai-team-playground/index.html
+          grep -q 'data-provider-node="cloudflare"' ai-team-playground/index.html
+          grep -q 'data-provider-node="grok"' ai-team-playground/index.html
+          grep -q 'function providerNodeForModel' ai-team-playground/app.js
+          grep -q 'function initProviderRoster' ai-team-playground/app.js
+          grep -q 'Real provider roster v31' ai-team-playground/app.css
+
+      - name: Verify provider-aware routing
+        run: |
+          grep -q 'function modelConfigured' netlify/functions/ask.mts
+          grep -q 'function resolveWorkerModel' netlify/functions/ask.mts
+          grep -q 'function resolveReviewerModel' netlify/functions/ask.mts
+          grep -q 'configuredCandidates = candidates.filter' netlify/functions/ask.mts
+          grep -q 'no_independent_provider' netlify/functions/ask.mts
+          ! grep -q 'Check Netlify usage/billing' netlify/functions/ask.mts
+
+      - name: Verify multi-model switching support
+        shell: python
+        run: |
+          from pathlib import Path
+          ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
+          health = Path("netlify/functions/health.mts").read_text(encoding="utf-8")
+
+          required = [
+              'coding: "deepseek/deepseek-v4-flash-0731:free"',
+              'general: "deepseek/deepseek-v4-flash-0731:free"',
+              'automation: "qwen/qwen3.8-27b:free"',
+              'reasoning: "qwen/qwen3.8-27b:free"',
+              'researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free"',
+              'universalFallback: "openrouter/free"',
+              'fast: "@cf/zai-org/glm-4.7-flash"',
+              'reasoning: "@cf/nvidia/nemotron-3-120b-a12b"',
+              'fast: "groq:openai/gpt-oss-20b"',
+              'strong: "groq:openai/gpt-oss-120b"',
+              'reasoning: "groq:qwen/qwen3.8-27b"',
+              'function callGroq',
+              'function callCloudflareAI',
+              'function runtimeVariant',
+              'function modelFamily',
+          ]
+          for item in required:
+              assert item in ask, f"Missing routing invariant: {item}"
+
+          # Gemini is intentionally specialized, not the universal worker.
+          assert ask.count('return "gemini-3.5-flash-lite"') == 1, "Gemini route dominance regressed"
+          assert 'presentation.visual ? "gpt-5.6-luna"' not in ask, "Visual prompts must not force paid GPT"
+          assert 'openai: providers.openai,' in health
+          assert 'claude: providers.anthropic,' in health
+          assert 'grok: false,' in health
+          assert 'if (q.length <= 120) return true' not in ask, "Short-prompt sticky routing regression"
+          assert 'coolDownProviderFamily(model, 60000)' in ask, "OpenRouter rate-limit circuit breaker missing"
+          assert 'emit({ type: "quota", provider: "openrouter"' in ask, "Visible OpenRouter quota event missing"
+          assert 'provider: "groq"' in ask, "Visible Groq quota event missing"
+          assert 'provider: "cloudflare"' in ask, "Visible Cloudflare quota event missing"
+          candidate_block = ask[ask.index('const candidates ='):ask.index('const configuredCandidates')]
+          assert 'groqFallback' in candidate_block, "Groq independent fallback missing"
+          assert 'cloudflareFallback' in candidate_block, "Cloudflare independent fallback missing"
+          assert 'GROQ_API_KEY' in ask, "Groq credential route missing"
+          assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
+          assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
+          assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
+          assert 'explicitRoute.comparison' in ask, "Multi-model comparison branch missing"
+          assert 'GROQ_MODELS.strong' in ask, "Neutral comparison worker missing"
+          assert 'function fetchTextWithTimeout' in ask, "Full response-body timeout helper missing"
+          assert 'isExplicitOpenRouterPrimary' in ask, "Explicit OpenRouter latency cap missing"
+          assert '{ family: "gemini", pattern:' in ask, "Gemini explicit route missing"
+          assert 'families.length !== 1' in ask, "Multi-model comparison neutrality guard missing"
+          print("Task routing, explicit affinity, comparison neutrality and latency guards: PASS")
+
+      - name: Verify media capabilities
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"action":"capabilities"}'             "${{ steps.deploy.outputs.url }}/api/media")"
+          echo "$response"
+          echo "$response" | grep -q '"imageGeneration":true'
+          echo "$response" | grep -q '"videoGeneration":true'
+          echo "$response" | grep -q '"serverGeminiConfigured":true'
+
+      - name: Manual live flowchart routing contract
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.OPENROUTER_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"/flowchart Show a simple three-step release process: validate, deploy, verify.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q '"format":"flowchart"'
+          echo "$response" | grep -q '"review":"PASS"'
+          if echo "$response" | grep -Eq 'flowchart (TD|LR|TB|RL)|graph (TD|LR|TB|RL)|[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>'; then
+            echo "Raw diagram source leaked into presentation answer."
+            exit 1
+          fi
+
+      - name: Manual live GitHub workflow inventory path
+        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.OPENROUTER_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"List my GitHub workflows by repository. Keep it concise.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
+          echo "$response"
+          echo "$response" | grep -q '"type":"tool","tool":"github","status":"complete"'
+          echo "$response" | grep -q '"type":"done"'
+          echo "$response" | grep -q '"format":"default"'
+          echo "$response" | grep -q 'bharosa-reliability.yml'
+          echo "$response" | grep -q 'daily-briefing.yml'
+          echo "$response" | grep -q 'ai-team-activation.yml'
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "### Relay Cloudflare preview"
+            echo
+            if [ -n "${{ steps.deploy.outputs.url }}" ]; then
+              echo "- URL: ${{ steps.deploy.outputs.url }}"
+            else
+              echo "- URL: inspect the deploy step output"
+            fi
+            echo "- Static UI served from Cloudflare assets"
+            echo "- Worker runs only for /api/*"
+            echo "- Production traffic was not changed"
+            echo "- Core AI Team unit/integration suite executed"
+            echo "- Browser extensions verified: voice, image generation, video generation, local video editor"
+            echo "- Netlify security headers preserved on Cloudflare"
+            echo "- Provider coverage is reported by /api/health; unavailable providers remain disabled rather than silently assumed"
+          } >> "$GITHUB_STEP_SUMMARY"

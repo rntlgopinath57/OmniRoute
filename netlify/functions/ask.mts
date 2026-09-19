@@ -1,3 +1,6 @@
+import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
+import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routing-policy.mjs";
+
 function classify(text: string) {
   const q = text.toLowerCase();
   if (/\b(code|coding|coder|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
@@ -8,41 +11,200 @@ function classify(text: string) {
   return "general";
 }
 
-function workerFor(taskType: string, question: string) {
-  const q = question.toLowerCase();
-  const heavy =
-    question.length > 900 ||
-    /\b(deep|complex|architecture|architect|production|root cause|large refactor|security audit|performance audit)\b/.test(q);
+const FREE_MODELS = Object.freeze({
+  coding: "deepseek/deepseek-v4-flash-0731:free",
+  automation: "qwen/qwen3.8-27b:free",
+  reasoning: "qwen/qwen3.8-27b:free",
+  general: "deepseek/deepseek-v4-flash-0731:free",
+  researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free",
+  universalFallback: "openrouter/free",
+});
 
-  if ((taskType === "coding" || taskType === "automation") && heavy) return "gpt-5.6-sol";
-  if (taskType === "coding" || taskType === "automation") return "gpt-5.6-luna";
-  if (taskType === "research" || taskType === "design" || taskType === "reasoning") return "gemini-3.5-flash";
-  return "gpt-5.6-luna";
+const CLOUDFLARE_MODELS = Object.freeze({
+  fast: "@cf/zai-org/glm-4.7-flash",
+  balanced: "@cf/google/gemma-4-26b-a4b-it",
+  reasoning: "@cf/nvidia/nemotron-3-120b-a12b",
+});
+
+const GROQ_MODELS = Object.freeze({
+  fast: "groq:openai/gpt-oss-20b",
+  strong: "groq:openai/gpt-oss-120b",
+  reasoning: "groq:qwen/qwen3.8-27b",
+});
+
+const EXPLICIT_MODEL_ROUTES: Array<{ family: string; pattern: RegExp; model: string }> = [
+  { family: "gemini", pattern: /\b(?:google\s+)?gemini\b/i, model: "gemini-3.5-flash-lite" },
+  { family: "claude", pattern: /\bclaude\b|\banthropic\b/i, model: "claude-haiku-4-5" },
+  { family: "openai", pattern: /\bopenai\b|\bchatgpt\b|\bgpt[-\s]?5(?:\.6)?\b/i, model: "gpt-5.6-luna" },
+  { family: "deepseek", pattern: /\bdeepseek\b/i, model: FREE_MODELS.coding },
+  { family: "qwen", pattern: /\bqwen\b/i, model: FREE_MODELS.reasoning },
+  { family: "groq", pattern: /\bgroq\b/i, model: GROQ_MODELS.fast },
+  { family: "cloudflare", pattern: /\bcloudflare(?:\s+workers?\s+ai)?\b/i, model: CLOUDFLARE_MODELS.fast },
+  { family: "grok", pattern: /\bgrok\b|\bxai\b|\bx-ai\b/i, model: "x-ai/grok-4.6" },
+];
+
+function explicitModelRoute(question: string) {
+  const hits = EXPLICIT_MODEL_ROUTES.filter((item) => item.pattern.test(question));
+  const families = [...new Set(hits.map((item) => item.family))];
+
+  if (families.length !== 1) return { model: "", family: "", explicit: false, comparison: families.length > 1 };
+
+  // Mentioning a provider is not enough to force that lane. Strict routing is
+  // reserved for explicit execution intent such as "use Gemini only" or
+  // "answer with Groq". This keeps ordinary questions about Gemini/Claude/etc.
+  // eligible for Relay's normal intelligent routing and bounded fallback.
+  const strictIntent = /\b(?:use|using|with|via|route\s+(?:this\s+)?to|ask)\s+(?:google\s+)?(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\b|\b(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\s+only\b/i.test(question);
+  if (!strictIntent) return { model: "", family: "", explicit: false, comparison: false };
+
+  const hit = hits.find((item) => item.family === families[0])!;
+  return { model: hit.model, family: hit.family, explicit: true, comparison: false };
+}
+
+function workerFor(taskType: string, question: string) {
+  // Prefer Groq for high-volume routine work when configured. It has an
+  // independent quota pool, so OpenRouter is preserved as a later fallback.
+  if (taskType === "coding") return GROQ_MODELS.fast;
+  if (taskType === "automation") return GROQ_MODELS.reasoning;
+  if (taskType === "reasoning") return GROQ_MODELS.reasoning;
+  if (taskType === "research" || taskType === "design") return "gemini-3.5-flash-lite";
+  return GROQ_MODELS.fast;
 }
 
 function isFollowUp(question: string, history: Array<{ role: string; content: string }>) {
   if (!history.length) return false;
   const q = question.trim().toLowerCase();
-  if (q.length > 220) return false;
+  if (!q || q.length > 220) return false;
   if (/^(new topic|different topic|unrelated|start over|ignore previous)\b/.test(q)) return false;
-  if (q.length <= 120) return true;
-  return /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|do more|more|go deeper|expand|elaborate|evaluate|compare|tell me more|what about|and |also |then |now )/.test(q)
-    || /\b(that|this|it|them|those|same|above|previous|further|deeper|more)\b/.test(q);
+
+  // Short does not automatically mean follow-up. A follow-up must actually
+  // refer to the previous turn or explicitly continue it.
+  const explicitContinuation =
+    /^(yes|yeah|yep|ok|okay|sure|go ahead|continue|proceed|do it|do more|more|go deeper|expand|elaborate|tell me more|what about|and |also |then |now )/.test(q);
+  const referential =
+    /\b(that|this|it|them|those|same|above|previous|further|deeper)\b/.test(q);
+  const elliptical =
+    /^(why|how so|which one|what next|anything else|more details?)\??$/.test(q);
+
+  return explicitContinuation || referential || elliptical;
 }
 
 function allowedStickyModel(model: string) {
   return new Set([
     "gpt-5.6-luna",
     "gpt-5.6-sol",
+    "openai/gpt-5.6-luna",
+    "openai/gpt-5.6-sol",
     "claude-haiku-4-5",
+    "anthropic/claude-haiku-4.5",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash-0731:free",
+    "qwen/qwen3.8-flash",
+    "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter/free",
+    "x-ai/grok-4.6",
+    GROQ_MODELS.fast,
+    GROQ_MODELS.strong,
+    GROQ_MODELS.reasoning,
   ]).has(model);
 }
 
 function reviewerFor(worker: string) {
-  return worker.startsWith("claude-") ? "gemini-3.5-flash" : "claude-haiku-4-5";
+  const family = modelFamily(worker);
+  if (family === "groq") return CLOUDFLARE_MODELS.reasoning;
+  if (family === "qwen") return CLOUDFLARE_MODELS.fast;
+  if (family === "deepseek") return GROQ_MODELS.reasoning;
+  if (family === "gemini") return GROQ_MODELS.fast;
+  if (family === "cloudflare") return GROQ_MODELS.reasoning;
+  return CLOUDFLARE_MODELS.fast;
+}
+
+const OPENROUTER_ALIASES: Record<string, string> = {
+  "gpt-5.6-luna": "openai/gpt-5.6-luna",
+  "gpt-5.6-sol": "openai/gpt-5.6-sol",
+  "claude-haiku-4-5": "anthropic/claude-haiku-4.5",
+};
+
+function providerForModel(model: string) {
+  if (model.startsWith("freellmapi:")) return "freellmapi";
+  if (model.startsWith("groq:")) return "groq";
+  if (model.startsWith("@cf/")) return "cloudflare";
+  if (model.startsWith("claude-")) return "anthropic";
+  if (model.startsWith("gemini-")) return "gemini";
+  if (model.includes("/")) return "openrouter";
+  return "openai";
+}
+
+function modelFamily(model: string) {
+  const m = String(model || "").toLowerCase();
+  if (m.startsWith("freellmapi:")) return "freellmapi";
+  if (m.startsWith("groq:")) return "groq";
+  if (m.startsWith("@cf/")) return "cloudflare";
+  if (m.includes("gemini") || m.includes("google")) return "gemini";
+  if (m.includes("claude") || m.includes("anthropic")) return "claude";
+  if (m.includes("deepseek")) return "deepseek";
+  if (m.includes("qwen") || m.includes("alibaba")) return "qwen";
+  if (m.includes("grok") || m.includes("x-ai")) return "grok";
+  if (m.includes("gpt") || m.includes("openai")) return "openai";
+  return "other";
+}
+
+function modelConfigured(model: string) {
+  const provider = providerForModel(model);
+  if (provider === "freellmapi") return true;
+  if (provider === "cloudflare") {
+    const ai = envGetRaw("AI") as any;
+    return Boolean(ai && typeof ai.run === "function");
+  }
+  if (provider === "groq") return Boolean(envGet("GROQ_API_KEY"));
+  if (provider === "anthropic") return Boolean(envGet("ANTHROPIC_API_KEY"));
+  if (provider === "gemini") return Boolean(envGet("GEMINI_API_KEY"));
+  if (provider === "openrouter") return Boolean(envGet("OPENROUTER_API_KEY"));
+  return Boolean(envGet("OPENAI_API_KEY"));
+}
+
+function firstConfiguredModel(models: string[]) {
+  return models.find((model) => modelConfigured(model)) || "";
+}
+
+function runtimeVariant(model: string) {
+  if (modelConfigured(model)) return model;
+  const openRouterAlias = OPENROUTER_ALIASES[model] || "";
+  if (openRouterAlias && modelConfigured(openRouterAlias)) return openRouterAlias;
+  return "";
+}
+
+function resolveWorkerModel(requested: string) {
+  const requestedRuntime = runtimeVariant(requested);
+  if (requestedRuntime) return requestedRuntime;
+  return firstConfiguredModel([
+    GROQ_MODELS.fast,
+    GROQ_MODELS.reasoning,
+    FREE_MODELS.general,
+    FREE_MODELS.reasoning,
+    CLOUDFLARE_MODELS.fast,
+    CLOUDFLARE_MODELS.reasoning,
+    "gemini-3.5-flash-lite",
+  ]) || requested;
+}
+
+function resolveReviewerModels(worker: string) {
+  const workerFamily = modelFamily(worker);
+  // Review is latency-sensitive. Prefer the local Cloudflare binding first:
+  // it avoids an extra network/API hop in the Worker. External providers are
+  // bounded fallbacks, never an unbounded retry chain.
+  const candidates = [
+    CLOUDFLARE_MODELS.fast,
+    runtimeVariant(reviewerFor(worker)),
+    GROQ_MODELS.fast,
+    "gemini-3.5-flash-lite",
+    FREE_MODELS.reasoning,
+  ].filter(Boolean);
+  return [...new Set(candidates)].filter((model) =>
+    modelConfigured(model) && modelFamily(model) !== workerFamily
+  );
 }
 
 function disambiguationContext(question: string) {
@@ -114,7 +276,7 @@ async function githubRepoContext(text: string) {
   const repos = mentionedRepos(text);
   if (!repos.length) return { context: "", repos: [], inaccessible: [] as string[] };
 
-  const token = Netlify.env.get("RELAY_GITHUB_TOKEN") || Netlify.env.get("GITHUB_TOKEN") || "";
+  const token = envGet("RELAY_GITHUB_TOKEN") || envGet("GITHUB_TOKEN") || "";
   const headers: Record<string, string> = {
     "Accept": "application/vnd.github+json",
     "User-Agent": "relay-ai-team",
@@ -273,7 +435,8 @@ function detectPresentationIntent(text: string): PresentationIntent {
   if (/\barchitecture|system design|components?|layers?|topology\b/.test(lower)) {
     return { format: "blueprint", visual: true, explicit: false, label: "BLUEPRINT" };
   }
-  if (/\bprocess|workflow|how .* works|steps?\b/.test(lower)) {
+  const workflowInventory = /\b(list|show|find|count|inventory|files?)\b.*\b(?:github\s+)?workflows?\b|\b(?:github\s+)?workflows?\b.*\b(list|show|find|count|inventory|files?)\b/.test(lower);
+  if (!workflowInventory && /\bprocess|workflow|how .* works|steps?\b/.test(lower)) {
     return { format: "flowchart", visual: true, explicit: false, label: "FLOWCHART" };
   }
   if (/\bweek[- ]by[- ]week|month[- ]by[- ]month|milestones?|implementation plan\b/.test(lower)) {
@@ -300,7 +463,7 @@ function presentationInstruction(presentation: PresentationIntent) {
     flashcards: " Produce repeated QUESTION / ANSWER pairs, one concept per card.",
     mindmap: " Start with one central topic, then branches and sub-branches using concise labels.",
     exploded: " Break the subject into parts, what each part does, inputs/outputs, and how parts connect.",
-    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node.",
+    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node. Do not output Mermaid/Graphviz source, node IDs such as A/B/C, arrows such as A --> B, or code fences; Relay renders the flow visually itself.",
     timeline: " Use dated or ordered milestones with a short event/outcome for each.",
     roadmap: " Use phases or time periods, with objective, actions, and exit criteria for each.",
     framework: " Use named pillars/components with purpose, inputs, outputs, and relationships.",
@@ -337,7 +500,13 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
     return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
   }
   if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
-    return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text);
+    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
+      return false;
+    }
+    const numberedStages = text.match(/(?:^|\n)\s*\d+[.)]\s+/gm) || [];
+    return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text)
+      || numberedStages.length >= 3
+      || (/\bdecision\s*:/i.test(text) && numberedStages.length >= 2);
   }
   return true;
 }
@@ -362,18 +531,37 @@ function useFastPath(question: string, taskType: string, presentation: Presentat
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const providerCooldownUntil = new Map<string, number>();
+const providerFamilyCooldownUntil = new Map<string, number>();
 
 function providerAvailable(model: string) {
-  return (providerCooldownUntil.get(model) || 0) <= Date.now();
+  const now = Date.now();
+  const provider = providerForModel(model);
+  return (providerCooldownUntil.get(model) || 0) <= now
+    && (providerFamilyCooldownUntil.get(provider) || 0) <= now;
 }
 function coolDownProvider(model: string, ms = 45000) {
   providerCooldownUntil.set(model, Date.now() + ms);
+}
+function coolDownProviderFamily(model: string, ms = 60000) {
+  providerFamilyCooldownUntil.set(providerForModel(model), Date.now() + ms);
 }
 function markProviderHealthy(model: string) {
   providerCooldownUntil.delete(model);
 }
 
 type ChatMessage = { role: string; content: string };
+
+async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const text = await response.text();
+    return { response, text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -385,12 +573,13 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+
 async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("OPENAI_BASE_URL");
-  const apiKey = Netlify.env.get("OPENAI_API_KEY");
+  const baseUrl = envGet("OPENAI_BASE_URL") || "https://api.openai.com";
+  const apiKey = envGet("OPENAI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenAI gateway is unavailable.");
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`,
     {
       method: "POST",
@@ -406,8 +595,6 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`OpenAI ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = json?.choices?.[0]?.message?.content;
@@ -416,8 +603,8 @@ async function callOpenAI(model: string, messages: ChatMessage[], maxTokens: num
 }
 
 async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("ANTHROPIC_BASE_URL");
-  const apiKey = Netlify.env.get("ANTHROPIC_API_KEY");
+  const baseUrl = envGet("ANTHROPIC_BASE_URL") || "https://api.anthropic.com";
+  const apiKey = envGet("ANTHROPIC_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Anthropic gateway is unavailable.");
 
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
@@ -425,7 +612,7 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role, content: m.content }));
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1/messages`,
     {
       method: "POST",
@@ -443,8 +630,6 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`Anthropic ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = (json?.content || [])
@@ -456,8 +641,8 @@ async function callAnthropic(model: string, messages: ChatMessage[], maxTokens: 
 }
 
 async function callGemini(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("GOOGLE_GEMINI_BASE_URL");
-  const apiKey = Netlify.env.get("GEMINI_API_KEY");
+  const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com";
+  const apiKey = envGet("GEMINI_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("Gemini gateway is unavailable.");
 
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
@@ -468,7 +653,7 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
       parts: [{ text: m.content }],
     }));
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
@@ -484,8 +669,6 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`Gemini ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = (json?.candidates?.[0]?.content?.parts || [])
@@ -495,12 +678,72 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
   return answer.trim();
 }
 
+async function callGroq(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  const apiKey = envGet("GROQ_API_KEY");
+  if (!apiKey) throw new Error("Groq gateway is unavailable.");
+
+  const actualModel = model.replace(/^groq:/, "");
+  const { response, text } = await fetchTextWithTimeout(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: actualModel,
+        messages,
+        max_tokens: maxTokens,
+      }),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) throw new Error(`Groq ${response.status}: ${text.slice(0, 220)}`);
+  const json = JSON.parse(text);
+  const answer = json?.choices?.[0]?.message?.content;
+  if (!answer || typeof answer !== "string") throw new Error(`${actualModel} returned an empty response`);
+  return answer.trim();
+}
+
+async function callCloudflareAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  const ai = envGetRaw("AI") as any;
+  if (!ai || typeof ai.run !== "function") throw new Error("Cloudflare Workers AI is unavailable.");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const result = await Promise.race([
+      ai.run(model, {
+        messages,
+        max_tokens: maxTokens,
+      }),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new Error("Cloudflare AI timed out")), { once: true });
+      }),
+    ]) as any;
+
+    const answer =
+      result?.response
+      || result?.result?.response
+      || result?.choices?.[0]?.message?.content
+      || result?.choices?.[0]?.text;
+    if (!answer || typeof answer !== "string") throw new Error(`${model} returned an empty response`);
+    return answer.trim();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cloudflare AI: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
-  const baseUrl = Netlify.env.get("OPENROUTER_BASE_URL");
-  const apiKey = Netlify.env.get("OPENROUTER_API_KEY");
+  const baseUrl = envGet("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1";
+  const apiKey = envGet("OPENROUTER_API_KEY");
   if (!baseUrl || !apiKey) throw new Error("OpenRouter gateway is unavailable.");
 
-  const response = await fetchWithTimeout(
+  const { response, text } = await fetchTextWithTimeout(
     `${baseUrl.replace(/\/$/, "")}/chat/completions`,
     {
       method: "POST",
@@ -516,12 +759,39 @@ async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens:
     },
     timeoutMs,
   );
-
-  const text = await response.text();
   if (!response.ok) throw new Error(`OpenRouter ${response.status}: ${text.slice(0, 220)}`);
   const json = JSON.parse(text);
   const answer = json?.choices?.[0]?.message?.content;
   if (!answer || typeof answer !== "string") throw new Error(`${model} returned an empty response`);
+  return answer.trim();
+}
+
+async function callFreeLlmApiPublic(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  // This is the proven keyless public lane surfaced by FreeLLMAPI. Kilo's free
+  // tier may log prompts/outputs for training, so routing-policy.mjs must block
+  // private, sensitive, high-risk, or fresh/current prompts from this path.
+  const actualModel = model.replace(/^freellmapi:kilo\//, "");
+  const { response, text } = await fetchTextWithTimeout(
+    "https://api.kilo.ai/api/gateway/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "relay-ai-team-public-free-lane",
+      },
+      body: JSON.stringify({
+        model: actualModel,
+        messages,
+        max_tokens: Math.min(maxTokens, 1200),
+        temperature: 0.2,
+      }),
+    },
+    timeoutMs,
+  );
+  if (!response.ok) throw new Error(`FreeLLMAPI public lane ${response.status}: ${text.slice(0, 220)}`);
+  const json = JSON.parse(text);
+  const answer = json?.choices?.[0]?.message?.content;
+  if (!answer || typeof answer !== "string") throw new Error(`${actualModel} returned an empty response`);
   return answer.trim();
 }
 
@@ -531,6 +801,15 @@ async function callModel(
   maxTokens = 1700,
   timeoutMs = 12000,
 ) {
+  if (model.startsWith("freellmapi:")) {
+    return callFreeLlmApiPublic(model, messages, maxTokens, timeoutMs);
+  }
+  if (model.startsWith("groq:")) {
+    return callGroq(model, messages, maxTokens, timeoutMs);
+  }
+  if (model.startsWith("@cf/")) {
+    return callCloudflareAI(model, messages, maxTokens, timeoutMs);
+  }
   if (model.startsWith("claude-")) {
     return callAnthropic(model, messages, maxTokens, timeoutMs);
   }
@@ -609,9 +888,10 @@ export default async (request: Request) => {
           .join(" ");
         const contextualQuestion = recentUserContext ? `${recentUserContext} ${question}` : question;
         const followUp = isFollowUp(question, history);
-        const taskType = followUp && previousTaskType
-          ? previousTaskType
-          : classify(contextualQuestion);
+        const explicitRoute = explicitModelRoute(question);
+        const taskType = explicitRoute.comparison
+          ? "reasoning"
+          : (followUp && previousTaskType ? previousTaskType : classify(contextualQuestion));
         let presentation = detectPresentationIntent(question);
         if (followUp && presentation.format === "default" && previousPresentation) {
           const stickyPresentation = PRESENTATION_PATTERNS.find((item) => item.format === previousPresentation);
@@ -624,19 +904,66 @@ export default async (request: Request) => {
             };
           }
         }
-        const stickyModel = followUp && allowedStickyModel(preferredModel)
+        const routingPolicy = assessRoutingLane({
+          question,
+          contextualQuestion,
+          taskType,
+          history,
+        });
+        const stickyModel = !explicitRoute.explicit && !explicitRoute.comparison && followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
         const routedWorkerModel = workerFor(taskType, contextualQuestion);
-        const workerModel = stickyModel || (presentation.visual ? "gpt-5.6-luna" : routedWorkerModel);
-        const reviewerModel = reviewerFor(workerModel);
+        const usePublicFreePrimary =
+          !explicitRoute.explicit
+          && !explicitRoute.comparison
+          && !followUp
+          && routingPolicy.lane === "public_free";
+        const requestedWorkerModel = explicitRoute.comparison
+          ? GROQ_MODELS.strong
+          : (explicitRoute.model || stickyModel || (usePublicFreePrimary ? PUBLIC_FREE_MODEL : routedWorkerModel));
+        const workerModel = explicitRoute.explicit
+          ? runtimeVariant(requestedWorkerModel)
+          : resolveWorkerModel(requestedWorkerModel);
 
-        emit({ type: "planner", taskType, presentation });
+        if (explicitRoute.explicit && !workerModel) {
+          throw new Error(`Requested ${explicitRoute.family} provider is not configured. Relay will not silently switch providers for an explicit request.`);
+        }
+
+        emit({
+          type: "planner",
+          taskType,
+          presentation,
+          routeReason: explicitRoute.explicit
+            ? "explicit_model"
+            : explicitRoute.comparison
+              ? "multi_model_comparison"
+              : stickyModel
+                ? "follow_up"
+                : usePublicFreePrimary
+                  ? "public_free_lane"
+                  : "task_route",
+          requestedFamily: explicitRoute.family || undefined,
+          routingLane: routingPolicy.lane,
+          routingReason: routingPolicy.reason,
+        });
         await new Promise((resolve) => setTimeout(resolve, 180));
         if (presentation.format !== "default") {
           emit({ type: "presentation", presentation });
         }
-        emit({ type: "worker", taskType, model: workerModel, presentation });
+        emit({
+          type: "worker",
+          taskType,
+          model: workerModel,
+          presentation,
+          routeReason: explicitRoute.explicit
+            ? "explicit_model"
+            : usePublicFreePrimary
+              ? "public_free_lane"
+              : "task_route",
+          requestedFamily: explicitRoute.family || undefined,
+          routingLane: routingPolicy.lane,
+        });
 
         let actualWorkerModel = workerModel;
         const contextNote = disambiguationContext(contextualQuestion);
@@ -666,21 +993,35 @@ export default async (request: Request) => {
         let answer = "";
         const longForm = isLongFormPresentation(question, presentation);
         const primaryModel = actualWorkerModel;
-        const candidates = longForm
-          ? Array.from(new Set([
-              primaryModel,
-              "claude-haiku-4-5",
-              "deepseek/deepseek-v4-flash",
-            ]))
-          : Array.from(new Set([
-              primaryModel,
-              "gpt-5.6-luna",
-              "claude-haiku-4-5",
-              "gemini-3.5-flash-lite",
-              "deepseek/deepseek-v4-flash",
-            ]));
-        let pool = candidates.filter((model, index) => index === 0 || providerAvailable(model));
-        if (!pool.length) pool = candidates;
+        const researchOrDesign = taskType === "research" || taskType === "design";
+        const groqFallback = taskType === "automation" || taskType === "reasoning"
+          ? GROQ_MODELS.reasoning
+          : GROQ_MODELS.fast;
+        const cloudflareFallback = taskType === "automation" || taskType === "reasoning"
+          ? CLOUDFLARE_MODELS.reasoning
+          : CLOUDFLARE_MODELS.fast;
+        const openRouterFallback = researchOrDesign
+          ? FREE_MODELS.researchFallback
+          : (taskType === "automation" || taskType === "reasoning" ? FREE_MODELS.reasoning : FREE_MODELS.general);
+        const candidates = Array.from(new Set([
+          primaryModel,
+          groqFallback,
+          cloudflareFallback,
+          openRouterFallback,
+          ...(primaryModel.startsWith("gemini-") ? [] : ["gemini-3.5-flash-lite"]),
+          ...(primaryModel !== PUBLIC_FREE_MODEL && routingPolicy.publicFreeAllowed ? [PUBLIC_FREE_MODEL] : []),
+        ]));
+        const configuredCandidates = candidates.filter((model) => modelConfigured(model));
+        // Explicit provider intent is strict: never silently answer with another family.
+        // Automatic/task routes retain the bounded multi-provider fallback pool.
+        let pool = explicitRoute.explicit
+          ? [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model))
+          : (configuredCandidates.length ? configuredCandidates : candidates)
+              .filter((model, index) => index === 0 || providerAvailable(model));
+        if (!pool.length && !explicitRoute.explicit) pool = configuredCandidates.length ? configuredCandidates : candidates;
+        if (!pool.length && explicitRoute.explicit) {
+          throw new Error(`Requested ${explicitRoute.family} provider is temporarily unavailable. Relay will not silently switch providers for an explicit request.`);
+        }
 
         const failures: string[] = [];
         let rateLimited = 0;
@@ -689,14 +1030,24 @@ export default async (request: Request) => {
 
         for (let index = 0; index < pool.length; index++) {
           const model = pool[index];
-          if (index > 0) emit({ type: "fallback", model });
+          if (!providerAvailable(model)) continue;
+          if (index > 0) {
+            const emergency = model.startsWith("gemini-") && !researchOrDesign;
+            emit({ type: emergency ? "emergency_fallback" : "fallback", model });
+          }
 
           const maxTokens = longForm
             ? (model.startsWith("gpt-") ? 2000 : 1700)
             : (model.startsWith("gpt-") ? 1200 : 1000);
-          const timeoutMs = longForm
-            ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
-            : (index === 0 ? 10000 : 7000);
+          const isExplicitOpenRouterPrimary =
+            index === 0 && explicitRoute.explicit && providerForModel(model) === "openrouter";
+          const timeoutMs = providerForModel(model) === "freellmapi"
+            ? 9000
+            : isExplicitOpenRouterPrimary
+              ? (longForm ? 12000 : 8000)
+              : longForm
+                ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
+                : (index === 0 ? 10000 : 7000);
 
           try {
             answer = await callModelWithProgress(
@@ -720,14 +1071,53 @@ export default async (request: Request) => {
               coolDownProvider(model, 20000);
               continue;
             }
-            if (/\b429\b|rate.?limit|resource[_ -]?exhausted/i.test(message)) {
+            if (/\b429\b|rate.?limit|resource[_ -]?exhausted|account limited|out of capacity|3040|3036/i.test(message)) {
               rateLimited += 1;
               coolDownProvider(model, 60000);
+              const provider = providerForModel(model);
+              if (provider === "groq") {
+                coolDownProviderFamily(model, 60000);
+                emit({ type: "quota", provider: "groq", model, status: "rate_limited" });
+                continue;
+              }
+              if (provider === "openrouter") {
+                // Free-tier failures count against the shared allowance. Do not
+                // burn more requests by blindly trying every OpenRouter model.
+                coolDownProviderFamily(model, 60000);
+                emit({ type: "quota", provider: "openrouter", model, status: "rate_limited" });
+                continue;
+              }
+              if (provider === "cloudflare") {
+                const daily = /3036|account limited/i.test(message);
+                coolDownProviderFamily(model, daily ? 300000 : 60000);
+                emit({ type: "quota", provider: "cloudflare", model, status: daily ? "daily_allocation" : "capacity" });
+                continue;
+              }
+              if (provider === "freellmapi") {
+                coolDownProviderFamily(model, 120000);
+                emit({ type: "quota", provider: "freellmapi", model, status: "keyless_capacity" });
+                continue;
+              }
               continue;
             }
             if (/\b402\b|insufficient|credits?|quota/i.test(message)) {
               creditLimited += 1;
               coolDownProvider(model, 120000);
+              if (providerForModel(model) === "groq") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "groq", model, status: "credits_or_quota" });
+                continue;
+              }
+              if (providerForModel(model) === "openrouter") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
+                continue;
+              }
+              if (providerForModel(model) === "freellmapi") {
+                coolDownProviderFamily(model, 300000);
+                emit({ type: "quota", provider: "freellmapi", model, status: "free_pool_unavailable" });
+                continue;
+              }
               continue;
             }
             coolDownProvider(model, 30000);
@@ -735,9 +1125,16 @@ export default async (request: Request) => {
         }
 
         if (!answer && longForm && timedOut > 0) {
-          const rescueModel = "deepseek/deepseek-v4-flash";
-          emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
+          const rescueModel = firstConfiguredModel([
+            GROQ_MODELS.fast,
+            GROQ_MODELS.reasoning,
+            CLOUDFLARE_MODELS.fast,
+            CLOUDFLARE_MODELS.reasoning,
+            ...(researchOrDesign ? [] : ["gemini-3.5-flash-lite"]),
+          ].filter(providerAvailable));
+          if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
+            if (!rescueModel) throw new Error("No configured rescue provider.");
             const rescueMessages = [
               {
                 role: "system",
@@ -762,7 +1159,7 @@ export default async (request: Request) => {
             throw new Error("Relay's AI gateway is temporarily saturated. It will recover shortly; retry this prompt in about a minute.");
           }
           if (creditLimited > 0 && creditLimited + timedOut >= pool.length) {
-            throw new Error("Relay's AI gateway credits are unavailable or exhausted. Check Netlify usage/billing.");
+            throw new Error("Relay's configured AI provider credits or quota are unavailable. Check the active provider account.");
           }
           if (timedOut > 0) {
             throw new Error("Relay's providers timed out while generating this longer response. Retry once; Relay will use the compact rescue path.");
@@ -770,7 +1167,8 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
-        const actualReviewerModel = reviewerFor(actualWorkerModel);
+        const reviewerCandidates = resolveReviewerModels(actualWorkerModel);
+        let actualReviewerModel = reviewerCandidates[0] || "";
 
         if (presentation.visual) {
           emit({ type: "render", presentation });
@@ -782,33 +1180,44 @@ export default async (request: Request) => {
 
         if (presentation.format !== "default") {
           emit({ type: "reviewer", model: "local-format-validator" });
-          reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "SKIPPED";
-          if (reviewStatus === "SKIPPED") {
-            emit({ type: "review_skipped", reason: "format_structure_incomplete" });
+          const formatValid = presentationLooksStructured(answer, presentation, question);
+          reviewStatus = formatValid ? "PASS" : "FAIL";
+          if (!formatValid) {
+            review = "FAIL\nReturn the requested visual format as concise structured content. Do not emit Mermaid/Graphviz source or raw diagram code.";
+            emit({ type: "review_failed", reason: "format_structure_incomplete" });
           }
-        } else if (useFastPath(question, taskType, presentation)) {
+        } else if (useFastPath(question, taskType, presentation) && !explicitRoute.explicit) {
           reviewStatus = "FAST_PATH";
           emit({ type: "fast_path", reason: "simple_or_low_risk" });
+        } else if (!actualReviewerModel) {
+          reviewStatus = "SKIPPED";
+          emit({ type: "review_skipped", reason: "no_independent_provider" });
         } else {
           emit({ type: "reviewer", model: actualReviewerModel });
           try {
-          review = await callModel(
-            actualReviewerModel,
-            [
-              {
-                role: "system",
-                content:
-                  "You are an independent reviewer. Evaluate relevance, correctness, completeness, unsupported claims, and presentation-format compliance. The required presentation format is " + presentation.label + ". A requested visual format must not be replaced by ASCII art, generic prose, or a code block. First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
-              },
-              ...history,
-              { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
-            ],
-            220,
-            4500,
-          );
-          reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS")
-            ? "PASS"
-            : "FAIL";
+          const reviewMessages = [
+            {
+              role: "system",
+              content:
+                "You are an independent reviewer. Evaluate relevance, correctness, completeness, unsupported claims, and presentation-format compliance. The required presentation format is " + presentation.label + ". First line must be PASS or FAIL. If FAIL, add one concise correction instruction on the next line.",
+            },
+            { role: "user", content: `CURRENT QUESTION:\n${question}\n\nCANDIDATE ANSWER:\n${answer}` },
+          ];
+          let reviewError: unknown = null;
+          for (const candidate of reviewerCandidates.slice(0, 2)) {
+            actualReviewerModel = candidate;
+            emit({ type: "reviewer", model: actualReviewerModel });
+            try {
+              review = await callModel(actualReviewerModel, reviewMessages, 48, 5000);
+              reviewStatus = review.split(/\r?\n/)[0].trim().toUpperCase().startsWith("PASS") ? "PASS" : "FAIL";
+              reviewError = null;
+              break;
+            } catch (candidateError) {
+              reviewError = candidateError;
+              emit({ type: "reviewer_fallback", model: actualReviewerModel, reason: "timeout_or_provider_error" });
+            }
+          }
+          if (reviewError) throw reviewError;
           } catch (reviewError) {
             console.warn("Reviewer unavailable; returning worker answer", {
               model: actualReviewerModel,
@@ -828,7 +1237,11 @@ export default async (request: Request) => {
                 {
                   role: "system",
                   content:
-                    "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful.",
+                    "Revise the answer using the review feedback. Preserve prior conversation context. Return only the improved final answer. Keep it direct and useful."
+                    + presentationInstruction(presentation)
+                    + (presentation.format === "flowchart"
+                      ? " Do not use ASCII diagram characters, box drawing, Mermaid, Graphviz, node IDs, or arrow syntax. Use numbered steps and short decision bullets only."
+                      : ""),
                 },
                 ...history,
                 { role: "user", content: `CURRENT QUESTION:\n${question}\n\nFIRST ANSWER:\n${answer}\n\nREVIEW:\n${review}` },
@@ -842,6 +1255,10 @@ export default async (request: Request) => {
             });
             reviewStatus = "SKIPPED";
           }
+
+          if (presentation.format !== "default" && reviewStatus !== "SKIPPED") {
+            reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "FAIL";
+          }
         }
 
         emit({
@@ -849,7 +1266,7 @@ export default async (request: Request) => {
           answer,
           review: reviewStatus,
           model: actualWorkerModel,
-          reviewer: actualReviewerModel,
+          reviewer: reviewStatus === "FAST_PATH" || reviewStatus === "SKIPPED" ? "" : actualReviewerModel,
           taskType,
           presentation,
         });
