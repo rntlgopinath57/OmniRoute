@@ -1,4 +1,4 @@
-import { envGet } from "../../relay-runtime/env.mts";
+import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
 
 function classify(text: string) {
   const q = text.toLowerCase();
@@ -17,6 +17,12 @@ const FREE_MODELS = Object.freeze({
   general: "deepseek/deepseek-v4-flash-0731:free",
   researchFallback: "nvidia/nemotron-3-ultra-550b-a55b:free",
   universalFallback: "openrouter/free",
+});
+
+const CLOUDFLARE_MODELS = Object.freeze({
+  fast: "@cf/zai-org/glm-4.7-flash",
+  balanced: "@cf/google/gemma-4-26b-a4b-it",
+  reasoning: "@cf/nvidia/nemotron-3-120b-a12b",
 });
 
 function workerFor(taskType: string, question: string) {
@@ -69,10 +75,11 @@ function allowedStickyModel(model: string) {
 
 function reviewerFor(worker: string) {
   const family = modelFamily(worker);
-  if (family === "qwen") return FREE_MODELS.coding;
-  if (family === "deepseek") return FREE_MODELS.automation;
-  if (family === "gemini") return FREE_MODELS.coding;
-  return FREE_MODELS.reasoning;
+  if (family === "qwen") return CLOUDFLARE_MODELS.fast;
+  if (family === "deepseek") return CLOUDFLARE_MODELS.reasoning;
+  if (family === "gemini") return CLOUDFLARE_MODELS.fast;
+  if (family === "cloudflare") return FREE_MODELS.reasoning;
+  return CLOUDFLARE_MODELS.fast;
 }
 
 const OPENROUTER_ALIASES: Record<string, string> = {
@@ -82,6 +89,7 @@ const OPENROUTER_ALIASES: Record<string, string> = {
 };
 
 function providerForModel(model: string) {
+  if (model.startsWith("@cf/")) return "cloudflare";
   if (model.startsWith("claude-")) return "anthropic";
   if (model.startsWith("gemini-")) return "gemini";
   if (model.includes("/")) return "openrouter";
@@ -90,6 +98,7 @@ function providerForModel(model: string) {
 
 function modelFamily(model: string) {
   const m = String(model || "").toLowerCase();
+  if (m.startsWith("@cf/")) return "cloudflare";
   if (m.includes("gemini") || m.includes("google")) return "gemini";
   if (m.includes("claude") || m.includes("anthropic")) return "claude";
   if (m.includes("deepseek")) return "deepseek";
@@ -101,6 +110,10 @@ function modelFamily(model: string) {
 
 function modelConfigured(model: string) {
   const provider = providerForModel(model);
+  if (provider === "cloudflare") {
+    const ai = envGetRaw("AI") as any;
+    return Boolean(ai && typeof ai.run === "function");
+  }
   if (provider === "anthropic") return Boolean(envGet("ANTHROPIC_API_KEY"));
   if (provider === "gemini") return Boolean(envGet("GEMINI_API_KEY"));
   if (provider === "openrouter") return Boolean(envGet("OPENROUTER_API_KEY"));
@@ -123,10 +136,10 @@ function resolveWorkerModel(requested: string) {
   if (requestedRuntime) return requestedRuntime;
   return firstConfiguredModel([
     FREE_MODELS.general,
+    CLOUDFLARE_MODELS.fast,
     FREE_MODELS.reasoning,
-    FREE_MODELS.researchFallback,
+    CLOUDFLARE_MODELS.reasoning,
     "gemini-3.5-flash-lite",
-    FREE_MODELS.universalFallback,
   ]) || requested;
 }
 
@@ -134,11 +147,10 @@ function resolveReviewerModel(worker: string) {
   const workerFamily = modelFamily(worker);
   const candidates = [
     runtimeVariant(reviewerFor(worker)),
+    CLOUDFLARE_MODELS.fast,
+    CLOUDFLARE_MODELS.reasoning,
     FREE_MODELS.reasoning,
-    FREE_MODELS.coding,
-    FREE_MODELS.researchFallback,
     "gemini-3.5-flash-lite",
-    FREE_MODELS.universalFallback,
   ].filter(Boolean);
   return candidates.find((model) =>
     modelConfigured(model) && modelFamily(model) !== workerFamily
@@ -609,6 +621,38 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
   return answer.trim();
 }
 
+async function callCloudflareAI(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
+  const ai = envGetRaw("AI") as any;
+  if (!ai || typeof ai.run !== "function") throw new Error("Cloudflare Workers AI is unavailable.");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const result = await Promise.race([
+      ai.run(model, {
+        messages,
+        max_tokens: maxTokens,
+      }),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new Error("Cloudflare AI timed out")), { once: true });
+      }),
+    ]) as any;
+
+    const answer =
+      result?.response
+      || result?.result?.response
+      || result?.choices?.[0]?.message?.content
+      || result?.choices?.[0]?.text;
+    if (!answer || typeof answer !== "string") throw new Error(`${model} returned an empty response`);
+    return answer.trim();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cloudflare AI: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callOpenRouter(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
   const baseUrl = envGet("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1";
   const apiKey = envGet("OPENROUTER_API_KEY");
@@ -645,6 +689,9 @@ async function callModel(
   maxTokens = 1700,
   timeoutMs = 12000,
 ) {
+  if (model.startsWith("@cf/")) {
+    return callCloudflareAI(model, messages, maxTokens, timeoutMs);
+  }
   if (model.startsWith("claude-")) {
     return callAnthropic(model, messages, maxTokens, timeoutMs);
   }
@@ -780,13 +827,15 @@ export default async (request: Request) => {
         let answer = "";
         const longForm = isLongFormPresentation(question, presentation);
         const primaryModel = actualWorkerModel;
-        const openRouterFallbacks = taskType === "automation" || taskType === "reasoning"
-          ? [FREE_MODELS.coding, FREE_MODELS.researchFallback, FREE_MODELS.universalFallback]
-          : [FREE_MODELS.reasoning, FREE_MODELS.researchFallback, FREE_MODELS.universalFallback];
         const researchOrDesign = taskType === "research" || taskType === "design";
+        const cloudflareFallback = taskType === "automation" || taskType === "reasoning"
+          ? CLOUDFLARE_MODELS.reasoning
+          : CLOUDFLARE_MODELS.fast;
         const candidates = Array.from(new Set([
           primaryModel,
-          ...(researchOrDesign ? openRouterFallbacks : openRouterFallbacks),
+          cloudflareFallback,
+          ...(researchOrDesign ? [FREE_MODELS.researchFallback] : []),
+          ...(primaryModel.startsWith("gemini-") ? [] : ["gemini-3.5-flash-lite"]),
         ]));
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         let pool = (configuredCandidates.length ? configuredCandidates : candidates)
@@ -800,7 +849,11 @@ export default async (request: Request) => {
 
         for (let index = 0; index < pool.length; index++) {
           const model = pool[index];
-          if (index > 0) emit({ type: "fallback", model });
+          if (!providerAvailable(model)) continue;
+          if (index > 0) {
+            const emergency = model.startsWith("gemini-") && !researchOrDesign;
+            emit({ type: emergency ? "emergency_fallback" : "fallback", model });
+          }
 
           const maxTokens = longForm
             ? (model.startsWith("gpt-") ? 2000 : 1700)
@@ -839,7 +892,7 @@ export default async (request: Request) => {
                 // burn more requests by blindly trying every OpenRouter model.
                 coolDownProviderFamily(model, 60000);
                 emit({ type: "quota", provider: "openrouter", model, status: "rate_limited" });
-                break;
+                continue;
               }
               continue;
             }
@@ -849,8 +902,18 @@ export default async (request: Request) => {
               if (providerForModel(model) === "openrouter") {
                 coolDownProviderFamily(model, 300000);
                 emit({ type: "quota", provider: "openrouter", model, status: "credits_or_quota" });
-                break;
+                continue;
               }
+              continue;
+            }
+            if (providerForModel(model) === "cloudflare" && /\b429\b|account limited|out of capacity|3040|3036/i.test(message)) {
+              coolDownProviderFamily(model, /3036|account limited/i.test(message) ? 300000 : 60000);
+              emit({
+                type: "quota",
+                provider: "cloudflare",
+                model,
+                status: /3036|account limited/i.test(message) ? "daily_allocation" : "capacity",
+              });
               continue;
             }
             coolDownProvider(model, 30000);
@@ -859,10 +922,9 @@ export default async (request: Request) => {
 
         if (!answer && longForm && timedOut > 0) {
           const rescueModel = firstConfiguredModel([
-            FREE_MODELS.coding,
-            FREE_MODELS.reasoning,
-            FREE_MODELS.researchFallback,
-            FREE_MODELS.universalFallback,
+            CLOUDFLARE_MODELS.fast,
+            CLOUDFLARE_MODELS.reasoning,
+            ...(researchOrDesign ? [] : ["gemini-3.5-flash-lite"]),
           ]);
           if (rescueModel) emit({ type: "fallback", model: rescueModel, reason: "compact_rescue" });
           try {
