@@ -67,7 +67,9 @@ jobs:
           assert "resolveReviewerModels" in ask, "Reviewer candidate resolver missing"
           assert "reviewerCandidates.slice(0, 2)" in ask, "Reviewer fallback must be bounded to one alternate"
           assert "reviewer_fallback" in ask, "Reviewer fallback visibility missing"
-          assert "120, 2500" in ask, "Reviewer latency budget regression"
+          assert "48, 5000" in ask, "Reviewer latency budget regression"
+          reviewer_block = ask[ask.index("function resolveReviewerModels"):ask.index("function disambiguationContext")]
+          assert reviewer_block.index("CLOUDFLARE_MODELS.fast") < reviewer_block.index("GROQ_MODELS.fast"), "Local Cloudflare reviewer must be preferred before external Groq"
           assert "Explicit provider intent is strict" in ask, "Explicit provider strictness regression"
           assert "Relay will not silently switch providers for an explicit request." in ask, "Explicit provider failsafe missing"
           assert "let pool = explicitRoute.explicit" in ask, "Explicit provider must use a strict candidate pool"
