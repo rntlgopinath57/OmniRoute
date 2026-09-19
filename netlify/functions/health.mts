@@ -45,6 +45,7 @@ export default async () => {
     anthropic: Boolean(envGet("ANTHROPIC_API_KEY")),
     gemini: Boolean(envGet("GEMINI_API_KEY")),
     openrouter: Boolean(envGet("OPENROUTER_API_KEY")),
+    groq: Boolean(envGet("GROQ_API_KEY")),
     cloudflare: Boolean(ai && typeof ai.run === "function"),
   };
 
@@ -55,6 +56,7 @@ export default async () => {
     claude: providers.anthropic,
     deepseek: providers.openrouter,
     qwen: providers.openrouter,
+    groq: providers.groq,
     cloudflare: providers.cloudflare,
     grok: false,
   };
@@ -69,6 +71,17 @@ export default async () => {
     models,
     limits: {
       openrouter,
+      groq: providers.groq
+        ? {
+            configured: true,
+            independentPool: true,
+            selectedFreeModels: {
+              "openai/gpt-oss-20b": { requestsPerMinute: 30, requestsPerDay: 1000, tokensPerMinute: 8000, tokensPerDay: 200000 },
+              "openai/gpt-oss-120b": { requestsPerMinute: 30, requestsPerDay: 1000, tokensPerMinute: 8000, tokensPerDay: 200000 },
+              "qwen/qwen3.8-27b": { requestsPerMinute: 30, requestsPerDay: 1000, tokensPerMinute: 8000, tokensPerDay: 200000 },
+            },
+          }
+        : { configured: false },
       cloudflare: providers.cloudflare
         ? { configured: true, freeAllocationNeuronsPerDay: 10000, independentPool: true }
         : { configured: false },
