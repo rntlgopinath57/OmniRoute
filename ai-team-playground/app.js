@@ -52,6 +52,7 @@ function friendlyModel(model=''){
 }
 function providerNodeForModel(model=''){
   const m=String(model||'').toLowerCase();
+  if(m.startsWith('groq:'))return'groq';
   if(m.startsWith('@cf/'))return'cloudflare';
   if(m.includes('gemini')||m.includes('google'))return'gemini';
   if(m.includes('claude')||m.includes('anthropic'))return'claude';
@@ -894,6 +895,7 @@ async function initProviderRoster(){
       claude:Boolean(models.claude ?? providers.anthropic),
       deepseek:Boolean(models.deepseek ?? providers.openrouter),
       qwen:Boolean(models.qwen ?? providers.openrouter),
+      groq:Boolean(models.groq ?? providers.groq),
       cloudflare:Boolean(models.cloudflare ?? providers.cloudflare),
       grok:Boolean(models.grok ?? false)
     };
@@ -908,11 +910,13 @@ async function initProviderRoster(){
         if(id==='gemini')small.textContent='READY · Gemini pool';
         else if(id==='openai')small.textContent='READY · OpenAI';
         else if(id==='claude')small.textContent='READY · Anthropic';
+        else if(id==='groq')small.textContent='READY · 1K REQUESTS/DAY';
         else if(id==='cloudflare')small.textContent='READY · 10K NEURONS/DAY';
         else if(openrouterLimit?.freeTier)small.textContent='READY · FREE · 50/DAY SHARED';
         else small.textContent='READY · OpenRouter';
       }else{
-        small.textContent=(id==='deepseek'||id==='qwen'||id==='grok')?'STANDBY · OpenRouter':'STANDBY';
+        if(id==='groq')small.textContent='STANDBY · ADD GROQ KEY';
+        else small.textContent=(id==='deepseek'||id==='qwen'||id==='grok')?'STANDBY · OpenRouter':'STANDBY';
       }
     });
   }catch{}
