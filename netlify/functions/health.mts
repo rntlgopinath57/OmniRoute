@@ -1,4 +1,4 @@
-import { envGet } from "../../relay-runtime/env.mts";
+import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
 
 async function openRouterLimitInfo() {
   const apiKey = envGet("OPENROUTER_API_KEY");
@@ -39,11 +39,13 @@ async function openRouterLimitInfo() {
 }
 
 export default async () => {
+  const ai = envGetRaw("AI") as any;
   const providers = {
     openai: Boolean(envGet("OPENAI_API_KEY")),
     anthropic: Boolean(envGet("ANTHROPIC_API_KEY")),
     gemini: Boolean(envGet("GEMINI_API_KEY")),
     openrouter: Boolean(envGet("OPENROUTER_API_KEY")),
+    cloudflare: Boolean(ai && typeof ai.run === "function"),
   };
 
   const models = {
@@ -53,6 +55,7 @@ export default async () => {
     claude: providers.anthropic,
     deepseek: providers.openrouter,
     qwen: providers.openrouter,
+    cloudflare: providers.cloudflare,
     grok: false,
   };
 
@@ -64,7 +67,12 @@ export default async () => {
     aiGateway: Object.values(models).some(Boolean),
     providers,
     models,
-    limits: { openrouter },
+    limits: {
+      openrouter,
+      cloudflare: providers.cloudflare
+        ? { configured: true, freeAllocationNeuronsPerDay: 10000, independentPool: true }
+        : { configured: false },
+    },
   });
 };
 
