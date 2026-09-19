@@ -86,12 +86,22 @@ jobs:
           put_secret () {
             key="$1"
             value="$2"
-            if [ -n "$value" ]; then
-              printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-ai-team-preview >/dev/null
-              echo "Synced $key"
-            else
+            if [ -z "$value" ]; then
               echo "Skipped $key (not configured in GitHub Actions secrets)"
+              return 0
             fi
+
+            for attempt in 1 2 3; do
+              if printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-ai-team-preview >/dev/null; then
+                echo "Synced $key"
+                return 0
+              fi
+              echo "::warning::Secret sync for $key failed on attempt $attempt"
+              sleep $((attempt * 2))
+            done
+
+            echo "::warning::Could not refresh $key after 3 attempts; continuing to health verification because existing Worker secrets are preserved across deploys."
+            return 0
           }
 
           put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
@@ -113,6 +123,12 @@ jobs:
             if body="$(curl --fail --show-error --silent "$url")"; then
               echo "$body"
               echo "$body" | grep -q '"cloudflare":true'
+              if [ -n "$GROQ_API_KEY" ]; then
+                echo "$body" | grep -q '"groq":true' || {
+                  echo "Groq key exists in GitHub but is not active in the Worker."
+                  exit 1
+                }
+              fi
               exit 0
             fi
             echo "Health check attempt $attempt failed; waiting for Worker propagation..."
