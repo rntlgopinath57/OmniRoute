@@ -8,11 +8,6 @@ on:
         required: true
         default: main
         type: string
-  push:
-    branches:
-      - release/v3.8.51
-    paths:
-      - '.github/workflows/ai-team-bharosa-controlled.yml'
 
 permissions:
   contents: read
@@ -41,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rntlgopinath57/safeqr
-          ref: ${{ inputs.target_ref || 'main' }}
+          ref: ${{ inputs.target_ref }}
           path: target-project
           token: ${{ secrets.BHAROSA_READ_TOKEN }}
           persist-credentials: false
@@ -54,5 +49,5 @@ jobs:
       - name: Run controlled Bharosa project audit
         env:
           AI_TEAM_TARGET_ROOT: target-project
-          AI_TEAM_TARGET_BRANCH: ${{ inputs.target_ref || 'main' }}
+          AI_TEAM_TARGET_BRANCH: ${{ inputs.target_ref }}
         run: node ai-team/automation/run.mjs bharosa-readonly-baseline
