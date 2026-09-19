@@ -22,10 +22,6 @@ on:
       - open-sse/config/providers/**
       - scripts/release/radar-export.mjs
       - .github/workflows/radar-export.yml
-  schedule:
-    # Diário 03:17 UTC — antes do `radar-feed.timer` do servidor (04:23 UTC), para o ciclo
-    # do dia já enxergar o export do dia; também mantém geradoEm/proveniência frescos.
-    - cron: "17 3 * * *"
 
 permissions:
   contents: read
