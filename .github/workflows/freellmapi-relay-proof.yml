@@ -1,0 +1,150 @@
+name: FreeLLMAPI Relay Proof
+
+on:
+  push:
+    branches:
+      - probe/freellmapi-relay-20260919
+    paths:
+      - ".github/workflows/freellmapi-relay-proof.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: freellmapi-relay-proof
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    steps:
+      - name: Run isolated FreeLLMAPI proof with existing Relay keys
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY' > /tmp/freellmapi-config.json
+          import json, os
+          keys=[]
+          for platform, env_name in [
+              ("groq","GROQ_API_KEY"),
+              ("google","GEMINI_API_KEY"),
+              ("openrouter","OPENROUTER_API_KEY"),
+          ]:
+              value=os.getenv(env_name,"").strip()
+              if value:
+                  keys.append({"platform":platform,"key":value,"label":"relay-existing","enabled":True})
+          if not keys:
+              raise SystemExit("No existing Relay provider key is available to the proof")
+          print(json.dumps({"keys":keys,"routing":{"strategy":"balanced"}}, separators=(",",":")))
+          PY
+
+          KEY_COUNT="$(python - <<'PY'
+          import json
+          print(len(json.load(open("/tmp/freellmapi-config.json"))["keys"]))
+          PY
+          )"
+          echo "Existing Relay provider keys exposed to isolated proof: $KEY_COUNT"
+          test "$KEY_COUNT" -ge 1
+
+          ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          docker pull ghcr.io/tashfeenahmed/freellmapi:latest >/dev/null
+          docker run -d --name freellmapi-relay-proof             -p 127.0.0.1:3001:3001             -e NODE_ENV=production             -e PORT=3001             -e ENCRYPTION_KEY="$ENCRYPTION_KEY"             -e FREEAPI_CONFIG_JSON="$(cat /tmp/freellmapi-config.json)"             ghcr.io/tashfeenahmed/freellmapi:latest >/dev/null
+
+          cleanup() { docker rm -f freellmapi-relay-proof >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          for i in $(seq 1 45); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3001/api/ping >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 45 ]; then
+              echo "FreeLLMAPI did not become reachable"
+              docker logs --tail 80 freellmapi-relay-proof || true
+              exit 10
+            fi
+            sleep 2
+          done
+          echo "FreeLLMAPI boot: PASS"
+
+          SETUP_CODE="$(docker logs freellmapi-relay-proof 2>&1 | sed -n 's/.*First-run setup code: //p' | tail -1 | tr -d '\r')"
+          test -n "$SETUP_CODE" || { echo "Setup code missing"; exit 11; }
+
+          SETUP_JSON="$(python - "$SETUP_CODE" <<'PY'
+          import json,sys
+          print(json.dumps({
+              "email":"relay-proof@example.com",
+              "password":"relay-proof-2026",
+              "setupCode":sys.argv[1],
+          }))
+          PY
+          )"
+          SETUP_RESPONSE="$(curl -fsS --max-time 10             -H 'Content-Type: application/json'             -d "$SETUP_JSON"             http://127.0.0.1:3001/api/auth/setup)"
+          DASH_TOKEN="$(printf '%s' "$SETUP_RESPONSE" | python -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
+
+          API_RESPONSE="$(curl -fsS --max-time 10             -H "Authorization: Bearer $DASH_TOKEN"             http://127.0.0.1:3001/api/settings/api-key)"
+          UNIFIED_KEY="$(printf '%s' "$API_RESPONSE" | python -c 'import json,sys; print(json.load(sys.stdin)["apiKey"])')"
+          test -n "$UNIFIED_KEY"
+          echo "Unified API key minted: PASS"
+
+          PROVIDERS="$(curl -fsS --max-time 10             -H "Authorization: Bearer $UNIFIED_KEY"             http://127.0.0.1:3001/v1/providers)"
+          printf '%s' "$PROVIDERS" | python - <<'PY'
+          import json,sys
+          d=json.load(sys.stdin)
+          rows=d.get("providers", d if isinstance(d,list) else [])
+          safe=[]
+          for x in rows:
+              if not isinstance(x,dict): continue
+              safe.append({
+                  "platform":x.get("platform"),
+                  "status":x.get("status"),
+                  "keys":x.get("keys"),
+              })
+          print("Provider health:", safe)
+          if not safe:
+              raise SystemExit("No provider health rows returned")
+          PY
+
+          MODELS="$(curl -fsS --max-time 15             -H "Authorization: Bearer $UNIFIED_KEY"             'http://127.0.0.1:3001/v1/models?available=true')"
+          printf '%s' "$MODELS" | python - <<'PY'
+          import json,sys
+          d=json.load(sys.stdin)
+          rows=d.get("data",[])
+          print("Available models:", len(rows))
+          if not rows:
+              raise SystemExit("No available models from configured Relay keys")
+          print("Sample model ids:", [x.get("id") for x in rows[:5]])
+          PY
+
+          call_model() {
+            local model="$1"
+            local expected="$2"
+            local body="/tmp/body-$expected.json"
+            local headers="/tmp/headers-$expected.txt"
+            curl -fsS --max-time 35 -D "$headers" -o "$body"               -H "Authorization: Bearer $UNIFIED_KEY"               -H 'Content-Type: application/json'               -d "{"model":"$model","messages":[{"role":"user","content":"Reply with exactly $expected and nothing else."}],"max_tokens":32,"temperature":0}"               http://127.0.0.1:3001/v1/chat/completions
+
+            python - "$body" "$expected" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          expected=sys.argv[2]
+          text=((d.get("choices") or [{}])[0].get("message") or {}).get("content","").strip()
+          print("Response:", text[:120])
+          if expected not in text:
+              raise SystemExit("Unexpected model response")
+          PY
+            ROUTED="$(awk 'BEGIN{IGNORECASE=1} /^x-routed-via:/{sub(/^[^:]+:[[:space:]]*/,""); gsub("\r",""); print; exit}' "$headers")"
+            test -n "$ROUTED" || { echo "Missing X-Routed-Via"; exit 20; }
+            echo "$model routed via: $ROUTED"
+          }
+
+          call_model "auto:fast" "FREELLMAPI_RELAY_OK"
+          call_model "auto:reliable" "FREELLMAPI_SECOND_OK"
+
+          echo "FREELLMAPI_PROOF_GREEN"
+          echo "No new provider keys created; existing Relay secrets only."
