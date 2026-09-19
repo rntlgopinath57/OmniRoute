@@ -4,6 +4,10 @@ export function setRuntimeEnv(values: Record<string, unknown> | undefined | null
   runtimeEnv = values || {};
 }
 
+export function envGetRaw(name: string): unknown {
+  return runtimeEnv?.[name];
+}
+
 export function envGet(name: string): string {
   const runtimeValue = runtimeEnv?.[name];
   if (runtimeValue !== undefined && runtimeValue !== null && runtimeValue !== "") {
