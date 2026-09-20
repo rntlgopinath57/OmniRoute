@@ -156,7 +156,7 @@ jobs:
           echo "Live keyless FreeLLMAPI lane: PASS"
 
       - name: Manual live Relay research smoke
-        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.GEMINI_API_KEY != ''
+        if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.GEMINI_API_KEY != ''
         run: |
           url="${{ steps.deploy.outputs.url }}/api/ask"
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"Research task: reply with exactly CLOUDFLARE_RELAY_OK and nothing else.","history":[]}'             "$url")"
@@ -605,7 +605,7 @@ jobs:
           echo "$response" | grep -q '"serverGeminiConfigured":true'
 
       - name: Manual live flowchart routing contract
-        if: steps.deploy.outputs.url != '' && github.event_name == 'workflow_dispatch' && env.OPENROUTER_API_KEY != ''
+        if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.OPENROUTER_API_KEY != ''
         run: |
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"/flowchart Show a simple three-step release process: validate, deploy, verify.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
           echo "$response"
