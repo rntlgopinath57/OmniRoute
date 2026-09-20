@@ -13,6 +13,7 @@ function classify(text: string) {
 
 const FREE_MODELS = Object.freeze({
   coding: "deepseek/deepseek-v4-flash-0731:free",
+  deepseekFallback: "deepseek/deepseek-r1:free",
   automation: "qwen/qwen3.8-27b:free",
   reasoning: "qwen/qwen3.8-27b:free",
   general: "deepseek/deepseek-v4-flash-0731:free",
@@ -1015,7 +1016,11 @@ export default async (request: Request) => {
         // Explicit provider intent is strict: never silently answer with another family.
         // Automatic/task routes retain the bounded multi-provider fallback pool.
         let pool = explicitRoute.explicit
-          ? [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model))
+          ? (explicitRoute.family === "deepseek"
+              ? [primaryModel, FREE_MODELS.deepseekFallback]
+                  .filter((model, index, items) => items.indexOf(model) === index)
+                  .filter((model) => modelConfigured(model) && providerAvailable(model))
+              : [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model)))
           : (configuredCandidates.length ? configuredCandidates : candidates)
               .filter((model, index) => index === 0 || providerAvailable(model));
         if (!pool.length && !explicitRoute.explicit) pool = configuredCandidates.length ? configuredCandidates : candidates;
@@ -1040,7 +1045,7 @@ export default async (request: Request) => {
             ? (model.startsWith("gpt-") ? 2000 : 1700)
             : (model.startsWith("gpt-") ? 1200 : 1000);
           const isExplicitOpenRouterPrimary =
-            index === 0 && explicitRoute.explicit && providerForModel(model) === "openrouter";
+            explicitRoute.explicit && providerForModel(model) === "openrouter";
           const timeoutMs = providerForModel(model) === "freellmapi"
             ? 9000
             : isExplicitOpenRouterPrimary
