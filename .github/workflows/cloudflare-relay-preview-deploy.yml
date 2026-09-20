@@ -193,13 +193,15 @@ jobs:
           echo "DeepSeek explicit route elapsed: ${elapsed}s"
           echo "$deepseek" | grep -q '"type":"worker"'
           echo "$deepseek" | grep -q '"requestedFamily":"deepseek"'
+          echo "$deepseek" | grep -q '"type":"done"'
+          ! echo "$deepseek" | grep -q '"type":"error"'
           test "$elapsed" -lt 25 || { echo "DeepSeek route exceeded 25s"; exit 1; }
           echo "DeepSeek/comparison live latency smoke: PASS"
 
       - name: Opt-in explicit-model affinity smoke
         if: steps.deploy.outputs.url != '' && github.event_name == 'push' && contains(github.event.head_commit.message, '[affinity-smoke]') && env.GEMINI_API_KEY != ''
         run: |
-          response="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is gemini famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          response="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"Use Gemini only: explain in one sentence what Gemini is famous for.","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
           echo "$response"
           echo "$response" | grep -q '"type":"worker"'
           echo "$response" | grep -q '"model":"gemini-3.5-flash-lite"'
