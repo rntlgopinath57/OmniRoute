@@ -2,6 +2,8 @@ name: Relay Cloudflare Preview Deploy
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "35 2 * * *" # 08:05 IST daily runtime verification
   push:
     branches:
       - infra/cloudflare-relay
