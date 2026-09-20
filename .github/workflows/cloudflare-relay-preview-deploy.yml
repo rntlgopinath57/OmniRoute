@@ -143,10 +143,17 @@ jobs:
       - name: Verify live keyless FreeLLMAPI lane
         if: steps.deploy.outputs.url != ''
         run: |
-          response="$(curl --fail --show-error --silent --max-time 25 \
-            -H 'Content-Type: application/json' \
-            -d '{"question":"Write a friendly two-sentence greeting for a new user.","history":[]}' \
-            "${{ steps.deploy.outputs.url }}/api/ask")"
+          response=""
+          for attempt in 1 2 3; do
+            response="$(curl --fail --show-error --silent --max-time 25 \
+              -H 'Content-Type: application/json' \
+              -d '{"question":"Write a friendly two-sentence greeting for a new user.","history":[]}' \
+              "${{ steps.deploy.outputs.url }}/api/ask")"
+            if printf '%s\n' "$response" | grep -Eq '"type":"done".*"model":"freellmapi:'; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep "$((attempt * 5))"; fi
+          done
           printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
           cat /tmp/relay-freellmapi-smoke.ndjson
           grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
