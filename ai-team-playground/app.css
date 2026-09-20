@@ -3896,3 +3896,32 @@ header{
     bottom:78px!important;
   }
 }
+
+
+/* Mobile action dock containment v36 */
+@media(max-width:1199px){
+  .viewportToolDock,.toolDock.viewportToolDock{
+    left:12px!important;
+    right:12px!important;
+    transform:none!important;
+    width:auto!important;
+    max-width:none!important;
+    bottom:82px!important;
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    gap:6px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:4px!important;
+    box-sizing:border-box!important;
+    -webkit-overflow-scrolling:touch;
+  }
+  .viewportToolDock .toolAction,.toolDock.viewportToolDock .toolAction{
+    flex:1 0 auto!important;
+    min-width:0!important;
+    white-space:nowrap!important;
+    position:static!important;
+    transform:none!important;
+  }
+  #answer .thread{padding-bottom:170px!important}
+}
