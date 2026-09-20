@@ -1160,6 +1160,13 @@ export default async (request: Request) => {
 
         if (!answer) {
           console.error("All Relay providers failed", { failures });
+          if (explicitRoute.explicit && failures.length) {
+            emit({
+              type: "provider_diagnostic",
+              family: explicitRoute.family,
+              failures: failures.map((failure) => failure.slice(0, 280)),
+            });
+          }
           if (rateLimited > 0 && rateLimited + timedOut >= pool.length) {
             throw new Error("Relay's AI gateway is temporarily saturated. It will recover shortly; retry this prompt in about a minute.");
           }
