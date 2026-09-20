@@ -187,7 +187,7 @@ jobs:
           test "$elapsed" -lt 25 || { echo "Comparison route exceeded 25s"; exit 1; }
 
           start="$(date +%s)"
-          deepseek="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"what is deepseek famous for","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
+          deepseek="$(curl --fail --show-error --silent -H 'Content-Type: application/json' -d '{"question":"Use DeepSeek only: explain in one sentence what DeepSeek is famous for.","history":[]}' "${{ steps.deploy.outputs.url }}/api/ask")"
           elapsed="$(( $(date +%s) - start ))"
           echo "$deepseek"
           echo "DeepSeek explicit route elapsed: ${elapsed}s"
