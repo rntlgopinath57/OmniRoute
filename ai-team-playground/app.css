@@ -3925,3 +3925,34 @@ header{
   }
   #answer .thread{padding-bottom:170px!important}
 }
+
+
+/* Mobile compact media actions v37 */
+@media(max-width:1199px){
+  .viewportToolDock,.toolDock.viewportToolDock{
+    left:12px!important;
+    right:12px!important;
+    bottom:82px!important;
+    transform:none!important;
+    width:auto!important;
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:6px!important;
+    overflow:visible!important;
+    padding:0!important;
+  }
+  .viewportToolDock .toolAction,.toolDock.viewportToolDock .toolAction{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    padding:9px 5px!important;
+    font-size:8px!important;
+    line-height:1.1!important;
+    letter-spacing:.10em!important;
+    white-space:normal!important;
+    text-align:center!important;
+    position:static!important;
+    transform:none!important;
+  }
+  #answer .thread{padding-bottom:158px!important}
+}
