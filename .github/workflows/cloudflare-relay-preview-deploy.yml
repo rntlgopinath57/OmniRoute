@@ -193,7 +193,10 @@ jobs:
           echo "DeepSeek explicit route elapsed: ${elapsed}s"
           echo "$deepseek" | grep -q '"type":"worker"'
           echo "$deepseek" | grep -q '"requestedFamily":"deepseek"'
-          echo "$deepseek" | grep -q '"type":"done"'
+          if echo "$deepseek" | grep -q '"type":"fallback"'; then
+            echo "$deepseek" | grep -q '"model":"deepseek/deepseek-r1:free"'
+          fi
+          echo "$deepseek" | grep -Eq '"type":"done".*"model":"deepseek/'
           ! echo "$deepseek" | grep -q '"type":"error"'
           test "$elapsed" -lt 25 || { echo "DeepSeek route exceeded 25s"; exit 1; }
           echo "DeepSeek/comparison live latency smoke: PASS"
