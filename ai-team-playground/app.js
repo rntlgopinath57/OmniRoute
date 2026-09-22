@@ -1,3 +1,4 @@
+document.body.dataset.animationLab='fusion';
 const POS={
   // Full execution graph used only by View run.
   you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
@@ -151,10 +152,15 @@ function setState(text,kind=''){
 }
 function setMobileRunStage(stage,label=''){
   if(!mobileRunLane)return;
+  const order=['you','planner','router','model','reviewer'];
+  const current=Math.max(0,order.indexOf(stage));
   mobileRunLane.querySelectorAll('[data-mobile-stage]').forEach(el=>{
-    el.classList.toggle('active',el.dataset.mobileStage===stage);
+    const idx=order.indexOf(el.dataset.mobileStage);
+    el.classList.toggle('active',idx===current);
+    el.classList.toggle('completed',idx>=0&&idx<current);
     if(stage==='model'&&el.dataset.mobileStage==='model'&&label)el.textContent=label.toUpperCase().slice(0,10);
   });
+  mobileRunLane.dataset.stage=stage;
 }
 function setFlowEdge(edge){
   for(const existing of activeEdges) completedEdges.add(existing);
@@ -241,7 +247,7 @@ function animateAmbientFlight(fromId,toId){
   flight.style.top=y1+'px';
   flight.style.width=Math.max(24,distance)+'px';
   flight.style.transform=`rotate(${angle}deg)`;
-  flight.innerHTML='<span class="flightLine"></span><i class="flightPacket"></i><b class="flightTail"></b>';
+  flight.innerHTML='<span class="flightLine"></span><i class="flightPacket"></i><i class="flightSpark s1"></i><i class="flightSpark s2"></i><i class="flightSpark s3"></i><b class="flightTail"></b>';
   handoffFx.appendChild(flight);
 
   setTimeout(()=>{
