@@ -1109,7 +1109,7 @@ export default async (request: Request) => {
           const timeoutMs = providerForModel(model) === "freellmapi"
             ? 9000
             : isNamedDeepSeekCloudflare
-              ? (longForm ? 42000 : 36000)
+              ? (longForm ? 36000 : 28000)
               : isExplicitOpenRouterPrimary
                 ? (longForm ? 12000 : 8000)
               : longForm
