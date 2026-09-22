@@ -22,6 +22,7 @@ const FREE_MODELS = Object.freeze({
 });
 
 const DEEPSEEK_FREE_MODELS = Object.freeze([
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
   FREE_MODELS.coding,
   "deepseek/deepseek-v4-flash:free",
   "deepseek/deepseek-chat-v3-0324:free",
