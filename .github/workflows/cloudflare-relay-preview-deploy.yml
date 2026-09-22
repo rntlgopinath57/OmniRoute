@@ -173,7 +173,7 @@ jobs:
       - name: Verify natural named-model affinity
         if: steps.deploy.outputs.url != ''
         run: |
-          response="$(curl --fail --show-error --silent --max-time 30 \
+          response="$(curl --fail --show-error --silent --max-time 45 \
             -H 'Content-Type: application/json' \
             -d '{"question":"what is deepseek famous for","history":[]}' \
             "${{ steps.deploy.outputs.url }}/api/ask")"
@@ -181,8 +181,11 @@ jobs:
           cat /tmp/relay-deepseek-affinity.ndjson
           grep -Eq '"type":"planner".*"routeReason":"explicit_model".*"requestedFamily":"deepseek"' /tmp/relay-deepseek-affinity.ndjson
           grep -Eq '"type":"worker".*"model":"deepseek/' /tmp/relay-deepseek-affinity.ndjson
-          ! grep -Eq '"type":"worker".*"model":"groq:' /tmp/relay-deepseek-affinity.ndjson
-          echo "Natural DeepSeek affinity: PASS — Groq is not the worker route"
+          grep -Eq '"type":"worker_selected".*"model":"(@cf/)?deepseek' /tmp/relay-deepseek-affinity.ndjson
+          grep -Eq '"type":"done".*"model":"(@cf/)?deepseek' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -q '"type":"error"' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -Eq '"type":"worker_selected".*"model":"groq:' /tmp/relay-deepseek-affinity.ndjson
+          echo "Natural DeepSeek affinity: PASS — DeepSeek actually completed the answer"
 
       - name: Manual live Relay research smoke
         if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.GEMINI_API_KEY != ''
