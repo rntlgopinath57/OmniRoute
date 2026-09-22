@@ -685,3 +685,5 @@ jobs:
             echo "- Netlify security headers preserved on Cloudflare"
             echo "- Provider coverage is reported by /api/health; unavailable providers remain disabled rather than silently assumed"
           } >> "$GITHUB_STEP_SUMMARY"
+
+# animation lab preview validation trigger: energy v2
