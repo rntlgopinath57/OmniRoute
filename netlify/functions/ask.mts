@@ -558,6 +558,12 @@ function markProviderHealthy(model: string) {
 
 type ChatMessage = { role: string; content: string };
 
+function cleanVisibleAnswer(text: string) {
+  return String(text || "")
+    .replace(/<think>[\s\S]*?<\/think>\s*/gi, "")
+    .trim();
+}
+
 async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -1191,6 +1197,8 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
+        answer = cleanVisibleAnswer(answer);
+
         const reviewerCandidates = explicitRoute.explicit
           ? [
               "gemini-3.5-flash-lite",
@@ -1285,6 +1293,7 @@ export default async (request: Request) => {
               1200,
               8000,
             );
+            answer = cleanVisibleAnswer(answer);
           } catch (retryError) {
             console.warn("Refinement unavailable; returning first worker answer", {
               error: retryError instanceof Error ? retryError.message : String(retryError),
