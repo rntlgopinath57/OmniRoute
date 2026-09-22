@@ -330,8 +330,8 @@ jobs:
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=37' in html
-          assert './app.js?v=45' in html
+          assert './app.css?v=41' in html
+          assert './app.js?v=49' in html
           print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
 
       - name: Browser-rendered Relay UI smoke
@@ -435,7 +435,7 @@ jobs:
                     JSON.stringify({ type:'planner' }),
                     JSON.stringify({ type:'worker', model:'groq:qwen/qwen3.8-27b', taskType:'reasoning' }),
                     JSON.stringify({ type:'reviewer', model:'@cf/nvidia/nemotron-3-120b-a12b' }),
-                    JSON.stringify({ type:'done', model:'groq:qwen/qwen3.8-27b', answer:'UI smoke complete.' }),
+                    JSON.stringify({ type:'done', model:'groq:qwen/qwen3.8-27b', answer:'## UI smoke\n- **bold** item\n- [Docs](https://example.com)\n\n`code`' }),
                   ].join('\n');
 
                   send('Fetch.fulfillRequest', {
@@ -556,6 +556,117 @@ jobs:
             fs.writeFileSync('relay-ui-smoke.png', Buffer.from(shot.data, 'base64'));
             console.log('BROWSER_RENDERED_UI PASS');
 
+            await send('Emulation.setDeviceMetricsOverride', {
+              width: 390,
+              height: 844,
+              deviceScaleFactor: 2,
+              mobile: true,
+            });
+            const mobileUrl = process.env.RELAY_URL + '/?mobile_ui_smoke=' + Date.now();
+            const mobileLoaded = waitEvent('Page.loadEventFired', 30000);
+            await send('Page.navigate', { url: mobileUrl });
+            await mobileLoaded;
+            await sleep(1000);
+
+            const mobileInitial = await evaluate(`(() => {
+              const composer=document.querySelector('.followup');
+              const tools=document.querySelector('#toolDock');
+              const lane=document.querySelector('#mobileRunLane');
+              const c=composer?.getBoundingClientRect();
+              const t=tools?.getBoundingClientRect();
+              return {
+                viewport:{width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth},
+                composer:c&&{top:c.top,bottom:c.bottom,left:c.left,right:c.right,width:c.width},
+                tools:t&&{top:t.top,bottom:t.bottom,left:t.left,right:t.right,width:t.width},
+                laneDisplay:lane?getComputedStyle(lane).display:'missing',
+                inputFont:parseFloat(getComputedStyle(document.querySelector('#followQ')).fontSize||'0'),
+                runOpen:document.querySelector('#workspace')?.classList.contains('show-run'),
+              };
+            })()`);
+            console.log('MOBILE_INITIAL', JSON.stringify(mobileInitial));
+            if (mobileInitial.viewport.scrollWidth > mobileInitial.viewport.width + 1) {
+              throw new Error('Mobile horizontal overflow: '+JSON.stringify(mobileInitial));
+            }
+            if (!mobileInitial.composer || mobileInitial.composer.left < 0 || mobileInitial.composer.right > mobileInitial.viewport.width + 1 || mobileInitial.composer.bottom > mobileInitial.viewport.height + 1) {
+              throw new Error('Mobile composer outside viewport: '+JSON.stringify(mobileInitial));
+            }
+            if (!mobileInitial.tools || mobileInitial.tools.left < 0 || mobileInitial.tools.right > mobileInitial.viewport.width + 1 || mobileInitial.tools.bottom > mobileInitial.composer.top + 2) {
+              throw new Error('Mobile tools overlap composer or overflow: '+JSON.stringify(mobileInitial));
+            }
+            if (mobileInitial.laneDisplay === 'none' || mobileInitial.laneDisplay === 'missing') {
+              throw new Error('Mobile execution lane is not visible.');
+            }
+            if (mobileInitial.inputFont < 16) {
+              throw new Error('Mobile input font risks iOS zoom: '+mobileInitial.inputFont);
+            }
+            if (mobileInitial.runOpen) throw new Error('Mobile run graph must start closed.');
+
+            await evaluate(`(() => {
+              const input=document.querySelector('#followQ');
+              input.focus();
+              input.value='Explain this mobile smoke.';
+              input.dispatchEvent(new Event('input',{bubbles:true}));
+              document.querySelector('#followGo').click();
+              return true;
+            })()`);
+
+            let mobileDone=null;
+            const mobileDeadline=Date.now()+10000;
+            while(Date.now()<mobileDeadline){
+              mobileDone=await evaluate(`(() => {
+                const last=document.querySelector('.messageRow.assistant:last-of-type .messageText');
+                const lane=[...document.querySelectorAll('#mobileRunLane [data-mobile-stage]')].map(x=>({stage:x.dataset.mobileStage,active:x.classList.contains('active'),completed:x.classList.contains('completed')}));
+                return {
+                  text:last?.textContent||'',
+                  heading:!!last?.querySelector('h2,h3'),
+                  strong:!!last?.querySelector('strong'),
+                  link:!!last?.querySelector('a[href^="https://example.com"]'),
+                  code:!!last?.querySelector('code'),
+                  rawBold:(last?.textContent||'').includes('**'),
+                  lane,
+                };
+              })()`);
+              if(mobileDone?.text.includes('UI smoke')&&mobileDone?.heading)break;
+              await sleep(80);
+            }
+            console.log('MOBILE_DONE', JSON.stringify(mobileDone));
+            if(!mobileDone?.heading||!mobileDone?.strong||!mobileDone?.link||!mobileDone?.code||mobileDone?.rawBold){
+              throw new Error('Safe Markdown rendering regression: '+JSON.stringify(mobileDone));
+            }
+            if(!mobileDone.lane.every(x=>x.completed)){
+              throw new Error('Mobile execution lane did not complete: '+JSON.stringify(mobileDone.lane));
+            }
+
+            await evaluate(`document.querySelector('#runToggle').click()`);
+            await sleep(250);
+            const runView=await evaluate(`(() => {
+              const workspace=document.querySelector('#workspace');
+              const canvas=document.querySelector('#canvas');
+              const thread=document.querySelector('#thread');
+              const strip=document.querySelector('#runStrip');
+              const toggle=document.querySelector('#runToggle');
+              const s=strip?.getBoundingClientRect();
+              const b=toggle?.getBoundingClientRect();
+              return {
+                open:workspace?.classList.contains('show-run'),
+                canvasZ:Number(getComputedStyle(canvas).zIndex||0),
+                threadVisibility:getComputedStyle(thread).visibility,
+                strip:s&&{top:s.top,bottom:s.bottom,left:s.left,right:s.right},
+                toggle:b&&{top:b.top,bottom:b.bottom,left:b.left,right:b.right},
+              };
+            })()`);
+            console.log('MOBILE_RUN_VIEW', JSON.stringify(runView));
+            if(!runView.open||runView.canvasZ<100||runView.threadVisibility!=='hidden'){
+              throw new Error('Mobile View Run layering regression: '+JSON.stringify(runView));
+            }
+            if(!runView.toggle||runView.toggle.left<0||runView.toggle.right>390||runView.toggle.top<0||runView.toggle.bottom>844){
+              throw new Error('Mobile View Run toggle is inaccessible: '+JSON.stringify(runView));
+            }
+
+            const mobileShot = await send('Page.captureScreenshot', { format:'png', fromSurface:true });
+            fs.writeFileSync('relay-ui-mobile-smoke.png', Buffer.from(mobileShot.data, 'base64'));
+            console.log('MOBILE_RENDERED_UI PASS');
+
             ws.close();
           })().catch(err => {
             console.error(err);
@@ -568,7 +679,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: relay-ui-smoke
-          path: relay-ui-smoke.png
+          path: |
+            relay-ui-smoke.png
+            relay-ui-mobile-smoke.png
           if-no-files-found: ignore
 
       - name: Verify real provider roster
@@ -581,6 +694,24 @@ jobs:
           grep -q 'function providerNodeForModel' ai-team-playground/app.js
           grep -q 'function initProviderRoster' ai-team-playground/app.js
           grep -q 'Real provider roster v31' ai-team-playground/app.css
+
+      - name: Verify response rendering and mobile lane contract
+        shell: python
+        run: |
+          from pathlib import Path
+          js = Path("ai-team-playground/app.js").read_text(encoding="utf-8")
+          css = Path("ai-team-playground/app.css").read_text(encoding="utf-8")
+          html = Path("ai-team-playground/index.html").read_text(encoding="utf-8")
+          assert 'function appendInlineMarkdown' in js, "Safe inline Markdown renderer missing"
+          assert "body.classList.add('structuredMessage')" in js, "Default answers are not structured"
+          assert "if(p.format==='default'){body.textContent=text;return}" not in js, "Raw Markdown regression returned"
+          assert "function executionLabel" in js and "function transportForModel" in js, "Provider transport telemetry missing"
+          assert "model " in js and "total " in js, "Execution timing telemetry missing"
+          assert 'id="mobileRunLane"' in html, "Mobile execution lane missing"
+          assert 'function setMobileRunStage' in js, "Mobile execution state handler missing"
+          assert 'Relay safe markdown + mobile reliability v41' in css, "Mobile reliability CSS missing"
+          assert '#workspace.show-run #answer .runStrip' in css, "Mobile View Run escape control missing"
+          print("Response rendering, telemetry and mobile lane contract: PASS")
 
       - name: Verify provider-aware routing
         run: |
@@ -597,6 +728,7 @@ jobs:
           from pathlib import Path
           ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
           health = Path("netlify/functions/health.mts").read_text(encoding="utf-8")
+          named = Path("relay-runtime/named-agent-routing.mjs").read_text(encoding="utf-8")
 
           required = [
               'coding: "deepseek/deepseek-v4-flash-0731:free"',
@@ -636,8 +768,7 @@ jobs:
           assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
           assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
           assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
-          assert 'affinity: !strictIntent' in ask, "Single named-agent affinity missing"
-          assert 'strict: strictIntent' in ask, "Explicit-only routing missing"
+          assert 'detectNamedAgentRoute(question)' in ask, "Shared named-agent detector missing"
           assert '"named_model_affinity"' in ask, "Named-agent affinity trace missing"
           assert 'sameFamilyPool' in ask, "Same-family first routing missing"
           assert '...normalPool' in ask, "Visible bounded fallback pool missing"
@@ -645,8 +776,12 @@ jobs:
           assert 'GROQ_MODELS.strong' in ask, "Neutral comparison worker missing"
           assert 'function fetchTextWithTimeout' in ask, "Full response-body timeout helper missing"
           assert 'isExplicitOpenRouterPrimary' in ask, "Explicit OpenRouter latency cap missing"
-          assert '{ family: "gemini", pattern:' in ask, "Gemini explicit route missing"
-          assert 'families.length !== 1' in ask, "Multi-model comparison neutrality guard missing"
+          assert 'export function detectNamedAgentRoute' in named, "Named-agent contract is not testable"
+          for family in ("gemini","claude","openai","deepseek","qwen","groq","cloudflare","grok"):
+              assert f'family: "{family}"' in named, f"Named-agent family missing: {family}"
+          assert 'affinity: !strict' in named, "Single named-agent affinity missing"
+          assert 'strict,' in named, "Explicit-only routing missing"
+          assert 'comparison: families.length > 1' in named, "Multi-model comparison neutrality guard missing"
           print("Task routing, explicit affinity, comparison neutrality and latency guards: PASS")
 
       - name: Verify media capabilities

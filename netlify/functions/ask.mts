@@ -1,5 +1,6 @@
 import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
 import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routing-policy.mjs";
+import { detectNamedAgentRoute } from "../../relay-runtime/named-agent-routing.mjs";
 
 function classify(text: string) {
   const q = text.toLowerCase();
@@ -39,43 +40,26 @@ const DEEPSEEK_FAMILY_MODELS = Object.freeze([
   FREE_MODELS.deepseekFallback,
 ]);
 
-const EXPLICIT_MODEL_ROUTES: Array<{ family: string; pattern: RegExp; model: string }> = [
-  { family: "gemini", pattern: /\b(?:google\s+)?gemini\b/i, model: "gemini-3.5-flash-lite" },
-  { family: "claude", pattern: /\bclaude\b|\banthropic\b/i, model: "claude-haiku-4-5" },
-  { family: "openai", pattern: /\bopenai\b|\bchatgpt\b|\bgpt[-\s]?5(?:\.6)?\b/i, model: "gpt-5.6-luna" },
-  { family: "deepseek", pattern: /\bdeepseek\b/i, model: FREE_MODELS.coding },
-  { family: "qwen", pattern: /\bqwen\b/i, model: FREE_MODELS.reasoning },
-  { family: "groq", pattern: /\bgroq\b/i, model: GROQ_MODELS.fast },
-  { family: "cloudflare", pattern: /\bcloudflare(?:\s+workers?\s+ai)?\b/i, model: CLOUDFLARE_MODELS.fast },
-  { family: "grok", pattern: /\bgrok\b|\bxai\b|\bx-ai\b/i, model: "x-ai/grok-4.6" },
-];
+const EXPLICIT_MODEL_MODELS: Record<string, string> = Object.freeze({
+  gemini: "gemini-3.5-flash-lite",
+  claude: "claude-haiku-4-5",
+  openai: "gpt-5.6-luna",
+  deepseek: FREE_MODELS.coding,
+  qwen: FREE_MODELS.reasoning,
+  groq: GROQ_MODELS.fast,
+  cloudflare: CLOUDFLARE_MODELS.fast,
+  grok: "x-ai/grok-4.6",
+});
 
 function explicitModelRoute(question: string) {
-  const hits = EXPLICIT_MODEL_ROUTES.filter((item) => item.pattern.test(question));
-  const families = [...new Set(hits.map((item) => item.family))];
-
-  if (families.length !== 1) {
-    return {
-      model: "",
-      family: "",
-      explicit: false,
-      affinity: false,
-      strict: false,
-      comparison: families.length > 1,
-    };
-  }
-
-  const hit = hits.find((item) => item.family === families[0])!;
-  const strictIntent =
-    /\b(?:use|using|with|via|route\s+(?:this\s+)?to|ask)\s+(?:google\s+)?(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\b|\b(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\s+only\b/i.test(question);
-
+  const route = detectNamedAgentRoute(question);
   return {
-    model: hit.model,
-    family: hit.family,
-    explicit: true,
-    affinity: !strictIntent,
-    strict: strictIntent,
-    comparison: false,
+    model: route.family ? (EXPLICIT_MODEL_MODELS[route.family] || "") : "",
+    family: route.family,
+    explicit: Boolean(route.family),
+    affinity: route.affinity,
+    strict: route.strict,
+    comparison: route.comparison,
   };
 }
 
