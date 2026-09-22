@@ -184,6 +184,7 @@ jobs:
           grep -Eq '"type":"worker_selected".*"model":"(@cf/)?deepseek' /tmp/relay-deepseek-affinity.ndjson
           grep -Eq '"type":"done".*"model":"(@cf/)?deepseek' /tmp/relay-deepseek-affinity.ndjson
           ! grep -q '"type":"error"' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -qi '<think>' /tmp/relay-deepseek-affinity.ndjson
           ! grep -Eq '"type":"worker_selected".*"model":"groq:' /tmp/relay-deepseek-affinity.ndjson
           echo "Natural DeepSeek affinity: PASS — DeepSeek actually completed the answer"
 
