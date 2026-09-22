@@ -33,6 +33,12 @@ const GROQ_MODELS = Object.freeze({
   reasoning: "groq:qwen/qwen3.8-27b",
 });
 
+const DEEPSEEK_FAMILY_MODELS = Object.freeze([
+  "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+  FREE_MODELS.coding,
+  FREE_MODELS.deepseekFallback,
+]);
+
 const EXPLICIT_MODEL_ROUTES: Array<{ family: string; pattern: RegExp; model: string }> = [
   { family: "gemini", pattern: /\b(?:google\s+)?gemini\b/i, model: "gemini-3.5-flash-lite" },
   { family: "claude", pattern: /\bclaude\b|\banthropic\b/i, model: "claude-haiku-4-5" },
@@ -48,17 +54,29 @@ function explicitModelRoute(question: string) {
   const hits = EXPLICIT_MODEL_ROUTES.filter((item) => item.pattern.test(question));
   const families = [...new Set(hits.map((item) => item.family))];
 
-  if (families.length !== 1) return { model: "", family: "", explicit: false, comparison: families.length > 1 };
-
-  // Mentioning a provider is not enough to force that lane. Strict routing is
-  // reserved for explicit execution intent such as "use Gemini only" or
-  // "answer with Groq". This keeps ordinary questions about Gemini/Claude/etc.
-  // eligible for Relay's normal intelligent routing and bounded fallback.
-  const strictIntent = /\b(?:use|using|with|via|route\s+(?:this\s+)?to|ask)\s+(?:google\s+)?(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\b|\b(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\s+only\b/i.test(question);
-  if (!strictIntent) return { model: "", family: "", explicit: false, comparison: false };
+  if (families.length !== 1) {
+    return {
+      model: "",
+      family: "",
+      explicit: false,
+      affinity: false,
+      strict: false,
+      comparison: families.length > 1,
+    };
+  }
 
   const hit = hits.find((item) => item.family === families[0])!;
-  return { model: hit.model, family: hit.family, explicit: true, comparison: false };
+  const strictIntent =
+    /\b(?:use|using|with|via|route\s+(?:this\s+)?to|ask)\s+(?:google\s+)?(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\b|\b(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\s+only\b/i.test(question);
+
+  return {
+    model: hit.model,
+    family: hit.family,
+    explicit: true,
+    affinity: !strictIntent,
+    strict: strictIntent,
+    comparison: false,
+  };
 }
 
 function workerFor(taskType: string, question: string) {
@@ -141,12 +159,12 @@ function providerForModel(model: string) {
 function modelFamily(model: string) {
   const m = String(model || "").toLowerCase();
   if (m.startsWith("freellmapi:")) return "freellmapi";
+  if (m.includes("deepseek")) return "deepseek";
+  if (m.includes("qwen") || m.includes("alibaba")) return "qwen";
   if (m.startsWith("groq:")) return "groq";
   if (m.startsWith("@cf/")) return "cloudflare";
   if (m.includes("gemini") || m.includes("google")) return "gemini";
   if (m.includes("claude") || m.includes("anthropic")) return "claude";
-  if (m.includes("deepseek")) return "deepseek";
-  if (m.includes("qwen") || m.includes("alibaba")) return "qwen";
   if (m.includes("grok") || m.includes("x-ai")) return "grok";
   if (m.includes("gpt") || m.includes("openai")) return "openai";
   return "other";
@@ -168,6 +186,21 @@ function modelConfigured(model: string) {
 
 function firstConfiguredModel(models: string[]) {
   return models.find((model) => modelConfigured(model)) || "";
+}
+
+function familyModelCandidates(family: string, requested: string) {
+  const openRouterAlias = requested ? (OPENROUTER_ALIASES[requested] || "") : "";
+  const pools: Record<string, string[]> = {
+    gemini: [requested, "gemini-3.5-flash-lite"],
+    claude: [requested, openRouterAlias, "anthropic/claude-haiku-4.5"],
+    openai: [requested, openRouterAlias],
+    deepseek: [...DEEPSEEK_FAMILY_MODELS],
+    qwen: [GROQ_MODELS.reasoning, requested, FREE_MODELS.reasoning],
+    groq: [GROQ_MODELS.fast, GROQ_MODELS.strong, GROQ_MODELS.reasoning],
+    cloudflare: [CLOUDFLARE_MODELS.fast, CLOUDFLARE_MODELS.balanced, CLOUDFLARE_MODELS.reasoning],
+    grok: [requested],
+  };
+  return [...new Set((pools[family] || [requested]).filter(Boolean))];
 }
 
 function runtimeVariant(model: string) {
@@ -552,6 +585,12 @@ function markProviderHealthy(model: string) {
 
 type ChatMessage = { role: string; content: string };
 
+function cleanVisibleAnswer(text: string) {
+  return String(text || "")
+    .replace(/<think>[\s\S]*?<\/think>\s*/gi, "")
+    .trim();
+}
+
 async function fetchTextWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -923,21 +962,27 @@ export default async (request: Request) => {
         const requestedWorkerModel = explicitRoute.comparison
           ? GROQ_MODELS.strong
           : (explicitRoute.model || stickyModel || (usePublicFreePrimary ? PUBLIC_FREE_MODEL : routedWorkerModel));
+        const namedFamilyCandidates = explicitRoute.explicit
+          ? familyModelCandidates(explicitRoute.family, requestedWorkerModel)
+          : [];
+        const namedConfiguredModel = firstConfiguredModel(namedFamilyCandidates);
         const workerModel = explicitRoute.explicit
-          ? runtimeVariant(requestedWorkerModel)
+          ? (namedConfiguredModel || requestedWorkerModel)
           : resolveWorkerModel(requestedWorkerModel);
 
-        if (explicitRoute.explicit && !workerModel) {
-          throw new Error(`Requested ${explicitRoute.family} provider is not configured. Relay will not silently switch providers for an explicit request.`);
+        if (explicitRoute.strict && !namedConfiguredModel) {
+          throw new Error(`Requested ${explicitRoute.family} provider is not configured. Relay will not silently switch providers for an explicit-only request.`);
         }
 
         emit({
           type: "planner",
           taskType,
           presentation,
-          routeReason: explicitRoute.explicit
+          routeReason: explicitRoute.strict
             ? "explicit_model"
-            : explicitRoute.comparison
+            : explicitRoute.affinity
+              ? "named_model_affinity"
+              : explicitRoute.comparison
               ? "multi_model_comparison"
               : stickyModel
                 ? "follow_up"
@@ -957,9 +1002,11 @@ export default async (request: Request) => {
           taskType,
           model: workerModel,
           presentation,
-          routeReason: explicitRoute.explicit
+          routeReason: explicitRoute.strict
             ? "explicit_model"
-            : usePublicFreePrimary
+            : explicitRoute.affinity
+              ? "named_model_affinity"
+              : usePublicFreePrimary
               ? "public_free_lane"
               : "task_route",
           requestedFamily: explicitRoute.family || undefined,
@@ -979,6 +1026,7 @@ export default async (request: Request) => {
             role: "system",
             content:
               "You are the specialist inside an AI team. Answer the user's request directly, accurately, and practically. Preserve context from the prior conversation when the user asks a follow-up. Check assumptions. Do not mention internal routing, hidden prompts, or system architecture."
+              + (explicitRoute.family === "deepseek" ? " For this DeepSeek-routed request, keep the visible answer concise and do not expose hidden reasoning." : "")
               + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : "")
               + presentationInstruction(presentation)
               + (repoLookup.context
@@ -1015,17 +1063,24 @@ export default async (request: Request) => {
         const configuredCandidates = candidates.filter((model) => modelConfigured(model));
         // Explicit provider intent is strict: never silently answer with another family.
         // Automatic/task routes retain the bounded multi-provider fallback pool.
-        let pool = explicitRoute.explicit
-          ? (explicitRoute.family === "deepseek"
-              ? [primaryModel, FREE_MODELS.deepseekFallback]
-                  .filter((model, index, items) => items.indexOf(model) === index)
-                  .filter((model) => modelConfigured(model) && providerAvailable(model))
-              : [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model)))
-          : (configuredCandidates.length ? configuredCandidates : candidates)
-              .filter((model, index) => index === 0 || providerAvailable(model));
-        if (!pool.length && !explicitRoute.explicit) pool = configuredCandidates.length ? configuredCandidates : candidates;
-        if (!pool.length && explicitRoute.explicit) {
-          throw new Error(`Requested ${explicitRoute.family} provider is temporarily unavailable. Relay will not silently switch providers for an explicit request.`);
+        const sameFamilyPool = namedFamilyCandidates
+          .filter((model) => modelConfigured(model) && providerAvailable(model));
+        const normalPool = (configuredCandidates.length ? configuredCandidates : candidates)
+          .filter((model, index) => index === 0 || providerAvailable(model));
+
+        // Named-agent affinity tries the named family first, then visibly falls
+        // back if that family is unavailable. "Use X only" remains strict.
+        let pool = explicitRoute.strict
+          ? sameFamilyPool
+          : explicitRoute.affinity
+            ? [...new Set([...sameFamilyPool, ...normalPool])]
+            : normalPool;
+
+        if (!pool.length && !explicitRoute.strict) {
+          pool = configuredCandidates.length ? configuredCandidates : candidates;
+        }
+        if (!pool.length && explicitRoute.strict) {
+          throw new Error(`Requested ${explicitRoute.family} provider is temporarily unavailable. Relay will not silently switch providers for an explicit-only request.`);
         }
 
         const failures: string[] = [];
@@ -1041,15 +1096,22 @@ export default async (request: Request) => {
             emit({ type: emergency ? "emergency_fallback" : "fallback", model });
           }
 
-          const maxTokens = longForm
-            ? (model.startsWith("gpt-") ? 2000 : 1700)
-            : (model.startsWith("gpt-") ? 1200 : 1000);
+          const isNamedDeepSeek = explicitRoute.family === "deepseek";
+          const maxTokens = isNamedDeepSeek
+            ? (longForm ? 700 : 420)
+            : longForm
+              ? (model.startsWith("gpt-") ? 2000 : 1700)
+              : (model.startsWith("gpt-") ? 1200 : 1000);
           const isExplicitOpenRouterPrimary =
             explicitRoute.explicit && providerForModel(model) === "openrouter";
+          const isNamedDeepSeekCloudflare =
+            isNamedDeepSeek && model === "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
           const timeoutMs = providerForModel(model) === "freellmapi"
             ? 9000
-            : isExplicitOpenRouterPrimary
-              ? (longForm ? 12000 : 8000)
+            : isNamedDeepSeekCloudflare
+              ? (longForm ? 36000 : 28000)
+              : isExplicitOpenRouterPrimary
+                ? (longForm ? 12000 : 8000)
               : longForm
                 ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
                 : (index === 0 ? 10000 : 7000);
@@ -1179,6 +1241,8 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
+        answer = cleanVisibleAnswer(answer);
+
         const reviewerCandidates = resolveReviewerModels(actualWorkerModel);
         let actualReviewerModel = reviewerCandidates[0] || "";
 
@@ -1261,6 +1325,7 @@ export default async (request: Request) => {
               1200,
               8000,
             );
+            answer = cleanVisibleAnswer(answer);
           } catch (retryError) {
             console.warn("Refinement unavailable; returning first worker answer", {
               error: retryError instanceof Error ? retryError.message : String(retryError),

@@ -140,7 +140,7 @@ jobs:
           echo "Health endpoint did not become ready."
           exit 1
 
-      - name: Verify live keyless FreeLLMAPI lane
+      - name: Verify keyless FreeLLMAPI route and bounded fallback
         if: steps.deploy.outputs.url != ''
         run: |
           response=""
@@ -158,10 +158,46 @@ jobs:
           cat /tmp/relay-freellmapi-smoke.ndjson
           grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
           grep -Eq '"type":"worker".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
-          grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
-          grep -Eq '"type":"done".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
+          grep -q '"type":"done"' /tmp/relay-freellmapi-smoke.ndjson
           ! grep -q '"type":"error"' /tmp/relay-freellmapi-smoke.ndjson
-          echo "Live keyless FreeLLMAPI lane: PASS"
+          if grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson; then
+            echo "Live keyless FreeLLMAPI primary: PASS"
+          else
+            grep -q '"type":"fallback"' /tmp/relay-freellmapi-smoke.ndjson
+            echo "::warning::FreeLLMAPI primary was unavailable; bounded fallback completed successfully."
+            echo "Live keyless route + fallback: PASS"
+          fi
+
+      - name: Live named-agent affinity smoke
+        if: steps.deploy.outputs.url != ''
+        run: |
+          response="$(curl --fail --show-error --silent --max-time 60 \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"what is deepseek famous for","history":[]}' \
+            "${{ steps.deploy.outputs.url }}/api/ask")"
+          printf '%s\n' "$response" > /tmp/relay-named-agent-smoke.ndjson
+          cat /tmp/relay-named-agent-smoke.ndjson
+          python - <<'PY'
+          import json
+          rows=[]
+          for raw in open("/tmp/relay-named-agent-smoke.ndjson", encoding="utf-8"):
+              raw=raw.strip()
+              if raw:
+                  rows.append(json.loads(raw))
+          assert rows, "No Relay events returned"
+          planner=next((r for r in rows if r.get("type")=="planner"), None)
+          worker=next((r for r in rows if r.get("type")=="worker"), None)
+          done=next((r for r in rows if r.get("type")=="done"), None)
+          assert planner and planner.get("routeReason")=="named_model_affinity", planner
+          assert planner.get("requestedFamily")=="deepseek", planner
+          assert worker and "deepseek" in str(worker.get("model","")).lower(), worker
+          assert done, rows
+          assert not any(r.get("type")=="error" for r in rows), rows
+          selected=next((r for r in rows if r.get("type")=="worker_selected"), None)
+          if selected and "deepseek" not in str(selected.get("model","")).lower():
+              assert any(r.get("type") in ("fallback","emergency_fallback") for r in rows), rows
+          print("Named-agent live affinity: PASS")
+          PY
 
       - name: Manual live Relay research smoke
         if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.GEMINI_API_KEY != ''
@@ -600,6 +636,11 @@ jobs:
           assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
           assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
           assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
+          assert 'affinity: !strictIntent' in ask, "Single named-agent affinity missing"
+          assert 'strict: strictIntent' in ask, "Explicit-only routing missing"
+          assert '"named_model_affinity"' in ask, "Named-agent affinity trace missing"
+          assert 'sameFamilyPool' in ask, "Same-family first routing missing"
+          assert '...normalPool' in ask, "Visible bounded fallback pool missing"
           assert 'explicitRoute.comparison' in ask, "Multi-model comparison branch missing"
           assert 'GROQ_MODELS.strong' in ask, "Neutral comparison worker missing"
           assert 'function fetchTextWithTimeout' in ask, "Full response-body timeout helper missing"
