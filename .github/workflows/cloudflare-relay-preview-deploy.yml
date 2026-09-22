@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: relay-cloudflare-preview
+  group: relay-cloudflare-preview-fusion
   cancel-in-progress: true
 
 jobs:
@@ -81,7 +81,7 @@ jobs:
         id: deploy
         run: |
           set -o pipefail
-          npx --yes wrangler@latest deploy             --config wrangler.jsonc             --name relay-ai-team-preview | tee deploy.log
+          npx --yes wrangler@latest deploy             --config wrangler.jsonc             --name relay-ai-team-fusion-preview | tee deploy.log
           url="$(grep -Eo 'https://[^ ]+\.workers\.dev' deploy.log | tail -1 || true)"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Preview URL: ${url:-not detected}"
@@ -97,7 +97,7 @@ jobs:
             fi
 
             for attempt in 1 2 3; do
-              if printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-ai-team-preview >/dev/null; then
+              if printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-ai-team-fusion-preview >/dev/null; then
                 echo "Synced $key"
                 return 0
               fi
@@ -685,3 +685,5 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
 # animation fusion v2 validation
+
+# isolated permanent animation preview: fusion
