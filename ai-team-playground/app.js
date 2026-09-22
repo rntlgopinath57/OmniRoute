@@ -54,10 +54,10 @@ function friendlyModel(model=''){
 function providerNodeForModel(model=''){
   const m=String(model||'').toLowerCase();
   if(m.startsWith('groq:'))return'groq';
+  if(m.includes('deepseek'))return'deepseek';
   if(m.startsWith('@cf/'))return'cloudflare';
   if(m.includes('gemini')||m.includes('google'))return'gemini';
   if(m.includes('claude')||m.includes('anthropic'))return'claude';
-  if(m.includes('deepseek'))return'deepseek';
   if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
   if(m.includes('grok')||m.includes('xai'))return'grok';
   if(m.includes('gpt')||m.includes('openai'))return'openai';
