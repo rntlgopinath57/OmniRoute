@@ -8,6 +8,7 @@ const required = [
   ".github/workflows/ai-team-project-automation.yml",
   ".github/workflows/ai-team-universal-audit.yml",
   ".github/workflows/ai-team-v0.yml",
+  ".github/workflows/ai-team-cbm-impact.yml",
 ];
 
 function read(path) {
@@ -58,4 +59,16 @@ test("Bharosa controlled audit remains credential-gated and read-only", () => {
   assert.match(text, /BHAROSA_READ_TOKEN/);
   assert.match(text, /persist-credentials: false/);
   assert.match(text, /bharosa-readonly-baseline/);
+});
+
+
+test("CBM impact gate stays read-only, pinned, and routing-scoped", () => {
+  const text = read(".github/workflows/ai-team-cbm-impact.yml");
+  assert.match(text, /contents: read/);
+  assert.match(text, /codebase-memory-mcp==0\.11\.0/);
+  assert.match(text, /persist-credentials: false/);
+  assert.match(text, /detectNamedAgentRoute/);
+  assert.match(text, /resolveWorkerModel/);
+  assert.match(text, /resolveReviewerModels/);
+  assert.doesNotMatch(text, /OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GROQ_API_KEY|CLOUDFLARE_API_TOKEN/);
 });

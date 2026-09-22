@@ -1,0 +1,181 @@
+name: AI Team CBM Impact Gate
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".cbmignore"
+      - "ai-team/**"
+      - "relay-runtime/**"
+      - "netlify/functions/**"
+      - "cloudflare/**"
+      - ".github/workflows/ai-team-cbm-impact.yml"
+  pull_request:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - ".cbmignore"
+      - "ai-team/**"
+      - "relay-runtime/**"
+      - "netlify/functions/**"
+      - "cloudflare/**"
+      - ".github/workflows/ai-team-cbm-impact.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-team-cbm-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  impact-map:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout routing surface
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .cbmignore
+            ai-team
+            relay-runtime
+            netlify/functions
+            cloudflare
+            .github/workflows
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned codebase-memory-mcp
+        run: python -m pip install --disable-pip-version-check -q codebase-memory-mcp==0.11.0
+
+      - name: Index current routing surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          args="$(python - <<'PY'
+          import json, os
+          print(json.dumps({"repo_path": os.environ["GITHUB_WORKSPACE"]}))
+          PY
+          )"
+          codebase-memory-mcp cli index_repository "$args" | tee /tmp/cbm-index.json
+
+          python - <<'PY'
+          import json, os
+          data = json.load(open("/tmp/cbm-index.json", encoding="utf-8"))
+          assert data.get("status") == "indexed", data
+          assert int(data.get("nodes") or 0) > 0, data
+          assert int(data.get("edges") or 0) > 0, data
+          project = str(data.get("project") or "").strip()
+          assert project, data
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"CBM_PROJECT={project}\n")
+          print(f"CBM indexed {data['nodes']} nodes / {data['edges']} edges as {project}")
+          PY
+
+      - name: Map production named-agent routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > /tmp/cbm-routing-report.txt
+
+          search_symbol () {
+            symbol="$1"
+            args="$(python - "$CBM_PROJECT" "$symbol" <<'PY'
+          import json, sys
+          print(json.dumps({"project": sys.argv[1], "name_pattern": sys.argv[2]}))
+          PY
+            )"
+            echo "===== SEARCH $symbol =====" | tee -a /tmp/cbm-routing-report.txt
+            codebase-memory-mcp cli search_graph "$args" | tee -a /tmp/cbm-routing-report.txt
+          }
+
+          trace_symbol () {
+            symbol="$1"
+            depth="$2"
+            args="$(python - "$CBM_PROJECT" "$symbol" "$depth" <<'PY'
+          import json, sys
+          print(json.dumps({
+              "project": sys.argv[1],
+              "function_name": sys.argv[2],
+              "direction": "both",
+              "depth": int(sys.argv[3]),
+          }))
+          PY
+            )"
+            echo "===== TRACE $symbol =====" | tee -a /tmp/cbm-routing-report.txt
+            codebase-memory-mcp cli trace_call_path "$args" | tee -a /tmp/cbm-routing-report.txt
+          }
+
+          for symbol in             detectNamedAgentRoute             explicitModelRoute             familyModelCandidates             resolveWorkerModel             providerForModel             modelFamily             reviewerFor             resolveReviewerModels
+          do
+            search_symbol "$symbol"
+          done
+
+          trace_symbol detectNamedAgentRoute 5
+          trace_symbol explicitModelRoute 6
+          trace_symbol resolveWorkerModel 6
+
+          test -s /tmp/cbm-routing-report.txt
+
+      - name: Enforce structural routing contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          text = Path("/tmp/cbm-routing-report.txt").read_text(encoding="utf-8", errors="ignore").lower()
+
+          required_symbols = [
+              "detectnamedagentroute",
+              "explicitmodelroute",
+              "familymodelcandidates",
+              "resolveworkermodel",
+              "providerformodel",
+              "modelfamily",
+              "reviewerfor",
+              "resolvereviewermodels",
+          ]
+          required_files = [
+              "relay-runtime/named-agent-routing.mjs",
+              "netlify/functions/ask.mts",
+          ]
+
+          missing_symbols = [item for item in required_symbols if item not in text]
+          missing_files = [item for item in required_files if item not in text]
+
+          assert not missing_symbols, f"CBM missing routing symbols: {missing_symbols}"
+          assert not missing_files, f"CBM missing routing files: {missing_files}"
+          assert "detectnamedagentroute" in text and "explicitmodelroute" in text
+          assert "resolveworkermodel" in text and "providerformodel" in text
+
+          print("CBM production routing impact contract: PASS")
+
+      - name: Publish impact summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## CBM Impact Gate"
+            if [ -f /tmp/cbm-index.json ]; then
+              python - <<'PY'
+          import json
+          data = json.load(open("/tmp/cbm-index.json", encoding="utf-8"))
+          print(f"- Project: `{data.get('project','unknown')}`")
+          print(f"- Nodes: **{data.get('nodes',0)}**")
+          print(f"- Edges: **{data.get('edges',0)}**")
+          print(f"- Index status: **{data.get('status','unknown')}**")
+          PY
+            fi
+            if [ -f /tmp/cbm-routing-report.txt ]; then
+              echo "- Named-agent routing symbols: **mapped**"
+              echo "- Worker/provider/reviewer structural path: **mapped**"
+              echo "- Mode: **read-only structural analysis**"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

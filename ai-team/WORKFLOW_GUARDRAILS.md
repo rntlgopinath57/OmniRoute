@@ -7,12 +7,15 @@ This file records project-specific workflow decisions so cleanup does not erase 
 These are custom project workflows and must not be removed as generic upstream clutter:
 
 - `.github/workflows/ai-team-v0.yml` — core AI Team regression suite and task-intake smoke test.
+- `.github/workflows/ai-team-cbm-impact.yml` — read-only codebase-memory structural impact gate for Relay/AI-Team routing changes; pinned to the verified CBM version and forbidden from controlling runtime routing.
 - `.github/workflows/ai-team-activation.yml` — starts the verified read-only local OmniRoute gateway and runs the bounded activation smoke.
 - `.github/workflows/ai-team-project-automation.yml` — read-only project automation regression path.
 - `.github/workflows/ai-team-universal-audit.yml` — provider-independent audit self-test plus manual target audit.
 - `.github/workflows/ai-team-bharosa-controlled.yml` — credential-gated, read-only Bharosa audit.
 
 The test `ai-team/tests/workflow-preservation.test.mjs` is the deletion regression guard.
+
+CBM is engineering-time code truth only. It may map call paths, dependencies, and routing blast radius, but it must not become a production provider, request router, secret-bearing service, or autonomous code editor.
 
 ## KEEP — infra/cloudflare-relay
 
