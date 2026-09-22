@@ -916,8 +916,8 @@ async function initProviderRoster(){
       gemini:Boolean(models.gemini ?? providers.gemini),
       openai:Boolean(models.openai ?? providers.openai),
       claude:Boolean(models.claude ?? providers.anthropic),
-      deepseek:Boolean(models.deepseek ?? providers.openrouter),
-      qwen:Boolean(models.qwen ?? providers.openrouter),
+      deepseek:Boolean(models.deepseek ?? providers.openrouter) || Boolean(models.cloudflare ?? providers.cloudflare),
+      qwen:Boolean(models.qwen ?? providers.openrouter) || Boolean(models.groq ?? providers.groq),
       groq:Boolean(models.groq ?? providers.groq),
       cloudflare:Boolean(models.cloudflare ?? providers.cloudflare),
       grok:Boolean(models.grok ?? false)
