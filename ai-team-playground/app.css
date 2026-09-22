@@ -4003,3 +4003,64 @@ header{
   .inputShell:focus-within:before,
   #answer .followup:focus-within:before{animation:none}
 }
+
+
+/* Mobile conversation + live execution lane v39 */
+.mobileRunLane{display:none}
+@media(max-width:720px){
+  #answer.open{
+    left:0!important;right:0!important;bottom:0!important;top:68px!important;
+    max-height:none!important;border:0!important;border-radius:0!important;
+    width:100vw!important;background:rgba(5,10,17,.985)!important;
+  }
+  #answer .aHead{display:none!important}
+  #answer .runStrip{
+    position:sticky!important;top:0!important;z-index:80!important;
+    margin:0!important;border-radius:0!important;padding:8px 10px!important;
+    min-height:58px!important;background:rgba(5,10,17,.97)!important;
+  }
+  .runStripStatus,.runSignal{display:none!important}
+  .mobileRunLane{
+    display:flex!important;align-items:center;gap:4px;min-width:0;overflow:hidden;
+    flex:1;font-size:7px;letter-spacing:.08em;font-weight:800;color:#526276;
+  }
+  .mobileRunLane span{padding:5px 4px;border-radius:8px;white-space:nowrap;transition:.2s ease}
+  .mobileRunLane i{font-style:normal;color:#314052}
+  .mobileRunLane span.active{
+    color:#dffcff;background:rgba(113,239,255,.10);
+    box-shadow:0 0 0 1px rgba(113,239,255,.20),0 0 18px rgba(113,239,255,.10);
+    animation:mobileStagePulse 1s ease-in-out infinite;
+  }
+  #answer .runToggle{flex:0 0 auto;padding:8px 9px!important;font-size:8px!important}
+  #answer .thread{
+    width:100%!important;max-width:none!important;margin:0!important;
+    padding:14px 14px 174px!important;box-sizing:border-box!important;
+  }
+  #answer .messageRow,#answer .messageBubble{
+    width:100%!important;max-width:none!important;box-sizing:border-box!important;
+  }
+  #answer .messageBubble{border-radius:16px!important}
+  .viewportToolDock,.toolDock.viewportToolDock{
+    left:10px!important;right:10px!important;bottom:78px!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important;
+  }
+  .viewportToolDock .processRail{width:100%!important}
+  .viewportToolDock .processName,.viewportToolDock .processWave{display:none!important}
+  .viewportToolDock .toolActions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important;width:100%!important}
+  .viewportToolDock .toolAction{padding:8px 3px!important;font-size:7px!important;white-space:nowrap!important}
+  .viewportComposer,.followup.viewportComposer{
+    left:10px!important;right:10px!important;bottom:8px!important;
+    transform:none!important;width:auto!important;min-height:58px!important;
+    border-radius:20px!important;padding:7px!important;
+  }
+  .viewportComposer textarea{font-size:16px!important;min-width:0!important}
+  #workspace.show-run #canvas{
+    display:block!important;position:fixed!important;inset:68px 0 0!important;
+    width:100vw!important;height:calc(100dvh - 68px)!important;min-height:0!important;
+    z-index:100!important;background:rgba(3,8,14,.99)!important;
+  }
+  #workspace.show-run #answer{z-index:130!important}
+  #workspace.show-run #answer .thread{opacity:.12!important;pointer-events:none!important}
+}
+@keyframes mobileStagePulse{50%{box-shadow:0 0 0 1px rgba(113,239,255,.42),0 0 22px rgba(113,239,255,.22)}}
+@media(prefers-reduced-motion:reduce){.mobileRunLane span.active{animation:none}}
