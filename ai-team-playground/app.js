@@ -1,3 +1,4 @@
+document.body.dataset.animationLab='neural';
 const POS={
   // Full execution graph used only by View run.
   you:[23,86],planner:[28,16],router:[58,28],github:[20,43],
