@@ -298,8 +298,8 @@ jobs:
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=39' in html
-          assert './app.js?v=46' in html
+          assert './app.css?v=energy-2' in html
+          assert './app.js?v=energy-2' in html
           print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
 
       - name: Browser-rendered Relay UI smoke
