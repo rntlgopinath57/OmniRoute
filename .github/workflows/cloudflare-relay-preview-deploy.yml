@@ -9,6 +9,9 @@ on:
       - infra/cloudflare-relay
       - release/v3.8.51
       - spike/ui-kokonut-bklit
+      - spike/animation-energy-router
+      - spike/animation-neural-network
+      - spike/animation-cinematic-morph
     paths:
       - "cloudflare/**"
       - "relay-runtime/**"
