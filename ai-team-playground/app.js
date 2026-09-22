@@ -28,7 +28,7 @@ const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer'),followup=document.querySelector('.followup'),toolDockEl=$('toolDock');
-const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx'),mobileRunLane=$('mobileRunLane');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
@@ -37,6 +37,7 @@ let ambientLastNode='you';
 let activeProviderNode='';
 let completedProviders=new Set();
 let currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
+let runStartedAt=0,workerStartedAt=0,workerElapsedMs=0,reviewerStartedAt=0,reviewerElapsedMs=0;
 
 function classify(t){
   const s=t.toLowerCase();
@@ -49,6 +50,34 @@ function classify(t){
 }
 function friendlyModel(model=''){
   return model.replace(/^.*\//,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function transportForModel(model=''){
+  const m=String(model||'').toLowerCase();
+  if(m.startsWith('groq:'))return'Groq';
+  if(m.startsWith('@cf/'))return'Cloudflare';
+  if(m.startsWith('gemini-'))return'Gemini';
+  if(m.startsWith('claude-'))return'Anthropic';
+  if(m.startsWith('freellmapi:'))return'FreeLLMAPI';
+  if(m.includes('/'))return'OpenRouter';
+  if(m.includes('gpt')||m.includes('openai'))return'OpenAI';
+  return'';
+}
+function familyLabelForModel(model=''){
+  const family=providerNodeForModel(model);
+  return ({deepseek:'DeepSeek',qwen:'Qwen',groq:'Groq',cloudflare:'Cloudflare',gemini:'Gemini',claude:'Claude',grok:'Grok',openai:'OpenAI'})[family]||friendlyModel(model);
+}
+function executionLabel(model=''){
+  const family=familyLabelForModel(model);
+  const transport=transportForModel(model);
+  const normalizedFamily=String(family).toLowerCase();
+  const normalizedTransport=String(transport).toLowerCase();
+  const same=
+    (normalizedFamily==='claude'&&normalizedTransport==='anthropic')
+    || normalizedFamily===normalizedTransport;
+  return transport&&!same ? `${family} · via ${transport}` : family;
+}
+function formatSeconds(ms=0){
+  return ms>0?(ms/1000).toFixed(ms<10000?1:0)+'s':'';
 }
 function providerNodeForModel(model=''){
   const m=String(model||'').toLowerCase();
@@ -148,6 +177,19 @@ function setState(text,kind=''){
   if(activityLane)activityLane.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
+}
+function setMobileRunStage(stage,label=''){
+  if(!mobileRunLane)return;
+  const order=['you','planner','router','model','reviewer'];
+  const current=stage==='done'?order.length:order.indexOf(stage);
+  mobileRunLane.querySelectorAll('[data-mobile-stage]').forEach(el=>{
+    const index=order.indexOf(el.dataset.mobileStage);
+    el.classList.toggle('active',current>=0&&index===current);
+    el.classList.toggle('completed',current>index);
+    if(el.dataset.mobileStage==='model'){
+      el.textContent=label?String(label).toUpperCase().slice(0,10):'MODEL';
+    }
+  });
 }
 function setFlowEdge(edge){
   for(const existing of activeEdges) completedEdges.add(existing);
@@ -287,55 +329,103 @@ function cleanPresentationLine(value=''){
     .replace(/^\s*#{1,6}\s*/,'')
     .replace(/^\s*[-*•]\s+/,'')
     .replace(/^\s*\d+[.)]\s+/,'')
-    .replace(/\*\*/g,'')
-    .replace(/\`/g,'')
     .trim();
 }
+function appendInlineMarkdown(container,value=''){
+  const text=String(value||'');
+  const token=/\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let last=0;
+  let match;
+  while((match=token.exec(text))){
+    if(match.index>last)container.appendChild(document.createTextNode(text.slice(last,match.index)));
+    if(match[1]!==undefined){
+      const strong=document.createElement('strong');strong.textContent=match[1];container.appendChild(strong);
+    }else if(match[2]!==undefined){
+      const code=document.createElement('code');code.textContent=match[2];container.appendChild(code);
+    }else{
+      const link=document.createElement('a');
+      link.textContent=match[3];
+      link.href=match[4];
+      link.target='_blank';
+      link.rel='noopener noreferrer';
+      container.appendChild(link);
+    }
+    last=token.lastIndex;
+  }
+  if(last<text.length)container.appendChild(document.createTextNode(text.slice(last)));
+}
 function appendStructuredText(container,text=''){
-  const lines=String(text).replace(/^\s*\`\`\`[a-z0-9_-]*\s*$/gmi,'').replace(/^\s*\`\`\`\s*$/gmi,'').split(/\r?\n/);
+  const lines=String(text).split(/\r?\n/);
   let list=null;
   const closeList=()=>{list=null;};
   const isTableRow=line=>/^\s*\|.*\|\s*$/.test(line);
   const isDivider=line=>/^\s*\|?\s*:?-{3,}/.test(String(line||'').replace(/^\s*\|/,''));
-  const cells=line=>String(line).trim().replace(/^\||\|$/g,'').split('|').map(x=>cleanPresentationLine(x));
+  const cells=line=>String(line).trim().replace(/^\||\|$/g,'').split('|').map(x=>x.trim());
+
   for(let i=0;i<lines.length;){
     const line=String(lines[i]||'');
+
+    const fence=line.match(/^\s*```([a-z0-9_+.-]*)\s*$/i);
+    if(fence){
+      closeList();
+      const language=fence[1]||'';
+      const codeLines=[];
+      i++;
+      while(i<lines.length&&!/^\s*```\s*$/.test(lines[i])){
+        codeLines.push(lines[i]);i++;
+      }
+      if(i<lines.length)i++;
+      const pre=document.createElement('pre');
+      const code=document.createElement('code');
+      if(language)code.dataset.language=language;
+      code.textContent=codeLines.join('\n');
+      pre.appendChild(code);container.appendChild(pre);
+      continue;
+    }
+
     if(isTableRow(line)&&i+1<lines.length&&isDivider(lines[i+1])){
       closeList();
       const tableWrap=document.createElement('div');tableWrap.className='artifactTableWrap';
       const table=document.createElement('table');
       const thead=document.createElement('thead');const hr=document.createElement('tr');
-      cells(line).forEach(value=>{const th=document.createElement('th');th.textContent=value;hr.appendChild(th)});
+      cells(line).forEach(value=>{const th=document.createElement('th');appendInlineMarkdown(th,value);hr.appendChild(th)});
       thead.appendChild(hr);table.appendChild(thead);
       const tbody=document.createElement('tbody');i+=2;
       while(i<lines.length&&isTableRow(lines[i])){
         const tr=document.createElement('tr');
-        cells(lines[i]).forEach(value=>{const td=document.createElement('td');td.textContent=value;tr.appendChild(td)});
+        cells(lines[i]).forEach(value=>{const td=document.createElement('td');appendInlineMarkdown(td,value);tr.appendChild(td)});
         tbody.appendChild(tr);i++;
       }
       table.appendChild(tbody);tableWrap.appendChild(table);container.appendChild(tableWrap);
       continue;
     }
+
     if(!line.trim()){closeList();i++;continue}
+
     const heading=line.match(/^\s*(#{1,4})\s+(.+)$/);
     if(heading){
       closeList();
       const h=document.createElement(heading[1].length<=1?'h2':'h3');
-      h.textContent=cleanPresentationLine(heading[2]);
+      appendInlineMarkdown(h,heading[2].trim());
       container.appendChild(h);i++;continue;
     }
+
     const bullet=line.match(/^\s*[-*•]\s+(.+)$/);
     if(bullet){
       if(!list||list.tagName!=='UL'){list=document.createElement('ul');container.appendChild(list)}
-      const li=document.createElement('li');li.textContent=cleanPresentationLine(bullet[1]);list.appendChild(li);i++;continue;
+      const li=document.createElement('li');appendInlineMarkdown(li,bullet[1].trim());list.appendChild(li);i++;continue;
     }
+
     const numbered=line.match(/^\s*\d+[.)]\s+(.+)$/);
     if(numbered){
       if(!list||list.tagName!=='OL'){list=document.createElement('ol');container.appendChild(list)}
-      const li=document.createElement('li');li.textContent=cleanPresentationLine(numbered[1]);list.appendChild(li);i++;continue;
+      const li=document.createElement('li');appendInlineMarkdown(li,numbered[1].trim());list.appendChild(li);i++;continue;
     }
+
     closeList();
-    const p=document.createElement('p');p.textContent=cleanPresentationLine(line);container.appendChild(p);i++;
+    const p=document.createElement('p');
+    appendInlineMarkdown(p,cleanPresentationLine(line));
+    container.appendChild(p);i++;
   }
 }
 function renderHandwrittenPages(body,text=''){
@@ -412,7 +502,12 @@ function applyPresentation(row,text,presentation){
   const body=row.querySelector('.messageText');
   const bubble=row.querySelector('.messageBubble');
   if(!body||!bubble)return;
-  if(p.format==='default'){body.textContent=text;return}
+  if(p.format==='default'){
+    body.textContent='';
+    body.classList.add('structuredMessage');
+    appendStructuredText(body,text);
+    return;
+  }
   row.classList.add('presentationResult');
   bubble.classList.add('presentationBubble','fmt-'+p.format);
   body.classList.add('presentationBody');
@@ -536,6 +631,8 @@ function resetForRun(question,isRetry=false){
   ambientLastNode='you';
   currentQuestion=question;
   currentPresentation={format:'default',visual:false,explicit:false,label:'STANDARD'};
+  runStartedAt=performance.now();workerStartedAt=0;workerElapsedMs=0;reviewerStartedAt=0;reviewerElapsedMs=0;
+  setMobileRunStage('you');
   busy=true; answered=false; selected=new Set(VISUAL_ROUTES[classify(question)]);
   completed=new Set(); completedEdges=new Set(); lastTool=''; active=new Set(['you']); activeEdges.clear();
   if(!chatStarted){
@@ -566,6 +663,7 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
+    setMobileRunStage('planner');
     completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',420); return;
   }
 
@@ -578,6 +676,7 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='worker'){
+    setMobileRunStage('router');
     completed.add('planner');
     setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
@@ -599,8 +698,10 @@ async function handleEvent(evt){
     await wait(220);
 
     setActiveProvider(evt.model);
-    setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
-    updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
+    workerStartedAt=performance.now();
+    setMobileRunStage('model',familyLabelForModel(evt.model));
+    setState(`ACTIVE · ${executionLabel(evt.model).toUpperCase()}`,'busy');
+    updatePending(`${executionLabel(evt.model)} is working on the answer…`);
     render();
     return;
   }
@@ -630,18 +731,21 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='worker_selected'){
+    if(workerStartedAt&&!workerElapsedMs)workerElapsedMs=Math.max(0,performance.now()-workerStartedAt);
     if(lastTool)completed.add(lastTool);
     updateRoleModel(lastWorker,evt.model);
     active=new Set([lastWorker]);
     setFlowEdge(`${lastTool||'router'}:${lastWorker}`);
     setStage('solve');
-    setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
-    updatePending(`${friendlyModel(evt.model)} responded — preparing the answer…`);
+    setMobileRunStage('model',familyLabelForModel(evt.model));
+    setState(`ACTIVE · ${executionLabel(evt.model).toUpperCase()}`,'busy');
+    updatePending(`${executionLabel(evt.model)} responded — preparing the answer…`);
     render(); kickNode(lastWorker); return;
   }
   if(evt.type==='fallback'){
     setState('SWITCHING','busy');
-    updatePending(`Switching to ${friendlyModel(evt.model)} on another provider pool…`);
+    setMobileRunStage('model',familyLabelForModel(evt.model));
+    updatePending(`Switching to ${executionLabel(evt.model)} on another provider pool…`);
     updateRoleModel(lastWorker,evt.model);
     setActiveProvider(evt.model);
     active=new Set([lastWorker]);
@@ -650,7 +754,8 @@ async function handleEvent(evt){
   }
   if(evt.type==='emergency_fallback'){
     setState('EMERGENCY SWITCH','busy');
-    updatePending(`Primary pools are limited — using ${friendlyModel(evt.model)} as the emergency lane…`);
+    setMobileRunStage('model',familyLabelForModel(evt.model));
+    updatePending(`Primary pools are limited — using ${executionLabel(evt.model)} as the emergency lane…`);
     updateRoleModel(lastWorker,evt.model);
     setActiveProvider(evt.model);
     active=new Set([lastWorker]);
@@ -683,6 +788,9 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='reviewer'){
+    if(workerStartedAt&&!workerElapsedMs)workerElapsedMs=Math.max(0,performance.now()-workerStartedAt);
+    reviewerStartedAt=performance.now();
+    setMobileRunStage('reviewer');
     if(activeProviderNode)completedProviders.add(activeProviderNode);
     activeProviderNode='';
     completed.add(lastWorker);
@@ -725,13 +833,19 @@ async function handleEvent(evt){
     currentPresentation=evt.presentation||currentPresentation;
     lastPresentation=String((currentPresentation&&currentPresentation.format)||'default');
     answered=true; busy=false; completed.add(lastWorker); if(evt.review==='PASS')completed.add('reviewer'); setStage('done'); active=new Set(['you']); setFlowEdge(evt.review==='PASS'?'reviewer:you':''); render(); kickNode('you'); validatedBurst();
+    setMobileRunStage('done');
+    if(workerStartedAt&&!workerElapsedMs)workerElapsedMs=Math.max(0,performance.now()-workerStartedAt);
+    if(reviewerStartedAt)reviewerElapsedMs=Math.max(0,performance.now()-reviewerStartedAt);
+    const totalElapsedMs=runStartedAt?Math.max(0,performance.now()-runStartedAt):0;
     setState(`DONE · ${completed.size} STEPS`,'done');
     const presentationLabel=currentPresentation&&currentPresentation.format&&currentPresentation.format!=='default' ? String(currentPresentation.label||currentPresentation.format).toUpperCase() : '';
+    const routeLabel=executionLabel(evt.model||'AI model');
+    const timing=[workerElapsedMs?`model ${formatSeconds(workerElapsedMs)}`:'',reviewerElapsedMs?`review ${formatSeconds(reviewerElapsedMs)}`:'',totalElapsedMs?`total ${formatSeconds(totalElapsedMs)}`:''].filter(Boolean).join(' · ');
     $('badge').textContent=presentationLabel||'VALIDATED';
-    $('meta').textContent=String(evt.taskType||'general').toUpperCase()+' · '+friendlyModel(evt.model||'')+(presentationLabel?' · '+presentationLabel:'');
+    $('meta').textContent=String(evt.taskType||'general').toUpperCase()+' · '+routeLabel+(timing?' · '+timing:'')+(presentationLabel?' · '+presentationLabel:'');
     resolvePending(
       evt.answer||'No answer returned.',
-      friendlyModel(evt.model||'AI model')+' · '+(evt.review==='PASS'?'independent review passed':evt.review==='FAST_PATH'?'fast path · reviewer skipped':'review timeout · answer returned'),
+      routeLabel+' · '+(evt.review==='PASS'?'independent review passed':evt.review==='FAST_PATH'?'fast path · reviewer skipped':'review timeout · answer returned')+(timing?' · '+timing:''),
       currentPresentation
     );
     if(currentQuestion && evt.answer){
