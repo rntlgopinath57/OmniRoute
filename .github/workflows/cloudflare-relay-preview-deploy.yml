@@ -9,6 +9,7 @@ on:
       - infra/cloudflare-relay
       - release/v3.8.51
       - spike/ui-kokonut-bklit
+      - spike/animation-fusion-v2
     paths:
       - "cloudflare/**"
       - "relay-runtime/**"
@@ -295,8 +296,8 @@ jobs:
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=39' in html
-          assert './app.js?v=46' in html
+          assert './app.css?v=40' in html
+          assert './app.js?v=47' in html
           print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
 
       - name: Browser-rendered Relay UI smoke
@@ -682,3 +683,5 @@ jobs:
             echo "- Netlify security headers preserved on Cloudflare"
             echo "- Provider coverage is reported by /api/health; unavailable providers remain disabled rather than silently assumed"
           } >> "$GITHUB_STEP_SUMMARY"
+
+# animation fusion v2 validation
