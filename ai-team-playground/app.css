@@ -3956,3 +3956,50 @@ header{
   }
   #answer .thread{padding-bottom:158px!important}
 }
+
+
+/* Kokonut-inspired command composer spike v38 — CSS-only, no runtime dependency.
+   Progressive enhancement: existing input, mic/send handlers and routing remain unchanged. */
+.inputShell,
+#answer .followup{
+  transition:border-color .22s ease,box-shadow .22s ease,background .22s ease,transform .22s ease;
+}
+.inputShell:focus-within,
+#answer .followup:focus-within{
+  border-color:rgba(113,239,255,.52)!important;
+  background:linear-gradient(135deg,rgba(9,18,29,.98),rgba(8,13,23,.98))!important;
+  box-shadow:
+    0 20px 70px rgba(0,0,0,.52),
+    0 0 0 1px rgba(113,239,255,.08),
+    0 0 34px rgba(113,239,255,.10)!important;
+}
+.inputShell:focus-within:before,
+#answer .followup:focus-within:before{
+  content:"";
+  position:absolute;
+  inset:-1px;
+  border-radius:inherit;
+  padding:1px;
+  pointer-events:none;
+  background:linear-gradient(105deg,transparent 10%,rgba(113,239,255,.5),rgba(156,134,255,.35),transparent 90%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  animation:composerSheen 2.8s ease-in-out infinite;
+}
+.inputShell{position:relative}
+#answer .followup{isolation:isolate}
+.send:not(:disabled),
+.followSend:not(:disabled){
+  box-shadow:0 0 0 1px rgba(113,239,255,.06),0 8px 24px rgba(0,0,0,.22);
+}
+.send:not(:disabled):active,
+.followSend:not(:disabled):active{transform:scale(.94)}
+@keyframes composerSheen{
+  0%,100%{opacity:.32;filter:saturate(.85)}
+  50%{opacity:.9;filter:saturate(1.35)}
+}
+@media(prefers-reduced-motion:reduce){
+  .inputShell:focus-within:before,
+  #answer .followup:focus-within:before{animation:none}
+}
