@@ -1,0 +1,163 @@
+name: CBM Routing Truth Lab
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/cbm-routing-truth-lab.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cbm-routing-truth-lab
+  cancel-in-progress: true
+
+jobs:
+  routing-truth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout current OmniRoute release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install verified CBM release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/cbm-venv
+          source /tmp/cbm-venv/bin/activate
+          python -m pip install --disable-pip-version-check -q codebase-memory-mcp==0.11.0
+          codebase-memory-mcp --version
+
+      - name: Index actual release tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          codebase-memory-mcp cli index_repository "{\"repo_path\":\"$GITHUB_WORKSPACE\"}" | tee /tmp/cbm-index.json
+          python - <<'PY' > /tmp/cbm-project
+          import json
+          data=json.load(open('/tmp/cbm-index.json', encoding='utf-8'))
+          project=data.get('project')
+          if not project:
+              raise SystemExit('CBM did not return project id')
+          print(project)
+          PY
+          echo "CBM_PROJECT=$(cat /tmp/cbm-project)"
+          test -s /tmp/cbm-project
+
+      - name: Map production routing symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          PROJECT="$(cat /tmp/cbm-project)"
+
+          for FN in explicitModelRoute detectNamedAgentRoute assessRoutingLane resolveWorkerModel resolveReviewerModels callModel callGroq callCloudflareAI; do
+            codebase-memory-mcp cli search_graph "{\"project\":\"$PROJECT\",\"name_pattern\":\"^$FN$\",\"label\":\"Function\",\"format\":\"json\"}" \
+              | tee "/tmp/cbm-search-$FN.json"
+            test -s "/tmp/cbm-search-$FN.json"
+          done
+
+          grep -q 'netlify/functions/ask.mts' /tmp/cbm-search-explicitModelRoute.json
+          grep -q 'relay-runtime/named-agent-routing.mjs' /tmp/cbm-search-detectNamedAgentRoute.json
+          grep -q 'relay-runtime/routing-policy.mjs' /tmp/cbm-search-assessRoutingLane.json
+          grep -q 'netlify/functions/ask.mts' /tmp/cbm-search-resolveWorkerModel.json
+          grep -q 'netlify/functions/ask.mts' /tmp/cbm-search-resolveReviewerModels.json
+          echo "CBM_SYMBOL_MAP=PASS"
+
+      - name: Prove named-agent routing dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          PROJECT="$(cat /tmp/cbm-project)"
+
+          codebase-memory-mcp cli trace_path "{\"project\":\"$PROJECT\",\"function_name\":\"explicitModelRoute\",\"direction\":\"outbound\",\"depth\":3,\"format\":\"json\",\"include_evidence\":true}" \
+            | tee /tmp/cbm-trace-explicit.json
+
+          grep -q 'detectNamedAgentRoute' /tmp/cbm-trace-explicit.json
+          echo "CBM_NAMED_AGENT_PATH=PASS"
+
+      - name: Prove worker resolution dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          PROJECT="$(cat /tmp/cbm-project)"
+
+          codebase-memory-mcp cli trace_path "{\"project\":\"$PROJECT\",\"function_name\":\"resolveWorkerModel\",\"direction\":\"outbound\",\"depth\":4,\"format\":\"json\",\"include_evidence\":true}" \
+            | tee /tmp/cbm-trace-worker.json
+
+          grep -q 'runtimeVariant' /tmp/cbm-trace-worker.json
+          grep -q 'firstConfiguredModel' /tmp/cbm-trace-worker.json
+          grep -q 'modelConfigured' /tmp/cbm-trace-worker.json
+          echo "CBM_WORKER_PATH=PASS"
+
+      - name: Prove independent reviewer dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          PROJECT="$(cat /tmp/cbm-project)"
+
+          codebase-memory-mcp cli trace_path "{\"project\":\"$PROJECT\",\"function_name\":\"resolveReviewerModels\",\"direction\":\"outbound\",\"depth\":4,\"format\":\"json\",\"include_evidence\":true}" \
+            | tee /tmp/cbm-trace-reviewer.json
+
+          grep -q 'reviewerFor' /tmp/cbm-trace-reviewer.json
+          grep -q 'modelFamily' /tmp/cbm-trace-reviewer.json
+          grep -q 'modelConfigured' /tmp/cbm-trace-reviewer.json
+          echo "CBM_REVIEWER_PATH=PASS"
+
+      - name: Prove provider execution fan-out
+        shell: bash
+        run: |
+          set -euo pipefail
+          source /tmp/cbm-venv/bin/activate
+          PROJECT="$(cat /tmp/cbm-project)"
+
+          codebase-memory-mcp cli trace_path "{\"project\":\"$PROJECT\",\"function_name\":\"callModel\",\"direction\":\"outbound\",\"depth\":2,\"format\":\"json\",\"include_evidence\":true}" \
+            | tee /tmp/cbm-trace-callmodel.json
+
+          for FN in callGroq callCloudflareAI callAnthropic callGemini callOpenRouter callOpenAI callFreeLlmApiPublic; do
+            grep -q "$FN" /tmp/cbm-trace-callmodel.json
+          done
+          echo "CBM_PROVIDER_FANOUT=PASS"
+
+      - name: Architecture summary
+        if: always()
+        shell: bash
+        run: |
+          echo "===== CBM ROUTING TRUTH LAB ====="
+          if [ -f /tmp/cbm-index.json ]; then
+            python - <<'PY'
+          import json
+          p='/tmp/cbm-index.json'
+          try:
+              d=json.load(open(p, encoding='utf-8'))
+              print('project:', d.get('project'))
+              print('nodes:', d.get('nodes'))
+              print('edges:', d.get('edges'))
+              print('status:', d.get('status'))
+          except Exception as exc:
+              print('index parse failed:', exc)
+          PY
+          fi
+
+          for FILE in /tmp/cbm-trace-explicit.json /tmp/cbm-trace-worker.json /tmp/cbm-trace-reviewer.json /tmp/cbm-trace-callmodel.json; do
+            if [ -f "$FILE" ]; then
+              echo
+              echo "--- $(basename "$FILE") ---"
+              head -c 6000 "$FILE"
+              echo
+            fi
+          done
