@@ -4064,3 +4064,19 @@ header{
 }
 @keyframes mobileStagePulse{50%{box-shadow:0 0 0 1px rgba(113,239,255,.42),0 0 22px rgba(113,239,255,.22)}}
 @media(prefers-reduced-motion:reduce){.mobileRunLane span.active{animation:none}}
+
+/* Animation Lab A — Energy Router */
+body[data-animation-lab="energy"] .ambientFlight{filter:drop-shadow(0 0 8px rgba(113,239,255,.85))}
+body[data-animation-lab="energy"] .ambientFlight .flightPacket{animation:energyPacket .72s cubic-bezier(.2,.75,.15,1) forwards!important}
+body[data-animation-lab="energy"] .ambientFlight .flightTail{animation:energyTail .72s ease-out forwards!important}
+body[data-animation-lab="energy"] .railNode.receiving .railCore{animation:energyImpact .62s cubic-bezier(.18,.8,.2,1)}
+body[data-animation-lab="energy"] .railNode.sending .railCore{animation:energyCharge .45s ease-out}
+body[data-animation-lab="energy"] .mobileRunLane span.active:after{content:"";position:absolute;inset:-4px;border:1px solid rgba(113,239,255,.55);border-radius:10px;animation:energyRing .8s ease-out infinite}
+body[data-animation-lab="energy"] .mobileRunLane span{position:relative}
+@keyframes energyPacket{0%{transform:translateX(0) scale(.55);opacity:0}12%{opacity:1}70%{transform:translateX(calc(100% - 8px)) scale(1.35);opacity:1}100%{transform:translateX(calc(100% - 2px)) scale(.2);opacity:0}}
+@keyframes energyTail{0%{transform:scaleX(.05);opacity:0}30%{opacity:.9}100%{transform:scaleX(1);opacity:0}}
+@keyframes energyImpact{0%{transform:scale(.82)}45%{transform:scale(1.28);box-shadow:0 0 0 8px rgba(113,239,255,.08),0 0 28px rgba(113,239,255,.7)}100%{transform:scale(1)}}
+@keyframes energyCharge{50%{transform:scale(1.16);filter:brightness(1.8)}}
+@keyframes energyRing{to{transform:scale(1.18);opacity:0}}
+
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="energy"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
