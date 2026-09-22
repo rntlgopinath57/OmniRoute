@@ -28,7 +28,7 @@ const $=id=>document.getElementById(id);
 const edges=$('edges'),nodes=$('nodes'),q=$('q'),go=$('go'),mic=$('mic');
 const answer=$('answer'),workspace=$('workspace'),listenText=$('listenText');
 const followQ=$('followQ'),followGo=$('followGo'),followMic=$('followMic'),thread=$('thread'),canvas=$('canvas'),burstLayer=$('burstLayer'),followup=document.querySelector('.followup'),toolDockEl=$('toolDock');
-const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx');
+const runStrip=$('runStrip'),runStripText=$('runStripText'),runToggle=$('runToggle'),activityLane=$('activityLane'),handoffFx=$('handoffFx'),mobileRunLane=$('mobileRunLane');
 
 let busy=false, answered=false, listening=false, active=new Set(), selected=new Set(), completed=new Set(), activeEdges=new Set(), completedEdges=new Set();
 let lastWorker='analyst', lastTool='', recognition=null, currentQuestion='', conversation=[], chatStarted=false, pendingMessage=null, voiceTarget=q;
@@ -148,6 +148,13 @@ function setState(text,kind=''){
   if(activityLane)activityLane.dataset.mode=kind||'ready';
   canvas.dataset.mode=kind||'ready';
   workspace.classList.toggle('working',kind==='busy'||kind==='listening');
+}
+function setMobileRunStage(stage,label=''){
+  if(!mobileRunLane)return;
+  mobileRunLane.querySelectorAll('[data-mobile-stage]').forEach(el=>{
+    el.classList.toggle('active',el.dataset.mobileStage===stage);
+    if(stage==='model'&&el.dataset.mobileStage==='model'&&label)el.textContent=label.toUpperCase().slice(0,10);
+  });
 }
 function setFlowEdge(edge){
   for(const existing of activeEdges) completedEdges.add(existing);
@@ -526,6 +533,7 @@ function openAnswer(ok=true){
   $('tick').classList.toggle('bad',!ok);
 }
 function resetForRun(question,isRetry=false){
+  setMobileRunStage('you');
   workspace.classList.remove('show-run');
   if(runToggle){
     runToggle.setAttribute('aria-expanded','false');
@@ -566,6 +574,7 @@ function finishError(message){
 async function handleEvent(evt){
   if(!evt||!evt.type)return;
   if(evt.type==='planner'){
+    setMobileRunStage('planner');
     completed.add('you'); setStage('understand'); setState('PLANNER · UNDERSTANDING','busy'); updatePending('Planner is understanding your request…'); await travel('you','planner',420); return;
   }
 
@@ -578,6 +587,7 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='worker'){
+    setMobileRunStage('router');
     completed.add('planner');
     setStage('route'); setState('ROUTER · SELECTING','busy');
     active=new Set(['router']); setFlowEdge('planner:router'); render(); kickNode('router'); await wait(280);
@@ -599,6 +609,7 @@ async function handleEvent(evt){
     await wait(220);
 
     setActiveProvider(evt.model);
+    setMobileRunStage('model',friendlyModel(evt.model));
     setState(`ACTIVE · ${friendlyModel(evt.model).toUpperCase()}`,'busy');
     updatePending(`${friendlyModel(evt.model)} is working on the answer…`);
     render();
@@ -683,6 +694,7 @@ async function handleEvent(evt){
     return;
   }
   if(evt.type==='reviewer'){
+    setMobileRunStage('reviewer');
     if(activeProviderNode)completedProviders.add(activeProviderNode);
     activeProviderNode='';
     completed.add(lastWorker);
