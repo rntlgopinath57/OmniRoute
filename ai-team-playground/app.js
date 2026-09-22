@@ -52,12 +52,12 @@ function friendlyModel(model=''){
 }
 function providerNodeForModel(model=''){
   const m=String(model||'').toLowerCase();
+  if(m.includes('deepseek'))return'deepseek';
+  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
   if(m.startsWith('groq:'))return'groq';
   if(m.startsWith('@cf/'))return'cloudflare';
   if(m.includes('gemini')||m.includes('google'))return'gemini';
   if(m.includes('claude')||m.includes('anthropic'))return'claude';
-  if(m.includes('deepseek'))return'deepseek';
-  if(m.includes('qwen')||m.includes('alibaba'))return'qwen';
   if(m.includes('grok')||m.includes('xai'))return'grok';
   if(m.includes('gpt')||m.includes('openai'))return'openai';
   return'';
@@ -898,8 +898,8 @@ async function initProviderRoster(){
       gemini:Boolean(models.gemini ?? providers.gemini),
       openai:Boolean(models.openai ?? providers.openai),
       claude:Boolean(models.claude ?? providers.anthropic),
-      deepseek:Boolean(models.deepseek ?? providers.openrouter),
-      qwen:Boolean(models.qwen ?? providers.openrouter),
+      deepseek:Boolean(models.deepseek ?? providers.openrouter) || Boolean(models.cloudflare ?? providers.cloudflare),
+      qwen:Boolean(models.qwen ?? providers.openrouter) || Boolean(models.groq ?? providers.groq),
       groq:Boolean(models.groq ?? providers.groq),
       cloudflare:Boolean(models.cloudflare ?? providers.cloudflare),
       grok:Boolean(models.grok ?? false)
