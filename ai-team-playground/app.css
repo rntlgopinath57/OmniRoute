@@ -4097,3 +4097,14 @@ body[data-animation-lab="fusion"] .messageRow:last-child .messageBubble{animatio
 @keyframes fusionReveal{0%{opacity:0;transform:scale(.93) translateY(18px);filter:blur(10px)}100%{opacity:1;transform:none;filter:none}}
 @keyframes fusionAnswer{0%{opacity:0;transform:translateY(14px) scale(.98);filter:blur(4px)}100%{opacity:1;transform:none;filter:none}}
 @media(prefers-reduced-motion:reduce){body[data-animation-lab="fusion"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* Animation Lab identity v3 — FUSION: energy + neural + morph */
+body[data-animation-lab="fusion"] .runStrip{overflow:hidden}
+body[data-animation-lab="fusion"] .runStrip:before{content:"";position:absolute;left:-28%;bottom:0;width:28%;height:2px;background:linear-gradient(90deg,transparent,#dffcff,rgba(177,157,255,.8),transparent);box-shadow:0 0 16px rgba(113,239,255,.65);animation:fusionLaneSweep .9s linear infinite;pointer-events:none}
+body[data-animation-lab="fusion"] .runStrip:after{content:"";position:absolute;inset:0;opacity:.16;background-image:radial-gradient(circle,rgba(177,157,255,.8) 0 1px,transparent 1.5px);background-size:22px 22px;animation:fusionMesh 3.6s linear infinite;pointer-events:none}
+body[data-animation-lab="fusion"] #workspace.working .runStrip{animation:fusionRibbon 1.5s ease-in-out infinite}
+body[data-animation-lab="fusion"] .mobileRunLane span.active{transform:scale(1.08) translateY(-1px)!important}
+@keyframes fusionLaneSweep{to{left:100%}}
+@keyframes fusionMesh{to{background-position:22px 22px}}
+@keyframes fusionRibbon{50%{box-shadow:inset 0 0 30px rgba(113,239,255,.07),0 8px 28px rgba(156,134,255,.05);transform:scale(.997)}}
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="fusion"] .runStrip:before,body[data-animation-lab="fusion"] .runStrip:after,body[data-animation-lab="fusion"] #workspace.working .runStrip{animation:none!important}}
