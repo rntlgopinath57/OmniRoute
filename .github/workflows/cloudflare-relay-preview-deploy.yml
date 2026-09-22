@@ -146,7 +146,7 @@ jobs:
         if: steps.deploy.outputs.url != ''
         run: |
           response=""
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             response="$(curl --fail --show-error --silent --max-time 25 \
               -H 'Content-Type: application/json' \
               -d '{"question":"Write a friendly two-sentence greeting for a new user.","history":[]}' \
@@ -154,7 +154,7 @@ jobs:
             if printf '%s\n' "$response" | grep -Eq '"type":"done".*"model":"freellmapi:'; then
               break
             fi
-            if [ "$attempt" -lt 3 ]; then sleep "$((attempt * 5))"; fi
+            if [ "$attempt" -lt 5 ]; then sleep "$((attempt * 4))"; fi
           done
           printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
           cat /tmp/relay-freellmapi-smoke.ndjson
@@ -164,6 +164,20 @@ jobs:
           grep -Eq '"type":"done".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
           ! grep -q '"type":"error"' /tmp/relay-freellmapi-smoke.ndjson
           echo "Live keyless FreeLLMAPI lane: PASS"
+
+      - name: Verify natural named-model affinity
+        if: steps.deploy.outputs.url != ''
+        run: |
+          response="$(curl --fail --show-error --silent --max-time 30 \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"what is deepseek famous for","history":[]}' \
+            "${{ steps.deploy.outputs.url }}/api/ask")"
+          printf '%s\n' "$response" > /tmp/relay-deepseek-affinity.ndjson
+          cat /tmp/relay-deepseek-affinity.ndjson
+          grep -Eq '"type":"planner".*"routeReason":"explicit_model".*"requestedFamily":"deepseek"' /tmp/relay-deepseek-affinity.ndjson
+          grep -Eq '"type":"worker".*"model":"deepseek/' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -Eq '"type":"worker".*"model":"groq:' /tmp/relay-deepseek-affinity.ndjson
+          echo "Natural DeepSeek affinity: PASS — Groq is not the worker route"
 
       - name: Manual live Relay research smoke
         if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.GEMINI_API_KEY != ''
@@ -258,6 +272,17 @@ jobs:
           echo "$html" | grep -q 'id="runToggle"'
           echo "Conversation-first UI with ambient execution canvas verified."
 
+      - name: Verify isolated animation identity
+        if: steps.deploy.outputs.url != ''
+        run: |
+          html="$(curl --fail --show-error --silent "${{ steps.deploy.outputs.url }}/?lab_identity=fusion-3")"
+          echo "$html" | grep -q 'data-lab="fusion"'
+          echo "$html" | grep -q '>FUSION V2<'
+          echo "$html" | grep -q './app.css?v=fusion-3'
+          js="$(curl --fail --show-error --silent "${{ steps.deploy.outputs.url }}/app.js?v=fusion-2")"
+          echo "$js" | grep -q "animationLab='fusion'"
+          echo "FUSION V2 live identity: PASS"
+
       - name: Verify Relay three-column side rails
         run: |
           grep -q 'id="leftRail"' ai-team-playground/index.html
@@ -296,7 +321,7 @@ jobs:
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=fusion-2' in html
+          assert './app.css?v=fusion-3' in html
           assert './app.js?v=fusion-2' in html
           print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
 
@@ -623,6 +648,7 @@ jobs:
           assert 'emergency_fallback' in ask, "Gemini emergency fallback must be explicit"
           assert 'if (!providerAvailable(model)) continue' in ask, "Provider-family circuit breaker skip missing"
           assert 'function explicitModelRoute(question: string)' in ask, "Explicit model affinity router missing"
+          assert 'A single named model/provider is a routing affinity request in Relay.' in ask, "Single named model/provider affinity missing"
           assert 'explicitRoute.comparison' in ask, "Multi-model comparison branch missing"
           assert 'GROQ_MODELS.strong' in ask, "Neutral comparison worker missing"
           assert 'function fetchTextWithTimeout' in ask, "Full response-body timeout helper missing"
