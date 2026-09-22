@@ -172,6 +172,21 @@ jobs:
             echo "Live keyless route + fallback: PASS"
           fi
 
+      - name: Verify named-agent routing contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          ask = Path("netlify/functions/ask.mts").read_text()
+          for family in ("gemini","claude","openai","deepseek","qwen","groq","cloudflare","grok"):
+              assert f'family: "{family}"' in ask, f"Missing named family: {family}"
+          assert 'affinity: !strictIntent' in ask, "Single named-agent affinity missing"
+          assert 'strict: strictIntent' in ask, "Explicit-only routing missing"
+          assert 'comparison: families.length > 1' in ask, "Multi-agent comparison routing missing"
+          assert '"named_model_affinity"' in ask, "Named-agent affinity event missing"
+          assert 'sameFamilyPool' in ask and '...normalPool' in ask, "Visible bounded fallback contract missing"
+          print("Named-agent routing contract: PASS")
+          PY
+
       - name: Verify natural named-model affinity
         if: steps.deploy.outputs.url != ''
         run: |
@@ -181,10 +196,12 @@ jobs:
             "${{ steps.deploy.outputs.url }}/api/ask")"
           printf '%s\n' "$response" > /tmp/relay-deepseek-affinity.ndjson
           cat /tmp/relay-deepseek-affinity.ndjson
-          grep -Eq '"type":"planner".*"routeReason":"explicit_model".*"requestedFamily":"deepseek"' /tmp/relay-deepseek-affinity.ndjson
-          grep -Eq '"type":"worker".*"model":"deepseek/' /tmp/relay-deepseek-affinity.ndjson
-          ! grep -Eq '"type":"worker".*"model":"groq:' /tmp/relay-deepseek-affinity.ndjson
-          echo "Natural DeepSeek affinity: PASS — Groq is not the worker route"
+          grep -Eq '"type":"planner".*"routeReason":"named_model_affinity".*"requestedFamily":"deepseek"' /tmp/relay-deepseek-affinity.ndjson
+          grep -Eq '"type":"worker".*"model":"(@cf/)?deepseek|"type":"worker".*"model":"deepseek/' /tmp/relay-deepseek-affinity.ndjson
+          grep -q '"type":"done"' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -q '"type":"error"' /tmp/relay-deepseek-affinity.ndjson
+          ! grep -qi '<think>' /tmp/relay-deepseek-affinity.ndjson
+          echo "Natural DeepSeek affinity: PASS — DeepSeek was attempted first and Relay completed the answer"
 
       - name: Manual live Relay research smoke
         if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.GEMINI_API_KEY != ''
