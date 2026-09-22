@@ -4064,3 +4064,19 @@ header{
 }
 @keyframes mobileStagePulse{50%{box-shadow:0 0 0 1px rgba(113,239,255,.42),0 0 22px rgba(113,239,255,.22)}}
 @media(prefers-reduced-motion:reduce){.mobileRunLane span.active{animation:none}}
+
+/* Animation Lab B — Living Neural Network */
+body[data-animation-lab="neural"] .neuralField{opacity:.55!important;filter:drop-shadow(0 0 14px rgba(156,134,255,.16))}
+body[data-animation-lab="neural"] #workspace.working .neuralField i{animation:neuralBreathe 2.2s ease-in-out infinite}
+body[data-animation-lab="neural"] .railNode.active .railCore,body[data-animation-lab="neural"] .providerNode.active .railCore{animation:neuralWake 1.15s ease-in-out infinite}
+body[data-animation-lab="neural"] .railNode.completed .railCore{box-shadow:0 0 0 1px rgba(113,239,255,.18),0 0 20px rgba(113,239,255,.16)}
+body[data-animation-lab="neural"] .railNode:not(.active):not(.completed){transition:opacity .55s ease,filter .55s ease}
+body[data-animation-lab="neural"] #workspace.working .railNode:not(.active):not(.completed){opacity:.48;filter:saturate(.55)}
+body[data-animation-lab="neural"] .reviewerRailNode.active .railCore{animation:validationWave .9s ease-out infinite}
+body[data-animation-lab="neural"] .mobileRunLane span.active{animation:neuralMobile 1.2s ease-in-out infinite!important}
+@keyframes neuralBreathe{0%,100%{transform:scale(.96);opacity:.3}50%{transform:scale(1.08);opacity:.85}}
+@keyframes neuralWake{0%,100%{transform:scale(.96);filter:brightness(1)}50%{transform:scale(1.18);filter:brightness(1.75);box-shadow:0 0 28px rgba(156,134,255,.48)}}
+@keyframes validationWave{0%{box-shadow:0 0 0 0 rgba(104,255,185,.45)}100%{box-shadow:0 0 0 18px rgba(104,255,185,0)}}
+@keyframes neuralMobile{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px);filter:brightness(1.45)}}
+
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="neural"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
