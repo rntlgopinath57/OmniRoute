@@ -4064,3 +4064,36 @@ header{
 }
 @keyframes mobileStagePulse{50%{box-shadow:0 0 0 1px rgba(113,239,255,.42),0 0 22px rgba(113,239,255,.22)}}
 @media(prefers-reduced-motion:reduce){.mobileRunLane span.active{animation:none}}
+
+/* Animation Fusion V2 — truthful energy + neural reaction + cinematic morph */
+body[data-animation-lab="fusion"] .ambientFlight{filter:drop-shadow(0 0 9px rgba(113,239,255,.72));mix-blend-mode:screen}
+body[data-animation-lab="fusion"] .ambientFlight .flightPacket{animation:fusionPacket .78s cubic-bezier(.16,.76,.18,1) forwards!important}
+body[data-animation-lab="fusion"] .ambientFlight .flightTail{animation:fusionTail .82s ease-out forwards!important;transform-origin:left center}
+body[data-animation-lab="fusion"] .flightSpark{position:absolute;left:0;top:50%;width:3px;height:3px;border-radius:50%;background:#dffcff;box-shadow:0 0 9px rgba(113,239,255,.95);opacity:0}
+body[data-animation-lab="fusion"] .flightSpark.s1{animation:fusionSpark .72s .05s ease-out forwards}
+body[data-animation-lab="fusion"] .flightSpark.s2{animation:fusionSpark .76s .11s ease-out forwards}
+body[data-animation-lab="fusion"] .flightSpark.s3{animation:fusionSpark .68s .16s ease-out forwards}
+body[data-animation-lab="fusion"] .railNode.receiving .railCore{animation:fusionImpact .7s cubic-bezier(.18,.82,.2,1)}
+body[data-animation-lab="fusion"] #workspace.working .neuralField i{animation:fusionNeural 2.4s ease-in-out infinite}
+body[data-animation-lab="fusion"] #workspace.working .railNode:not(.active):not(.completed):not(.receiving){opacity:.5;filter:saturate(.6);transition:.45s ease}
+body[data-animation-lab="fusion"] .railNode.active .railCore,body[data-animation-lab="fusion"] .providerNode.active .railCore{box-shadow:0 0 0 1px rgba(113,239,255,.26),0 0 30px rgba(113,239,255,.28);animation:fusionCore 1.15s ease-in-out infinite}
+body[data-animation-lab="fusion"] .railNode.completed .railCore{box-shadow:0 0 0 1px rgba(104,255,185,.16),0 0 15px rgba(104,255,185,.12)}
+body[data-animation-lab="fusion"] .mobileRunLane span{position:relative}
+body[data-animation-lab="fusion"] .mobileRunLane span.completed{color:rgba(104,255,185,.72)}
+body[data-animation-lab="fusion"] .mobileRunLane span.completed:after{content:"✓";font-size:6px;margin-left:2px}
+body[data-animation-lab="fusion"] .mobileRunLane span.active{animation:fusionStage .8s cubic-bezier(.18,.82,.2,1)!important}
+body[data-animation-lab="fusion"] #answer,body[data-animation-lab="fusion"] #canvas,body[data-animation-lab="fusion"] .thread{transition:transform .5s cubic-bezier(.18,.82,.2,1),opacity .4s ease,filter .4s ease!important}
+body[data-animation-lab="fusion"] #workspace.show-run #canvas{animation:fusionReveal .55s cubic-bezier(.16,.84,.24,1) both}
+body[data-animation-lab="fusion"] #workspace.show-run #answer{z-index:90!important}
+body[data-animation-lab="fusion"] #workspace.show-run #canvas{z-index:140!important}
+body[data-animation-lab="fusion"] .messageRow:last-child .messageBubble{animation:fusionAnswer .48s cubic-bezier(.18,.82,.22,1) both}
+@keyframes fusionPacket{0%{transform:translateX(0) scale(.45);opacity:0}12%{opacity:1}72%{transform:translateX(calc(100% - 9px)) scale(1.35);opacity:1}100%{transform:translateX(calc(100% - 1px)) scale(.12);opacity:0}}
+@keyframes fusionTail{0%{transform:scaleX(.04);opacity:0}28%{opacity:.82}100%{transform:scaleX(1);opacity:0}}
+@keyframes fusionSpark{0%{transform:translate(0,0) scale(.2);opacity:0}25%{opacity:.9}100%{transform:translate(calc(100% - 5px),var(--sparkY,5px)) scale(.1);opacity:0}}
+@keyframes fusionImpact{0%{transform:scale(.82)}45%{transform:scale(1.25);filter:brightness(1.7);box-shadow:0 0 0 9px rgba(113,239,255,.07),0 0 30px rgba(113,239,255,.52)}100%{transform:scale(1)}}
+@keyframes fusionNeural{0%,100%{transform:scale(.97);opacity:.3}50%{transform:scale(1.06);opacity:.75}}
+@keyframes fusionCore{50%{transform:scale(1.12);filter:brightness(1.4)}}
+@keyframes fusionStage{0%{transform:scale(.88);opacity:.5}55%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+@keyframes fusionReveal{0%{opacity:0;transform:scale(.93) translateY(18px);filter:blur(10px)}100%{opacity:1;transform:none;filter:none}}
+@keyframes fusionAnswer{0%{opacity:0;transform:translateY(14px) scale(.98);filter:blur(4px)}100%{opacity:1;transform:none;filter:none}}
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="fusion"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
