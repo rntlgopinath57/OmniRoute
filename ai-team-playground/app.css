@@ -4080,3 +4080,12 @@ body[data-animation-lab="energy"] .mobileRunLane span{position:relative}
 @keyframes energyRing{to{transform:scale(1.18);opacity:0}}
 
 @media(prefers-reduced-motion:reduce){body[data-animation-lab="energy"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* Animation Lab identity v3 — ENERGY: directional packet transport */
+body[data-animation-lab="energy"] .runStrip{overflow:hidden}
+body[data-animation-lab="energy"] .runStrip:before{content:"";position:absolute;left:-34%;bottom:0;width:34%;height:2px;background:linear-gradient(90deg,transparent,rgba(113,239,255,.35),#dffcff,transparent);box-shadow:0 0 15px rgba(113,239,255,.7);animation:energyLaneSweep 1.05s linear infinite;pointer-events:none}
+body[data-animation-lab="energy"] #workspace.working .mobileRunLane i{animation:energyChevron .56s ease-in-out infinite}
+body[data-animation-lab="energy"] #workspace.working .runStrip{box-shadow:inset 0 -1px 0 rgba(113,239,255,.24),0 8px 30px rgba(113,239,255,.05)}
+@keyframes energyLaneSweep{to{left:100%}}
+@keyframes energyChevron{50%{transform:translateX(2px);color:#dffcff;text-shadow:0 0 9px rgba(113,239,255,.8)}}
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="energy"] .runStrip:before,body[data-animation-lab="energy"] .mobileRunLane i{animation:none!important}}
