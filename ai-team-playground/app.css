@@ -4064,3 +4064,17 @@ header{
 }
 @keyframes mobileStagePulse{50%{box-shadow:0 0 0 1px rgba(113,239,255,.42),0 0 22px rgba(113,239,255,.22)}}
 @media(prefers-reduced-motion:reduce){.mobileRunLane span.active{animation:none}}
+
+/* Animation Lab C — Cinematic Morph */
+body[data-animation-lab="morph"] #answer,body[data-animation-lab="morph"] #canvas,body[data-animation-lab="morph"] .runStrip,body[data-animation-lab="morph"] .thread{transition:transform .52s cubic-bezier(.2,.8,.2,1),opacity .42s ease,filter .42s ease,border-radius .52s ease!important}
+body[data-animation-lab="morph"] #workspace.show-run #canvas{animation:cinemaReveal .55s cubic-bezier(.16,.84,.24,1) both}
+body[data-animation-lab="morph"] #workspace.show-run #answer .thread{transform:scale(.96) translateY(8px);filter:blur(5px);opacity:.08!important}
+body[data-animation-lab="morph"] .messageRow:last-child .messageBubble{animation:answerLand .55s cubic-bezier(.18,.82,.22,1) both}
+body[data-animation-lab="morph"] .mobileRunLane span.active{animation:morphStage .7s cubic-bezier(.18,.82,.22,1) both!important}
+body[data-animation-lab="morph"] .runToggle{transition:transform .28s ease,box-shadow .28s ease}
+body[data-animation-lab="morph"] #workspace.show-run .runToggle{transform:scale(.94);box-shadow:0 0 24px rgba(156,134,255,.28)}
+@keyframes cinemaReveal{0%{opacity:0;transform:scale(.92) translateY(22px);filter:blur(12px);border-radius:30px}100%{opacity:1;transform:scale(1) translateY(0);filter:blur(0);border-radius:0}}
+@keyframes answerLand{0%{opacity:0;transform:translateY(18px) scale(.97);filter:blur(6px)}100%{opacity:1;transform:none;filter:none}}
+@keyframes morphStage{0%{transform:scale(.84);opacity:.45}55%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="morph"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
