@@ -50,13 +50,10 @@ function explicitModelRoute(question: string) {
 
   if (families.length !== 1) return { model: "", family: "", explicit: false, comparison: families.length > 1 };
 
-  // Mentioning a provider is not enough to force that lane. Strict routing is
-  // reserved for explicit execution intent such as "use Gemini only" or
-  // "answer with Groq". This keeps ordinary questions about Gemini/Claude/etc.
-  // eligible for Relay's normal intelligent routing and bounded fallback.
-  const strictIntent = /\b(?:use|using|with|via|route\s+(?:this\s+)?to|ask)\s+(?:google\s+)?(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\b|\b(?:gemini|claude|anthropic|openai|chatgpt|gpt[-\s]?5(?:\.6)?|deepseek|qwen|groq|cloudflare(?:\s+workers?\s+ai)?|grok|xai|x-ai)\s+only\b/i.test(question);
-  if (!strictIntent) return { model: "", family: "", explicit: false, comparison: false };
-
+  // A single named model/provider is a routing affinity request in Relay.
+  // This matches the UI promise: asking about DeepSeek routes the worker to
+  // DeepSeek; asking about Qwen routes to Qwen, etc. Multiple named families
+  // remain a neutral comparison route above.
   const hit = hits.find((item) => item.family === families[0])!;
   return { model: hit.model, family: hit.family, explicit: true, comparison: false };
 }
