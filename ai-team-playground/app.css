@@ -4078,3 +4078,13 @@ body[data-animation-lab="morph"] #workspace.show-run .runToggle{transform:scale(
 @keyframes morphStage{0%{transform:scale(.84);opacity:.45}55%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
 
 @media(prefers-reduced-motion:reduce){body[data-animation-lab="morph"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* Animation Lab identity v3 — MORPH: shared-element cinematic transitions */
+body[data-animation-lab="morph"] .runStrip{overflow:hidden;transform-origin:center top}
+body[data-animation-lab="morph"] .runStrip:before{content:"";position:absolute;inset:-1px;background:linear-gradient(105deg,transparent 15%,rgba(255,255,255,.055) 42%,rgba(177,157,255,.16) 50%,transparent 60%);transform:translateX(-115%);animation:morphSheen 2.1s cubic-bezier(.2,.75,.2,1) infinite;pointer-events:none}
+body[data-animation-lab="morph"] #workspace.working .runStrip{animation:morphRibbon 1.55s ease-in-out infinite}
+body[data-animation-lab="morph"] .mobileRunLane span.active{transform:scale(1.12) translateY(-1px)!important;min-width:44px;text-align:center}
+body[data-animation-lab="morph"] .mobileRunLane span.completed{transform:scale(.92);opacity:.72}
+@keyframes morphSheen{0%,28%{transform:translateX(-115%)}72%,100%{transform:translateX(115%)}}
+@keyframes morphRibbon{0%,100%{transform:perspective(700px) rotateX(0deg) scale(1)}50%{transform:perspective(700px) rotateX(1.4deg) scale(.994)}}
+@media(prefers-reduced-motion:reduce){body[data-animation-lab="morph"] .runStrip:before,body[data-animation-lab="morph"] #workspace.working .runStrip{animation:none!important}}
