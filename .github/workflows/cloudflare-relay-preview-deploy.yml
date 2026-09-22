@@ -8,6 +8,7 @@ on:
     branches:
       - infra/cloudflare-relay
       - release/v3.8.51
+      - improve/relay-stability-hardening
     paths:
       - "cloudflare/**"
       - "relay-runtime/**"
