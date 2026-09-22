@@ -148,10 +148,10 @@ function modelFamily(model: string) {
   const m = String(model || "").toLowerCase();
   if (m.startsWith("freellmapi:")) return "freellmapi";
   if (m.startsWith("groq:")) return "groq";
+  if (m.includes("deepseek")) return "deepseek";
   if (m.startsWith("@cf/")) return "cloudflare";
   if (m.includes("gemini") || m.includes("google")) return "gemini";
   if (m.includes("claude") || m.includes("anthropic")) return "claude";
-  if (m.includes("deepseek")) return "deepseek";
   if (m.includes("qwen") || m.includes("alibaba")) return "qwen";
   if (m.includes("grok") || m.includes("x-ai")) return "grok";
   if (m.includes("gpt") || m.includes("openai")) return "openai";
@@ -1052,11 +1052,17 @@ export default async (request: Request) => {
             : (model.startsWith("gpt-") ? 1200 : 1000);
           const isExplicitOpenRouterPrimary =
             explicitRoute.explicit && providerForModel(model) === "openrouter";
+          const isExplicitDeepSeekCloudflare =
+            explicitRoute.explicit
+            && explicitRoute.family === "deepseek"
+            && model === "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
           const timeoutMs = providerForModel(model) === "freellmapi"
             ? 9000
-            : isExplicitOpenRouterPrimary
-              ? (longForm ? 12000 : 8000)
-              : longForm
+            : isExplicitDeepSeekCloudflare
+              ? (longForm ? 30000 : 24000)
+              : isExplicitOpenRouterPrimary
+                ? (longForm ? 12000 : 8000)
+                : longForm
                 ? (index === 0 ? 16000 : index === 1 ? 12000 : 8000)
                 : (index === 0 ? 10000 : 7000);
 
@@ -1185,7 +1191,19 @@ export default async (request: Request) => {
           throw new Error("Relay could not reach an available AI provider. Please retry in a moment.");
         }
 
-        const reviewerCandidates = resolveReviewerModels(actualWorkerModel);
+        const reviewerCandidates = explicitRoute.explicit
+          ? [
+              "gemini-3.5-flash-lite",
+              CLOUDFLARE_MODELS.fast,
+              GROQ_MODELS.fast,
+              FREE_MODELS.reasoning,
+            ]
+              .filter((model, index, items) => items.indexOf(model) === index)
+              .filter((model) =>
+                modelConfigured(model)
+                && providerForModel(model) !== providerForModel(actualWorkerModel)
+              )
+          : resolveReviewerModels(actualWorkerModel);
         let actualReviewerModel = reviewerCandidates[0] || "";
 
         if (presentation.visual) {
