@@ -21,6 +21,14 @@ const FREE_MODELS = Object.freeze({
   universalFallback: "openrouter/free",
 });
 
+const DEEPSEEK_FREE_MODELS = Object.freeze([
+  FREE_MODELS.coding,
+  "deepseek/deepseek-v4-flash:free",
+  "deepseek/deepseek-chat-v3-0324:free",
+  "deepseek/deepseek-chat:free",
+  FREE_MODELS.deepseekFallback,
+]);
+
 const CLOUDFLARE_MODELS = Object.freeze({
   fast: "@cf/zai-org/glm-4.7-flash",
   balanced: "@cf/google/gemma-4-26b-a4b-it",
@@ -1014,7 +1022,7 @@ export default async (request: Request) => {
         // Automatic/task routes retain the bounded multi-provider fallback pool.
         let pool = explicitRoute.explicit
           ? (explicitRoute.family === "deepseek"
-              ? [primaryModel, FREE_MODELS.deepseekFallback]
+              ? DEEPSEEK_FREE_MODELS
                   .filter((model, index, items) => items.indexOf(model) === index)
                   .filter((model) => modelConfigured(model) && providerAvailable(model))
               : [primaryModel].filter((model) => modelConfigured(model) && providerAvailable(model)))
