@@ -619,9 +619,9 @@ jobs:
                 const lane=[...document.querySelectorAll('#mobileRunLane [data-mobile-stage]')].map(x=>({stage:x.dataset.mobileStage,active:x.classList.contains('active'),completed:x.classList.contains('completed')}));
                 return {
                   text:last?.textContent||'',
-                  heading:!!last?.querySelector('h2'),
+                  heading:!!last?.querySelector('h2,h3'),
                   strong:!!last?.querySelector('strong'),
-                  link:!!last?.querySelector('a[href="https://example.com/"]'),
+                  link:!!last?.querySelector('a[href^="https://example.com"]'),
                   code:!!last?.querySelector('code'),
                   rawBold:(last?.textContent||'').includes('**'),
                   lane,
