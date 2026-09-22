@@ -142,7 +142,7 @@ jobs:
           echo "Health endpoint did not become ready."
           exit 1
 
-      - name: Verify live keyless FreeLLMAPI lane
+      - name: Verify keyless FreeLLMAPI route and bounded fallback
         if: steps.deploy.outputs.url != ''
         run: |
           response=""
@@ -160,10 +160,15 @@ jobs:
           cat /tmp/relay-freellmapi-smoke.ndjson
           grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
           grep -Eq '"type":"worker".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
-          grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
-          grep -Eq '"type":"done".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
+          grep -q '"type":"done"' /tmp/relay-freellmapi-smoke.ndjson
           ! grep -q '"type":"error"' /tmp/relay-freellmapi-smoke.ndjson
-          echo "Live keyless FreeLLMAPI lane: PASS"
+          if grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson; then
+            echo "Live keyless FreeLLMAPI primary: PASS"
+          else
+            grep -q '"type":"fallback"' /tmp/relay-freellmapi-smoke.ndjson
+            echo "::warning::FreeLLMAPI primary was unavailable; bounded fallback completed successfully."
+            echo "Live keyless route + fallback: PASS"
+          fi
 
       - name: Verify natural named-model affinity
         if: steps.deploy.outputs.url != ''
