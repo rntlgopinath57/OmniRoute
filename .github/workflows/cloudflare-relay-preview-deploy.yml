@@ -8,6 +8,7 @@ on:
     branches:
       - infra/cloudflare-relay
       - release/v3.8.51
+      - spike/ui-kokonut-bklit
     paths:
       - "cloudflare/**"
       - "relay-runtime/**"
@@ -294,8 +295,8 @@ jobs:
           assert "workspace.classList.remove('show-run')" in js
           assert "runToggle.textContent='View run'" in js
           assert "await travel('you','planner',420)" in js
-          assert './app.css?v=37' in html
-          assert './app.js?v=45' in html
+          assert './app.css?v=39' in html
+          assert './app.js?v=46' in html
           print("Viewport composer mount and first YOU -> PLANNER handoff: PASS")
 
       - name: Browser-rendered Relay UI smoke
@@ -518,6 +519,25 @@ jobs:
 
             const shot = await send('Page.captureScreenshot', { format:'png', fromSurface:true });
             fs.writeFileSync('relay-ui-smoke.png', Buffer.from(shot.data, 'base64'));
+            await send('Emulation.setDeviceMetricsOverride', {
+              width: 390, height: 844, deviceScaleFactor: 3, mobile: true,
+            });
+            await sleep(500);
+            const mobile = await evaluate(`(() => {
+              const composer=document.querySelector('.followup')?.getBoundingClientRect();
+              const lane=document.querySelector('#mobileRunLane')?.getBoundingClientRect();
+              const answer=document.querySelector('#answer')?.getBoundingClientRect();
+              const tools=document.querySelector('#toolDock')?.getBoundingClientRect();
+              return {vw:innerWidth,vh:innerHeight,composer,lane,answer,tools,
+                laneDisplay:getComputedStyle(document.querySelector('#mobileRunLane')).display};
+            })()`);
+            console.log('MOBILE_UI', JSON.stringify(mobile));
+            if (!mobile.composer || mobile.composer.left < 0 || mobile.composer.right > mobile.vw || mobile.composer.bottom > mobile.vh) throw new Error('Mobile composer outside viewport');
+            if (!mobile.lane || mobile.laneDisplay === 'none' || mobile.lane.width < 150) throw new Error('Mobile execution lane not visible');
+            if (!mobile.answer || mobile.answer.width < mobile.vw - 4) throw new Error('Mobile conversation is not full width');
+            const mobileShot = await send('Page.captureScreenshot', { format:'png', fromSurface:true });
+            fs.writeFileSync('relay-ui-mobile-smoke.png', Buffer.from(mobileShot.data, 'base64'));
+            console.log('MOBILE_RENDERED_UI PASS');
             console.log('BROWSER_RENDERED_UI PASS');
 
             ws.close();
@@ -532,7 +552,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: relay-ui-smoke
-          path: relay-ui-smoke.png
+          path: |
+            relay-ui-smoke.png
+            relay-ui-mobile-smoke.png
           if-no-files-found: ignore
 
       - name: Verify real provider roster
