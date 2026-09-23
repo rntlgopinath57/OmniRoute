@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05080d">
+<title>Nandi</title>
+<style>
+:root{color-scheme:dark;--gold:#d7b56d;--cyan:#8eefff;--green:#83f4bd;--muted:#a9b2bd}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05080d;font-family:Inter,Segoe UI,system-ui,sans-serif}
+body{display:grid;place-items:stretch}
+.scene{position:fixed;inset:0;background:#05080d;overflow:hidden}
+.bg{position:absolute;inset:-2%;background-image:url("data:image/jpeg;base64,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[... trimmed for brevity in this call ...]");
+background-size:cover;background-position:center;filter:saturate(.92) brightness(.84);transform:scale(1.02);transition:transform .45s ease,filter .45s ease}
+.scene.awake .bg{filter:saturate(1.03) brightness(.95)}
+.scene.ack .bg{animation:nandiAck .9s cubic-bezier(.2,.8,.25,1)}
+.veil{position:absolute;inset:0;background:
+radial-gradient(circle at 50% 74%,transparent 0 17%,rgba(1,5,9,.12) 33%,rgba(1,5,9,.32) 65%,rgba(1,5,9,.62) 100%),
+linear-gradient(180deg,rgba(2,5,9,.28),transparent 35%,rgba(2,5,9,.45))}
+.aura{position:absolute;left:50%;top:72%;width:180px;height:120px;transform:translate(-50%,-50%);border-radius:50%;opacity:0;box-shadow:0 0 70px 26px rgba(142,239,255,.16);transition:opacity .35s}
+.scene.awake .aura{opacity:1;animation:breathe 2.4s ease-in-out infinite}
+.top{position:absolute;left:26px;top:22px;display:flex;align-items:center;gap:10px;color:#eef5fb;text-shadow:0 2px 20px #000}
+.mark{width:9px;height:9px;border-radius:50%;background:#8190a0;box-shadow:0 0 0 5px rgba(255,255,255,.03)}
+.scene.awake .mark{background:var(--green);box-shadow:0 0 18px rgba(131,244,189,.9)}
+.name{font-weight:700;letter-spacing:.22em;font-size:12px}
+.sub{display:block;margin-top:4px;font-size:9px;letter-spacing:.1em;color:#bdc8d4}
+.centerStatus{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;max-width:min(680px,88vw);text-align:center}
+.status{padding:10px 16px;border:1px solid rgba(255,255,255,.1);background:rgba(5,9,14,.52);backdrop-filter:blur(18px);border-radius:999px;color:#e9f2f8;font-size:11px;letter-spacing:.09em;box-shadow:0 14px 38px rgba(0,0,0,.35)}
+.heard{min-height:20px;color:#d9e6ef;font-size:13px;text-shadow:0 2px 14px #000}
+.enable{border:1px solid rgba(215,181,109,.36);background:rgba(11,14,18,.66);color:#fff0c9;border-radius:999px;padding:11px 16px;cursor:pointer;font:inherit;display:none}
+.enable.show{display:block}
+.answer{position:absolute;right:22px;bottom:22px;width:min(420px,40vw);max-height:44vh;overflow:auto;border:1px solid rgba(255,255,255,.09);background:rgba(4,8,13,.7);backdrop-filter:blur(20px);border-radius:20px;padding:17px 18px;color:#e8eef4;font-size:13px;line-height:1.5;opacity:0;transform:translateY(12px);pointer-events:none;transition:.3s}
+.answer.show{opacity:1;transform:none}
+.answer b{display:block;color:#ffe7ad;font-size:10px;letter-spacing:.14em;margin-bottom:8px}
+@keyframes breathe{50%{transform:translate(-50%,-50%) scale(1.08);opacity:.72}}
+@keyframes nandiAck{0%,100%{transform:scale(1.02) rotate(0)}22%{transform:scale(1.025) rotate(-.28deg)}48%{transform:scale(1.02) rotate(.32deg)}72%{transform:scale(1.024) rotate(-.18deg)}}
+@media(max-width:700px){.answer{left:14px;right:14px;width:auto;bottom:88px}.top{left:16px;top:16px}.centerStatus{bottom:18px}}
+</style>
+</head>
+<body>
+<div id="scene" class="scene">
+  <div class="bg"></div>
+  <div class="veil"></div>
+  <div class="aura"></div>
+  <div class="top">
+    <span class="mark"></span>
+    <div><span class="name">NANDI</span><span id="mode" class="sub">IDLE · SAY “HI NANDI”</span></div>
+  </div>
+  <div id="answer" class="answer"><b>NANDI</b><span id="answerText"></span></div>
+  <div class="centerStatus">
+    <div id="heard" class="heard"></div>
+    <button id="enable" class="enable" type="button">Enable microphone</button>
+    <div id="status" class="status">Preparing default microphone…</div>
+  </div>
+</div>
+<script>
+(() => {
+  const scene=document.getElementById('scene');
+  const status=document.getElementById('status');
+  const heard=document.getElementById('heard');
+  const mode=document.getElementById('mode');
+  const enable=document.getElementById('enable');
+  const answer=document.getElementById('answer');
+  const answerText=document.getElementById('answerText');
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let recognition=null,awake=false,busy=false,restartTimer=null;
+  let history=[];
+
+  function setStatus(text){ status.textContent=text; }
+  function speak(text){
+    if(!('speechSynthesis' in window)||!text)return;
+    window.speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=.98; u.pitch=.92; u.volume=.92;
+    window.speechSynthesis.speak(u);
+  }
+  function acknowledge(){
+    scene.classList.remove('ack'); void scene.offsetWidth; scene.classList.add('ack');
+    scene.classList.add('awake'); awake=true;
+    mode.textContent='ACTIVE · LISTENING';
+    setStatus('Listening…');
+    speak("I'm listening.");
+  }
+  function sleep(){
+    awake=false; scene.classList.remove('awake'); mode.textContent='IDLE · SAY “HI NANDI”';
+    setStatus('Waiting for “Hi Nandi”…'); answer.classList.remove('show');
+    speak('Going quiet.');
+  }
+  async function askRelay(question){
+    if(busy)return;
+    busy=true; setStatus('Working…'); heard.textContent=question;
+    answer.classList.remove('show');
+    try{
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),55000);
+      const response=await fetch('/api/ask',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({question,history:history.slice(-6)}),
+        signal:controller.signal
+      });
+      clearTimeout(timer);
+      if(!response.ok)throw new Error('Relay returned '+response.status);
+      if(!response.body)throw new Error('Streaming unavailable');
+      const reader=response.body.getReader(),decoder=new TextDecoder();
+      let buffer='',finalAnswer='';
+      while(true){
+        const part=await reader.read();
+        buffer+=decoder.decode(part.value||new Uint8Array(),{stream:!part.done});
+        const lines=buffer.split('\n'); buffer=lines.pop()||'';
+        for(const line of lines){
+          if(!line.trim())continue;
+          const evt=JSON.parse(line);
+          if(evt.type==='planner')setStatus('Understanding…');
+          if(evt.type==='worker'||evt.type==='worker_selected')setStatus('Thinking…');
+          if(evt.type==='tool')setStatus('Using '+String(evt.tool||'tool')+'…');
+          if(evt.type==='reviewer')setStatus('Verifying…');
+          if(evt.type==='done')finalAnswer=String(evt.answer||'').trim();
+          if(evt.type==='error')throw new Error(evt.message||'Relay error');
+        }
+        if(part.done)break;
+      }
+      if(buffer.trim()){
+        const evt=JSON.parse(buffer);
+        if(evt.type==='done')finalAnswer=String(evt.answer||'').trim();
+      }
+      if(!finalAnswer)finalAnswer='I finished, but no answer text came back.';
+      answerText.textContent=finalAnswer; answer.classList.add('show');
+      history.push({role:'user',content:question},{role:'assistant',content:finalAnswer});
+      history=history.slice(-8);
+      setStatus('Listening…'); speak(finalAnswer);
+    }catch(err){
+      const msg=err&&err.name==='AbortError'?'That took too long. I stopped the request.':('I hit a problem: '+(err.message||String(err)));
+      answerText.textContent=msg; answer.classList.add('show'); setStatus('Listening…'); speak(msg);
+    }finally{busy=false}
+  }
+  function handleTranscript(text){
+    const t=text.trim(); if(!t)return;
+    heard.textContent='“'+t+'”';
+    const lower=t.toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();
+    if(!awake){
+      if(/(^|\s)(hi|hey)\s+nandi(\s|$)/.test(lower)||lower==='nandi'){
+        acknowledge();
+      }else{
+        setStatus('Waiting for “Hi Nandi”…');
+      }
+      return;
+    }
+    if(/\b(go to sleep|sleep nandi|nandi sleep)\b/.test(lower)){ sleep(); return; }
+    if(/\b(stop talking|stop speaking)\b/.test(lower)){ window.speechSynthesis&&speechSynthesis.cancel(); return; }
+    askRelay(t);
+  }
+  function buildRecognition(){
+    if(!SpeechRecognition){
+      setStatus('Voice recognition is not available in this browser.');
+      mode.textContent='BROWSER VOICE UNSUPPORTED';
+      return false;
+    }
+    recognition=new SpeechRecognition();
+    recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-IN';
+    recognition.onstart=()=>{ enable.classList.remove('show'); setStatus(awake?'Listening…':'Waiting for “Hi Nandi”…'); };
+    recognition.onresult=(e)=>{
+      let interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const tx=e.results[i][0].transcript;
+        if(e.results[i].isFinal)handleTranscript(tx); else interim+=tx;
+      }
+      if(interim&&!busy)heard.textContent=interim;
+    };
+    recognition.onerror=(e)=>{
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+        enable.classList.add('show'); setStatus('Microphone permission needed once.');
+      } else if(e.error!=='no-speech'&&e.error!=='aborted'){
+        setStatus('Mic issue: '+e.error);
+      }
+    };
+    recognition.onend=()=>{
+      clearTimeout(restartTimer);
+      restartTimer=setTimeout(()=>{try{recognition.start()}catch(_){}},650);
+    };
+    return true;
+  }
+  async function startMic(){
+    try{
+      if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+        const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+        stream.getTracks().forEach(t=>t.stop());
+      }
+      if(!recognition&& !buildRecognition())return;
+      try{recognition.start()}catch(_){}
+    }catch(err){
+      enable.classList.add('show');
+      setStatus('Allow microphone access to start Nandi.');
+    }
+  }
+  enable.addEventListener('click',startMic);
+  window.addEventListener('load',()=>setTimeout(startMic,500));
+})();
+</script>
+</body>
+</html>
