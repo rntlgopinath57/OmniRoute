@@ -1,9 +1,9 @@
-name: Nandi Voice Test Deploy
+name: Nandi Immersive Test Deploy
 
 on:
   push:
     branches:
-      - nandi-voice-laptop-v1
+      - nandi-immersive-v1
     paths:
       - "ai-team-playground/nandi.html"
       - "cloudflare/**"
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nandi-voice-test
+  group: nandi-immersive-test
   cancel-in-progress: true
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: nandi-voice-laptop-v1
+          ref: nandi-immersive-v1
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -54,7 +54,7 @@ jobs:
 
       - name: Deploy isolated Nandi worker
         run: |
-          npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-voice-test
+          npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-immersive-test
 
       - name: Sync configured Relay secrets
         shell: bash
@@ -66,7 +66,7 @@ jobs:
               echo "Skipped $key"
               return 0
             fi
-            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-voice-test >/dev/null
+            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-immersive-test >/dev/null
             echo "Synced $key"
           }
           put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
@@ -83,7 +83,7 @@ jobs:
       - name: Smoke Nandi page
         run: |
           for attempt in 1 2 3 4 5 6; do
-            if body="$(curl --location --fail --silent --show-error https://nandi-voice-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
+            if body="$(curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
               printf '%s' "$body" | grep -q 'NANDI'
               printf '%s' "$body" | grep -q 'Hi Nandi'
               exit 0
@@ -94,9 +94,9 @@ jobs:
 
       - name: Record verified deployment
         run: |
-          printf '{"status":"GREEN","url":"https://nandi-voice-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
+          printf '{"status":"GREEN","url":"https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
           git config user.name "nandi-test-bot"
           git config user.email "nandi-test-bot@users.noreply.github.com"
           git add ai-team-playground/nandi-deploy-status.json
           git commit -m "Record verified Nandi test deployment [skip ci]"
-          git push origin HEAD:nandi-voice-laptop-v1
+          git push origin HEAD:nandi-immersive-v1
