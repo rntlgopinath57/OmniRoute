@@ -2,10 +2,29 @@ import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
 import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routing-policy.mjs";
 import { detectNamedAgentRoute } from "../../relay-runtime/named-agent-routing.mjs";
 
+function dateSensitiveFactIntent(text: string) {
+  const q = String(text || "").toLowerCase();
+  const namedCalendarFact = /\b(?:holiday|festival|calendar|vinayaka|ganesh|ganesha|chavithi|chaturthi|deepavali|diwali|dussehra|dasara|ugadi|bonalu|ramzan|eid|christmas|sankranti|pongal|krishnashtami|janmashtami)\b/.test(q);
+  const explicitDateQuestion =
+    /\b(?:what|which|when)\b[\s\S]{0,45}\b(?:date|day)\b/.test(q)
+    || /\b(?:date|day)\b[\s\S]{0,45}\b(?:holiday|festival)\b/.test(q);
+  return namedCalendarFact || explicitDateQuestion;
+}
+
+function runtimeDateContext() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()) + " in Asia/Kolkata";
+}
+
 function classify(text: string) {
   const q = text.toLowerCase();
   if (/\b(code|coding|coder|bug|fix|debug|refactor|python|javascript|typescript|abap|cds|sql|api|program|function)\b/.test(q)) return "coding";
   if (/\b(workflow|workflows|automate|automation|schedule|monitor|alert|pipeline|github actions|actions)\b/.test(q)) return "automation";
+  if (dateSensitiveFactIntent(q)) return "research";
   if (/\b(research|find|discover|latest|source|cite|news|security|privacy|market)\b/.test(q)) return "research";
   if (/\b(compare|comparison|versus|vs\.?|analyse|analyze|reason|logic|solve|why|trade.?off|decision|calculate|math)\b/.test(q)) return "reasoning";
   if (/\b(design|layout|ui|ux|website|visual|style|interface|screen)\b/.test(q)) return "design";
@@ -541,6 +560,7 @@ function useFastPath(question: string, taskType: string, presentation: Presentat
   const q = question.toLowerCase();
   if (presentation?.explicit && presentation.format !== "default") return false;
   const highRiskOrFresh = /\b(latest|today|current|source|cite|security|privacy|medical|health|legal|tax|investment|stock|market|price|breaking|news|verify|fact[- ]?check)\b/.test(q);
+  if (dateSensitiveFactIntent(q)) return false;
   const explicitlyComplex = /\b(deep research|comprehensive audit|production deploy|security review|threat model)\b/.test(q);
   if (highRiskOrFresh || explicitlyComplex) return false;
   if (question.length > 700) return false;
@@ -700,6 +720,69 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
     .join("");
   if (!answer) throw new Error(`${model} returned an empty response`);
   return answer.trim();
+}
+
+async function groundedDateFactContext(question: string) {
+  if (!dateSensitiveFactIntent(question)) return "";
+  const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com";
+  const apiKey = envGet("GEMINI_API_KEY");
+  if (!apiKey) return "";
+
+  const verificationPrompt = [
+    `Runtime date: ${runtimeDateContext()}.`,
+    "Verify the date-sensitive factual question below using Google Search before answering.",
+    "Prefer official government, court, institution, or event-organizer sources for jurisdiction-specific holidays.",
+    "Do not trust a date proposed by the user unless authoritative sources confirm it.",
+    "If authoritative sources disagree, state the conflict instead of choosing silently.",
+    `QUESTION: ${question}`,
+    "Return a concise verified answer with the authoritative source name.",
+  ].join("\n");
+
+  try {
+    const { response, text } = await fetchTextWithTimeout(
+      `${baseUrl.replace(/\/$/, "")}/v1beta/models/gemini-3.5-flash-lite:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: verificationPrompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 420 },
+        }),
+      },
+      12000,
+    );
+    if (!response.ok) {
+      console.warn("Grounded date lookup failed", response.status, text.slice(0, 180));
+      return "";
+    }
+
+    const json = JSON.parse(text);
+    const candidate = json?.candidates?.[0];
+    const answer = (candidate?.content?.parts || [])
+      .map((part: any) => part?.text || "")
+      .join("")
+      .trim();
+    const sources = (candidate?.groundingMetadata?.groundingChunks || [])
+      .map((chunk: any) => chunk?.web)
+      .filter((web: any) => web?.uri && web?.title)
+      .slice(0, 5)
+      .map((web: any) => `- ${web.title}: ${web.uri}`);
+
+    if (!answer || !sources.length) return "";
+    return [
+      `Verified at runtime: ${runtimeDateContext()}`,
+      `Grounded answer: ${answer}`,
+      "Web sources:",
+      ...sources,
+    ].join("\n");
+  } catch (error) {
+    console.warn("Grounded date lookup unavailable", error instanceof Error ? error.message : String(error));
+    return "";
+  }
 }
 
 async function callGroq(model: string, messages: ChatMessage[], maxTokens: number, timeoutMs: number) {
