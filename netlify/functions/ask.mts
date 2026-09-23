@@ -722,6 +722,86 @@ async function callGemini(model: string, messages: ChatMessage[], maxTokens: num
   return answer.trim();
 }
 
+function requestedYear(question: string) {
+  const match = String(question || "").match(/\b(20\d{2})\b/);
+  if (match) return Number(match[1]);
+  return Number(new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+  }).format(new Date()));
+}
+
+const TELANGANA_FESTIVALS = [
+  { canonical: "Vinayaka Chavithi", pattern: /\b(?:vinayaka\s+chavithi|vinayaka\s+chaturthi|ganesh(?:a)?\s+chaturthi)\b/i },
+  { canonical: "Sri Krishnashtami", pattern: /\b(?:sri\s+krishnashtami|krishnashtami|janmashtami)\b/i },
+  { canonical: "Ugadi", pattern: /\bugadi\b/i },
+  { canonical: "Deepavali", pattern: /\b(?:deepavali|diwali)\b/i },
+  { canonical: "Vijaya Dasami", pattern: /\b(?:vijaya\s+dasami|dussehra|dasara)\b/i },
+  { canonical: "Bonalu", pattern: /\bbonalu\b/i },
+];
+
+function stripHtml(text: string) {
+  return String(text || "")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function monthName(abbrev: string) {
+  const months: Record<string,string> = {
+    Jan: "January", Feb: "February", Mar: "March", Apr: "April",
+    May: "May", Jun: "June", Jul: "July", Aug: "August",
+    Sep: "September", Oct: "October", Nov: "November", Dec: "December",
+  };
+  return months[abbrev] || abbrev;
+}
+
+async function officialTelanganaHolidayAnswer(question: string) {
+  if (!/\btelangana\b/i.test(question)) return "";
+  const festival = TELANGANA_FESTIVALS.find((item) => item.pattern.test(question));
+  if (!festival) return "";
+
+  const year = requestedYear(question);
+  const url = `https://www.telangana.gov.in/downloads/calendar-${year}/`;
+  try {
+    const { response, text } = await fetchTextWithTimeout(
+      url,
+      { headers: { "User-Agent": "relay-ai-team-official-calendar" } },
+      8000,
+    );
+    if (!response.ok) return "";
+
+    const plain = stripHtml(text);
+    const lower = plain.toLowerCase();
+    const aliases = festival.canonical === "Vinayaka Chavithi"
+      ? ["vinayaka chavithi", "vinayaka chaturthi", "ganesh chaturthi", "ganesha chaturthi"]
+      : [festival.canonical.toLowerCase()];
+    const index = aliases
+      .map((alias) => lower.indexOf(alias))
+      .filter((value) => value >= 0)
+      .sort((a, b) => a - b)[0];
+    if (index === undefined) return "";
+
+    const before = plain.slice(Math.max(0, index - 90), index);
+    const dates = [...before.matchAll(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\b/g)];
+    const date = dates.at(-1);
+    if (!date) return "";
+
+    const fullDate = `${Number(date[2])} ${monthName(date[1])} ${year}`;
+    return [
+      `In Telangana, **${festival.canonical} in ${year} is on ${fullDate}**.`,
+      `Source: Telangana State Portal official ${year} calendar — ${url}`,
+    ].join("\n");
+  } catch (error) {
+    console.warn("Official Telangana calendar lookup unavailable", error instanceof Error ? error.message : String(error));
+    return "";
+  }
+}
+
 async function groundedDateFactContext(question: string) {
   if (!dateSensitiveFactIntent(question)) return "";
   const baseUrl = envGet("GOOGLE_GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com";
@@ -1064,6 +1144,38 @@ export default async (request: Request) => {
         if (presentation.format !== "default") {
           emit({ type: "presentation", presentation });
         }
+
+        const dateSensitive = dateSensitiveFactIntent(contextualQuestion);
+        const officialHolidayAnswer = dateSensitive ? await officialTelanganaHolidayAnswer(contextualQuestion) : "";
+        if (officialHolidayAnswer) {
+          emit({ type: "tool", tool: "official_calendar", status: "complete", source: "Telangana State Portal" });
+          emit({
+            type: "done",
+            answer: officialHolidayAnswer,
+            review: "VERIFIED_SOURCE",
+            model: "official:telangana-calendar",
+            reviewer: "",
+            taskType,
+            presentation,
+          });
+          return;
+        }
+
+        const groundedDateEvidence = dateSensitive ? await groundedDateFactContext(contextualQuestion) : "";
+        if (dateSensitive && !groundedDateEvidence) {
+          emit({ type: "tool", tool: "web_grounding", status: "unavailable" });
+          emit({
+            type: "done",
+            answer: "I could not verify this date from a live authoritative source, so I will not guess.",
+            review: "BLOCKED_UNVERIFIED_DATE",
+            model: "",
+            reviewer: "",
+            taskType,
+            presentation,
+          });
+          return;
+        }
+
         emit({
           type: "worker",
           taskType,
@@ -1082,8 +1194,6 @@ export default async (request: Request) => {
 
         let actualWorkerModel = workerModel;
         const contextNote = disambiguationContext(contextualQuestion);
-        const dateSensitive = dateSensitiveFactIntent(contextualQuestion);
-        const groundedDateEvidence = dateSensitive ? await groundedDateFactContext(contextualQuestion) : "";
         const repoLookup = await githubRepoContext(contextualQuestion);
         if (repoLookup.repos.length) {
           emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos });
