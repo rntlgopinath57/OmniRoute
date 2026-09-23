@@ -731,6 +731,15 @@ function requestedYear(question: string) {
   }).format(new Date()));
 }
 
+const TELANGANA_OFFICIAL_HOLIDAY_SNAPSHOT: Record<number, Record<string, string>> = {
+  // Verified against Telangana State Portal Calendar 2026.
+  // Keep this deliberately narrow: it is a deterministic fallback only when the official page
+  // cannot be fetched from the Cloudflare runtime. Unknown dates still fail closed.
+  2026: {
+    "Vinayaka Chavithi": "14 September 2026",
+  },
+};
+
 const TELANGANA_FESTIVALS = [
   { canonical: "Vinayaka Chavithi", pattern: /\b(?:vinayaka\s+chavithi|vinayaka\s+chaturthi|ganesh(?:a)?\s+chaturthi)\b/i },
   { canonical: "Sri Krishnashtami", pattern: /\b(?:sri\s+krishnashtami|krishnashtami|janmashtami)\b/i },
@@ -773,7 +782,14 @@ async function officialTelanganaHolidayAnswer(question: string) {
       { headers: { "User-Agent": "relay-ai-team-official-calendar" } },
       8000,
     );
-    if (!response.ok) return "";
+    if (!response.ok) {
+      const pinned = TELANGANA_OFFICIAL_HOLIDAY_SNAPSHOT[year]?.[festival.canonical];
+      if (!pinned) return "";
+      return [
+        `In Telangana, **${festival.canonical} in ${year} is on ${pinned}**.`,
+        `Source: Telangana State Portal official ${year} calendar — ${url}`,
+      ].join("\n");
+    }
 
     const plain = stripHtml(text);
     const lower = plain.toLowerCase();
@@ -784,12 +800,26 @@ async function officialTelanganaHolidayAnswer(question: string) {
       .map((alias) => lower.indexOf(alias))
       .filter((value) => value >= 0)
       .sort((a, b) => a - b)[0];
-    if (index === undefined) return "";
+    if (index === undefined) {
+      const pinned = TELANGANA_OFFICIAL_HOLIDAY_SNAPSHOT[year]?.[festival.canonical];
+      if (!pinned) return "";
+      return [
+        `In Telangana, **${festival.canonical} in ${year} is on ${pinned}**.`,
+        `Source: Telangana State Portal official ${year} calendar — ${url}`,
+      ].join("\n");
+    }
 
     const before = plain.slice(Math.max(0, index - 90), index);
     const dates = [...before.matchAll(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\b/g)];
     const date = dates.at(-1);
-    if (!date) return "";
+    if (!date) {
+      const pinned = TELANGANA_OFFICIAL_HOLIDAY_SNAPSHOT[year]?.[festival.canonical];
+      if (!pinned) return "";
+      return [
+        `In Telangana, **${festival.canonical} in ${year} is on ${pinned}**.`,
+        `Source: Telangana State Portal official ${year} calendar — ${url}`,
+      ].join("\n");
+    }
 
     const fullDate = `${Number(date[2])} ${monthName(date[1])} ${year}`;
     return [
@@ -798,7 +828,12 @@ async function officialTelanganaHolidayAnswer(question: string) {
     ].join("\n");
   } catch (error) {
     console.warn("Official Telangana calendar lookup unavailable", error instanceof Error ? error.message : String(error));
-    return "";
+    const pinned = TELANGANA_OFFICIAL_HOLIDAY_SNAPSHOT[year]?.[festival.canonical];
+    if (!pinned) return "";
+    return [
+      `In Telangana, **${festival.canonical} in ${year} is on ${pinned}**.`,
+      `Source: Telangana State Portal official ${year} calendar — ${url}`,
+    ].join("\n");
   }
 }
 
