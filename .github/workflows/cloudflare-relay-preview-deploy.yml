@@ -260,6 +260,42 @@ jobs:
           echo "$response" | grep -q '"type":"done"'
           echo "Explicit Gemini affinity smoke: PASS"
 
+      - name: Live Telangana holiday-date grounding smoke
+        if: steps.deploy.outputs.url != '' && env.GEMINI_API_KEY != ''
+        run: |
+          response="$(curl --fail --show-error --silent --max-time 60 \
+            -H 'Content-Type: application/json' \
+            -d '{"question":"In Telangana, on what date is Vinayaka Chavithi in 2026? Verify before answering.","history":[]}' \
+            "${{ steps.deploy.outputs.url }}/api/ask")"
+          printf '%s\n' "$response" > /tmp/relay-holiday-date-smoke.ndjson
+          cat /tmp/relay-holiday-date-smoke.ndjson
+          python - <<'PY'
+          import json, re
+          rows=[]
+          for raw in open("/tmp/relay-holiday-date-smoke.ndjson", encoding="utf-8"):
+              raw=raw.strip()
+              if raw:
+                  rows.append(json.loads(raw))
+          assert rows, "No Relay events returned"
+          planner=next((r for r in rows if r.get("type")=="planner"), None)
+          done=next((r for r in rows if r.get("type")=="done"), None)
+          assert planner and planner.get("taskType")=="research", planner
+          assert done and done.get("answer"), rows
+          answer=str(done["answer"])
+          normalized=re.sub(r"\s+", " ", answer.lower())
+          good=(
+              "14 september 2026" in normalized
+              or "september 14, 2026" in normalized
+              or "september 14 2026" in normalized
+              or "14 sep 2026" in normalized
+          )
+          assert good, f"Wrong Vinayaka Chavithi date: {answer}"
+          assert "september 1" not in normalized and "sep 1" not in normalized, answer
+          assert "september 17" not in normalized and "sep 17" not in normalized, answer
+          assert not any(r.get("type")=="error" for r in rows), rows
+          print("Telangana Vinayaka Chavithi grounded date: PASS")
+          PY
+
       - name: Verify static security header configuration
         run: |
           grep -q 'X-Content-Type-Options: nosniff' ai-team-playground/_headers
