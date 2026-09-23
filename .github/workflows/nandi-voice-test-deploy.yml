@@ -83,7 +83,7 @@ jobs:
       - name: Smoke Nandi page
         run: |
           for attempt in 1 2 3 4 5 6; do
-            if body="$(curl --fail --silent --show-error https://nandi-voice-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html)"; then
+            if body="$(curl --location --fail --silent --show-error https://nandi-voice-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
               printf '%s' "$body" | grep -q 'NANDI'
               printf '%s' "$body" | grep -q 'Hi Nandi'
               exit 0
