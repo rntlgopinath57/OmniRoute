@@ -1,1 +1,8 @@
-{"status":"GREEN","url":"https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"a218b4214107778132abdbdadef999313583d3e6"}
+{
+  "status": "GREEN",
+  "url": "https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi.html",
+  "source_commit": "73420f43b3309723e82c6d53e7393dcb094ce7fb",
+  "browser_verified": true,
+  "renderer": "WebGL/Three.js",
+  "note": "Live browser gate confirmed nandi3d=ready and nandi3dVisible=yes; prior workflow record push hit GitHub 500."
+}
