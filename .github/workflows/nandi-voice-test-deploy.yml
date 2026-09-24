@@ -121,17 +121,20 @@ jobs:
         run: |
           for attempt in 1 2 3 4 5 6; do
             if body="$(curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
-              printf '%s' "$body" | grep -q 'NANDI'
-              printf '%s' "$body" | grep -q 'Hi Nandi'
-              printf '%s' "$body" | grep -q 'NANDI_SCENE_V6'
-              printf '%s' "$body" | grep -q 'NANDI_AGENT_V7'
-              printf '%s' "$body" | grep -q 'Ask Nandi anything'
-              printf '%s' "$body" | grep -q 'class="nandi-agent"'
-              curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg
-              test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000
-              file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'
-              exit 0
+              if printf '%s' "$body" | grep -q 'NANDI' \
+                && printf '%s' "$body" | grep -q 'Hi Nandi' \
+                && printf '%s' "$body" | grep -q 'NANDI_SCENE_V6' \
+                && printf '%s' "$body" | grep -q 'NANDI_AGENT_V7' \
+                && printf '%s' "$body" | grep -q 'Ask Nandi anything' \
+                && printf '%s' "$body" | grep -q 'class="nandi-agent"'; then
+                if curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg \
+                  && test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000 \
+                  && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'; then
+                  exit 0
+                fi
+              fi
             fi
+            echo "Nandi live output not ready on attempt $attempt; retrying."
             sleep 5
           done
           exit 1
