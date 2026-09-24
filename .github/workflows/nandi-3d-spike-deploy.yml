@@ -1,0 +1,156 @@
+name: Nandi True 3D Spike Deploy
+
+on:
+  push:
+    branches:
+      - nandi-true3d-spike
+    paths:
+      - "ai-team-playground/nandi.html"
+      - "cloudflare/**"
+      - "relay-runtime/**"
+      - "wrangler.jsonc"
+      - ".github/workflows/nandi-voice-test-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nandi-3d-spike
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GOOGLE_GEMINI_BASE_URL: ${{ secrets.GOOGLE_GEMINI_BASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_BASE_URL: ${{ secrets.OPENROUTER_BASE_URL }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      RELAY_GITHUB_TOKEN: ${{ secrets.RELAY_GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: nandi-true3d-spike
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      - name: Build cinematic Nandi scene
+        shell: bash
+        run: |
+          test -f ai-team-playground/assets/nandi-shiva-cinematic.jpg.b64
+          base64 --decode ai-team-playground/assets/nandi-shiva-cinematic.jpg.b64 > ai-team-playground/assets/nandi-shiva-cinematic.jpg
+          test "$(wc -c < ai-team-playground/assets/nandi-shiva-cinematic.jpg)" -gt 20000
+          file ai-team-playground/assets/nandi-shiva-cinematic.jpg | grep -qi 'JPEG image data'
+
+      - name: Validate Nandi page
+        run: |
+          test -f ai-team-playground/nandi.html
+          grep -q 'Hi Nandi' ai-team-playground/nandi.html
+          grep -q 'SpeechRecognition' ai-team-playground/nandi.html
+          grep -q '/api/ask' ai-team-playground/nandi.html
+          grep -q 'NANDI_SCENE_V6' ai-team-playground/nandi.html
+          grep -q 'NANDI_TRUE3D_SPIKE_V1' ai-team-playground/nandi.html
+          grep -q '/assets/nandi-shiva-cinematic.jpg' ai-team-playground/nandi.html
+          grep -q 'id="nandi3d"' ai-team-playground/nandi.html
+          grep -q 'id="prompt"' ai-team-playground/nandi.html
+          grep -q 'Ask Nandi anything' ai-team-playground/nandi.html
+          grep -q 'NANDI_TRUE3D_SPIKE_V1' ai-team-playground/nandi.html
+          grep -q 'id="nandi3d"' ai-team-playground/nandi.html
+          grep -q '/assets/vendor/three.module.js' ai-team-playground/nandi.html
+          grep -q 'new THREE.WebGLRenderer' ai-team-playground/nandi.html
+          grep -q 'window.addEventListener('"'"'nandi-state'"'"'' ai-team-playground/nandi.html
+          test -f ai-team-playground/assets/vendor/three.module.js
+          test "$(wc -c < ai-team-playground/assets/vendor/three.module.js)" -gt 500000
+          grep -q 'askForm.addEventListener' ai-team-playground/nandi.html
+          grep -q 'nandiAuraV6' ai-team-playground/nandi.html
+          grep -q 'NANDI_TRUE3D_SPIKE_V1' ai-team-playground/nandi.html
+          grep -q 'box-shadow:none' ai-team-playground/nandi.html
+          ! grep -q 'commons.wikimedia.org' ai-team-playground/nandi.html
+          ! grep -q '<svg viewBox="0 0 1600 900"' ai-team-playground/nandi.html
+
+      - name: Verify true 3D Nandi spike
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('ai-team-playground/nandi.html','utf8');
+          for (const marker of ['NANDI_SCENE_V6','NANDI_TRUE3D_SPIKE_V1','/assets/nandi-shiva-cinematic.jpg','id="nandi3d"','id="prompt"','Ask Nandi anything','askForm.addEventListener','/assets/vendor/three.module.js','new THREE.WebGLRenderer','window.addEventListener(\'nandi-state\'']) {
+            if (!html.includes(marker)) throw new Error('missing agent marker: ' + marker);
+          }
+          for (const legacy of ['SpeechRecognition','/api/ask','history.slice(-6)','go to sleep','stop talking']) {
+            if (!html.includes(legacy)) throw new Error('voice/Relay regression: ' + legacy);
+          }
+          if (html.includes('commons.wikimedia.org')) throw new Error('borrowed temple image dependency returned');
+          if (html.includes('<svg viewBox="0 0 1600 900"')) throw new Error('flat vector scene returned');
+          console.log('True 3D Nandi spike verified');
+          NODE
+
+      - name: Deploy isolated Nandi worker
+        run: |
+          npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-3d-spike
+
+      - name: Sync configured Relay secrets
+        shell: bash
+        run: |
+          put_secret () {
+            key="$1"
+            value="$2"
+            if [ -z "$value" ]; then
+              echo "Skipped $key"
+              return 0
+            fi
+            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-3d-spike >/dev/null
+            echo "Synced $key"
+          }
+          put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
+          put_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+          put_secret ANTHROPIC_BASE_URL "$ANTHROPIC_BASE_URL"
+          put_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
+          put_secret GOOGLE_GEMINI_BASE_URL "$GOOGLE_GEMINI_BASE_URL"
+          put_secret GEMINI_API_KEY "$GEMINI_API_KEY"
+          put_secret OPENROUTER_BASE_URL "$OPENROUTER_BASE_URL"
+          put_secret OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
+          put_secret GROQ_API_KEY "$GROQ_API_KEY"
+          put_secret RELAY_GITHUB_TOKEN "$RELAY_GITHUB_TOKEN"
+
+      - name: Smoke Nandi page
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if body="$(curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
+              if printf '%s' "$body" | grep -q 'NANDI' \
+                && printf '%s' "$body" | grep -q 'Hi Nandi' \
+                && printf '%s' "$body" | grep -q 'NANDI_SCENE_V6' \
+                && printf '%s' "$body" | grep -q 'NANDI_TRUE3D_SPIKE_V1' \
+                && printf '%s' "$body" | grep -q 'Ask Nandi anything' \
+                && printf '%s' "$body" | grep -q 'id="nandi3d"'; then
+                if curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg \
+                  && test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000 \
+                  && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'; then
+                  exit 0
+                fi
+              fi
+            fi
+            echo "Nandi live output not ready on attempt $attempt; retrying."
+            sleep 5
+          done
+          exit 1
+
+      - name: Record verified deployment
+        run: |
+          printf '{"status":"GREEN","url":"https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
+          git config user.name "nandi-test-bot"
+          git config user.email "nandi-test-bot@users.noreply.github.com"
+          git add ai-team-playground/nandi-deploy-status.json
+          git commit -m "Record verified Nandi test deployment [skip ci]"
+          git push origin HEAD:nandi-true3d-spike
