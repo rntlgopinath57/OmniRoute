@@ -403,11 +403,42 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
   .nandi-agent,.aura,.status::before{animation:none!important;transition:none!important}
 }
 
+
+/* NANDI_TRUE3D_SPIKE_V1 — capability probe: genuine WebGL geometry, not wallpaper pixels. */
+.nandi-bg-patch{
+  position:absolute;z-index:2;left:-2%;bottom:-2%;width:43%;height:67%;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 16% 82%,rgba(4,4,5,.94) 0 22%,rgba(15,10,8,.83) 48%,rgba(18,10,7,.28) 74%,transparent 88%),
+    linear-gradient(90deg,rgba(4,4,5,.70),rgba(12,8,7,.34) 62%,transparent);
+  filter:blur(3px)
+}
+.nandi3d{
+  position:absolute;z-index:5;inset:0;width:100%;height:100%;display:block;
+  pointer-events:none;filter:drop-shadow(0 26px 32px rgba(0,0,0,.42))
+}
+.scene::after{opacity:.18!important}
+.nandi-agent{display:none!important}
+.aura{
+  z-index:4!important;left:28%!important;top:67%!important;
+  width:min(45vw,640px)!important;height:min(54vh,500px)!important;
+  opacity:.16!important;filter:blur(34px)!important;
+  background:radial-gradient(ellipse at 50% 50%,rgba(134,235,244,.10),rgba(255,202,112,.07) 28%,transparent 70%)!important
+}
+.scene.listening .aura{opacity:.30!important}
+.scene.thinking .aura{opacity:.26!important}
+.scene.speaking .aura{opacity:.28!important}
+.bg{transform:scale(1.12);transform-origin:65% 48%;filter:saturate(.90) brightness(.67) contrast(1.06)}
+.scene.awake .bg,.scene.thinking .bg,.scene.speaking .bg{transform:scale(1.12)!important;animation:none!important}
+@media(max-width:720px){
+  .nandi-bg-patch{width:55%;height:60%}
+  .aura{left:37%!important;top:67%!important;width:72vw!important;height:44vh!important}
+}
+
 </style>
 </head>
 <body>
 <div id="scene" class="scene">
-<img id="sceneArt" class="bg" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" loading="eager" fetchpriority="high" decoding="async"><div class="aura"></div><img id="nandiAgent" class="nandi-agent" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" decoding="async"><div class="veil"></div>
+<img id="sceneArt" class="bg" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" loading="eager" fetchpriority="high" decoding="async"><div class="nandi-bg-patch"></div><div class="aura"></div><canvas id="nandi3d" class="nandi3d" aria-hidden="true"></canvas><div class="veil"></div>
 <div class="top"><span class="dot"></span><div><span class="name">NANDI</span><span id="mode" class="mode">IDLE · SAY “HI NANDI”</span></div></div>
 <div id="answer" class="answer"><b>NANDI</b><span id="answerText"></span></div>
 <div class="center"><div id="heard" class="heard"></div><button id="enable" class="enable" type="button">Enable microphone</button><div id="status" class="status">Preparing default microphone…</div><form id="askForm" class="composer" autocomplete="off"><button id="talk" class="talk" type="button" aria-label="Talk to Nandi">●</button><input id="prompt" type="text" inputmode="text" placeholder="Ask Nandi anything…" aria-label="Ask Nandi anything"><button id="send" class="send" type="submit" aria-label="Send to Nandi">➤</button></form></div>
@@ -416,10 +447,10 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
 (function(){
 const scene=document.getElementById('scene'),status=document.getElementById('status'),heard=document.getElementById('heard'),mode=document.getElementById('mode'),enable=document.getElementById('enable'),answer=document.getElementById('answer'),answerText=document.getElementById('answerText'),askForm=document.getElementById('askForm'),promptInput=document.getElementById('prompt'),talk=document.getElementById('talk'),send=document.getElementById('send');
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,awake=false,busy=false,restart=null,history=[];
-function setState(s){scene.classList.remove('listening','thinking','speaking');if(s)scene.classList.add(s)}
+function setState(s){scene.classList.remove('listening','thinking','speaking');if(s)scene.classList.add(s);window.dispatchEvent(new CustomEvent('nandi-state',{detail:s||'idle'}))}
 function setStatus(t){status.textContent=t;if(/Working|Understanding|Thinking|Using|Verifying/.test(t)){setState('thinking');if(awake)mode.textContent='ACTIVE · THINKING'}else if(/Listening/.test(t)){setState('listening');if(awake)mode.textContent='ACTIVE · LISTENING'}}
 function say(t){if(!('speechSynthesis' in window)||!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.98;u.pitch=.92;u.volume=.92;u.onstart=function(){setState('speaking');if(awake)mode.textContent='ACTIVE · SPEAKING'};u.onend=function(){if(awake&&!busy){setState('listening');mode.textContent='ACTIVE · LISTENING'}};speechSynthesis.speak(u)}
-function wake(){setState('listening');scene.classList.remove('ack');void scene.offsetWidth;scene.classList.add('ack','awake');awake=true;mode.textContent='ACTIVE · LISTENING';setStatus('Listening…');say("I'm listening.")}
+function wake(){setState('listening');scene.classList.remove('ack');void scene.offsetWidth;scene.classList.add('ack','awake');window.dispatchEvent(new Event('nandi-ack'));awake=true;mode.textContent='ACTIVE · LISTENING';setStatus('Listening…');say("I'm listening.")}
 function sleep(){setState('');awake=false;scene.classList.remove('awake');mode.textContent='IDLE · SAY “HI NANDI”';setStatus('Waiting for “Hi Nandi”…');answer.classList.remove('show');say('Going quiet.')}
 async function ask(q){if(busy)return;if(!awake){awake=true;scene.classList.add('awake');mode.textContent='ACTIVE · THINKING'}busy=true;promptInput.disabled=true;send.disabled=true;setStatus('Working…');heard.textContent='“'+q+'”';answer.classList.remove('show');try{const c=new AbortController();const timer=setTimeout(function(){c.abort()},55000);const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,history:history.slice(-6)}),signal:c.signal});clearTimeout(timer);if(!r.ok)throw new Error('Relay returned '+r.status);if(!r.body)throw new Error('Streaming unavailable');const rd=r.body.getReader(),dec=new TextDecoder();let buf='',final='';while(true){const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';for(const line of lines){if(!line.trim())continue;const e=JSON.parse(line);if(e.type==='planner')setStatus('Understanding…');if(e.type==='worker'||e.type==='worker_selected')setStatus('Thinking…');if(e.type==='tool')setStatus('Using '+String(e.tool||'tool')+'…');if(e.type==='reviewer')setStatus('Verifying…');if(e.type==='done')final=String(e.answer||'').trim();if(e.type==='error')throw new Error(e.message||'Relay error')}if(p.done)break}if(buf.trim()){const e=JSON.parse(buf);if(e.type==='done')final=String(e.answer||'').trim()}if(!final)final='I finished, but no answer text came back.';answerText.textContent=final;answer.classList.add('show');history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);setStatus('Listening…');say(final)}catch(e){const m=e&&e.name==='AbortError'?'That took too long. I stopped the request.':'I hit a problem: '+(e.message||String(e));answerText.textContent=m;answer.classList.add('show');setStatus('Listening…');say(m)}finally{busy=false;promptInput.disabled=false;send.disabled=false}}
 function handle(t){t=String(t||'').trim();if(!t)return;heard.textContent='“'+t+'”';const l=t.toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();if(!awake){if(/(^|\s)(hi|hey)\s+nandi(\s|$)/.test(l)||l==='nandi')wake();else setStatus('Waiting for “Hi Nandi”…');return}if(/\b(go to sleep|sleep nandi|nandi sleep)\b/.test(l)){sleep();return}if(/\b(stop talking|stop speaking)\b/.test(l)){if('speechSynthesis' in window)speechSynthesis.cancel();return}ask(t)}
@@ -428,5 +459,163 @@ async function start(){try{if(navigator.mediaDevices&&navigator.mediaDevices.get
 enable.addEventListener('click',start);talk.addEventListener('click',function(){if(!rec){start();return}if(!awake)wake();else setStatus('Listening…')});askForm.addEventListener('submit',function(ev){ev.preventDefault();const q=promptInput.value.trim();if(!q||busy)return;promptInput.value='';ask(q)});window.addEventListener('load',function(){setTimeout(start,500)})
 })();
 </script>
+
+<script type="module">
+// NANDI_TRUE3D_SPIKE_V1
+import * as THREE from '/assets/vendor/three.module.js';
+
+const canvas=document.getElementById('nandi3d');
+const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,premultipliedAlpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.12;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
+const world=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(31,1,.1,100);
+camera.position.set(0,1.5,8.2);
+camera.lookAt(-.55,.25,0);
+
+world.add(new THREE.HemisphereLight(0xffe6b8,0x09121a,1.45));
+const key=new THREE.DirectionalLight(0xffbd69,3.0);
+key.position.set(3.5,6,4.5);key.castShadow=true;world.add(key);
+const rim=new THREE.PointLight(0x7de8f4,0.9,8,2);
+rim.position.set(-2.2,1.7,2.4);world.add(rim);
+const shrine=new THREE.PointLight(0xffa441,1.4,10,2);
+shrine.position.set(1.8,2.8,-3.4);world.add(shrine);
+
+const stone=new THREE.MeshStandardMaterial({color:0xb9b2a4,roughness:.62,metalness:.04});
+const stoneDark=new THREE.MeshStandardMaterial({color:0x302a28,roughness:.5,metalness:.08});
+const gold=new THREE.MeshStandardMaterial({color:0xc8943f,roughness:.28,metalness:.72,emissive:0x2d1604,emissiveIntensity:.22});
+const accent=new THREE.MeshStandardMaterial({color:0xd4aa5f,roughness:.34,metalness:.58,emissive:0x3b1d05,emissiveIntensity:.18});
+
+function mesh(geo,mat,pos=[0,0,0],scale=[1,1,1],rot=[0,0,0]){
+  const m=new THREE.Mesh(geo,mat);m.position.set(...pos);m.scale.set(...scale);m.rotation.set(...rot);
+  m.castShadow=true;m.receiveShadow=true;return m;
+}
+const nandi=new THREE.Group();
+const bodyRoot=new THREE.Group();
+nandi.add(bodyRoot);
+
+bodyRoot.add(mesh(new THREE.SphereGeometry(1,40,28),stone,[0,.02,.18],[1.12,.76,1.46]));
+bodyRoot.add(mesh(new THREE.SphereGeometry(.74,36,24),stone,[0,.58,-.62],[.88,.82,.86]));
+bodyRoot.add(mesh(new THREE.SphereGeometry(.62,32,22),stone,[0,.42,.82],[1.03,.82,.92]));
+
+const headPivot=new THREE.Group();
+headPivot.position.set(0,.62,-1.27);
+bodyRoot.add(headPivot);
+headPivot.add(mesh(new THREE.SphereGeometry(.54,32,24),stone,[0,0,-.20],[.78,.72,1.00]));
+headPivot.add(mesh(new THREE.SphereGeometry(.34,28,20),stone,[0,-.17,-.68],[.86,.60,.76]));
+
+function horn(side){
+  const h=mesh(new THREE.ConeGeometry(.12,.76,20),stoneDark,[side*.43,.33,-.42],[1,1,1],[.18,0,side*.72]);
+  headPivot.add(h);
+}
+horn(-1);horn(1);
+headPivot.add(mesh(new THREE.SphereGeometry(.22,20,14),stoneDark,[-.48,.04,-.34],[1.05,.24,.52],[0,0,-.28]));
+headPivot.add(mesh(new THREE.SphereGeometry(.22,20,14),stoneDark,[ .48,.04,-.34],[1.05,.24,.52],[0,0, .28]));
+
+const foreL=mesh(new THREE.CylinderGeometry(.16,.20,.82,20),stone,[-.54,-.47,-.82],[1,1,1],[1.08,0,.18]);
+const foreR=mesh(new THREE.CylinderGeometry(.16,.20,.82,20),stone,[ .54,-.47,-.82],[1,1,1],[1.08,0,-.18]);
+bodyRoot.add(foreL,foreR);
+bodyRoot.add(mesh(new THREE.SphereGeometry(.32,24,18),stone,[-.76,-.47,.57],[1.25,.62,1.15],[0,.18,0]));
+bodyRoot.add(mesh(new THREE.SphereGeometry(.32,24,18),stone,[ .76,-.47,.57],[1.25,.62,1.15],[0,-.18,0]));
+
+const neckBand=mesh(new THREE.TorusGeometry(.60,.055,12,48),gold,[0,.48,-1.12],[1,1,.78],[Math.PI/2,0,0]);
+bodyRoot.add(neckBand);
+const backBand=mesh(new THREE.TorusGeometry(1.00,.055,12,64),gold,[0,.18,.14],[1.0,1.0,1.36],[Math.PI/2,0,0]);
+bodyRoot.add(backBand);
+bodyRoot.add(mesh(new THREE.SphereGeometry(.11,18,12),gold,[0,.12,-1.71],[1,1.25,1]));
+
+const tailCurve=new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0,.20,1.52),new THREE.Vector3(.16,-.05,1.85),
+  new THREE.Vector3(.32,-.45,1.85),new THREE.Vector3(.42,-.72,1.62)
+]);
+const tail=mesh(new THREE.TubeGeometry(tailCurve,22,.045,10,false),stoneDark);
+bodyRoot.add(tail);
+
+const shadowMat=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.30,depthWrite:false});
+const shadow=mesh(new THREE.CircleGeometry(1.25,64),shadowMat,[0,-.78,.40],[1.35,.72,1],[ -Math.PI/2,0,0]);
+nandi.add(shadow);
+
+world.add(nandi);
+let base={x:-2.18,y:-.18,z:.35,s:1.02};
+nandi.position.set(base.x,base.y,base.z);
+nandi.scale.setScalar(base.s);
+nandi.rotation.y=.03;
+
+let state='idle',ackAt=-999,pointerX=0,pointerY=0;
+window.addEventListener('nandi-state',e=>{state=e.detail||'idle'});
+window.addEventListener('nandi-ack',()=>{ackAt=performance.now()});
+window.addEventListener('pointermove',e=>{
+  pointerX=(e.clientX/window.innerWidth-.5);
+  pointerY=(e.clientY/window.innerHeight-.5);
+},{passive:true});
+
+function layout(){
+  renderer.setSize(window.innerWidth,window.innerHeight,false);
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  if(window.innerWidth<720){base={x:-1.15,y:-.44,z:.15,s:.78}}
+  else if(window.innerWidth<1100){base={x:-1.75,y:-.28,z:.25,s:.91}}
+  else{base={x:-2.18,y:-.18,z:.35,s:1.02}}
+}
+window.addEventListener('resize',layout);layout();
+
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+  const breathe=Math.sin(t*1.35);
+  let headX=.02,headY=0,bodyY=0,bodyRoll=0,light=.72,scalePulse=0;
+
+  if(state==='listening'){
+    headY=Math.sin(t*1.55)*.065;headX=.025+Math.sin(t*1.15)*.018;
+    bodyY=Math.sin(t*1.35)*.012;light=1.65;scalePulse=.004;
+  }else if(state==='thinking'){
+    headX=.095+Math.sin(t*.72)*.018;headY=Math.sin(t*.55)*.022;
+    bodyY=Math.sin(t*.8)*.006;light=1.12;bodyRoll=Math.sin(t*.5)*.006;
+  }else if(state==='speaking'){
+    headX=.03+Math.sin(t*3.1)*.035;headY=Math.sin(t*1.1)*.018;
+    bodyY=Math.sin(t*1.8)*.009;light=1.35;scalePulse=.003;
+  }else{
+    headX=.025+breathe*.010;bodyY=breathe*.006;light=.72;
+  }
+
+  const ackAge=(performance.now()-ackAt)/1000;
+  if(ackAge>=0&&ackAge<.85){
+    const p=Math.sin(Math.min(1,ackAge/.85)*Math.PI);
+    headX+=p*.14;bodyY-=p*.012;light+=p*.8;
+  }
+
+  headPivot.rotation.x+=(headX-headPivot.rotation.x)*.10;
+  headPivot.rotation.y+=(headY-headPivot.rotation.y)*.10;
+  bodyRoot.rotation.z+=(bodyRoll-bodyRoot.rotation.z)*.08;
+  nandi.position.x+=(base.x-nandi.position.x)*.08;
+  nandi.position.y+=(base.y+bodyY-nandi.position.y)*.10;
+  nandi.position.z+=(base.z-nandi.position.z)*.08;
+  const targetScale=base.s*(1+scalePulse*(.5+.5*breathe));
+  nandi.scale.x+=(targetScale-nandi.scale.x)*.08;
+  nandi.scale.y+=(targetScale-nandi.scale.y)*.08;
+  nandi.scale.z+=(targetScale-nandi.scale.z)*.08;
+
+  rim.intensity+=(light-rim.intensity)*.08;
+  rim.color.set(state==='thinking'?0xf0ae55:state==='speaking'?0x8ff0bd:0x7de8f4);
+  gold.emissiveIntensity=.18+light*.055;
+  accent.emissiveIntensity=.15+light*.04;
+
+  const px=window.innerWidth<720?0:pointerX*.10,py=window.innerWidth<720?0:pointerY*.045;
+  camera.position.x+=(px-camera.position.x)*.025;
+  camera.position.y+=(1.5-py-camera.position.y)*.025;
+  camera.lookAt(-.55,.25,0);
+
+  renderer.render(world,camera);
+}
+animate();
+document.documentElement.dataset.nandi3d='ready';
+</script>
+
 </body>
 </html>
