@@ -189,86 +189,87 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
   .scene .bg,.scene .aura{animation:none!important;transition:none!important}
 }
 
+
+/* NANDI_SCENE_V6 — cinematic Nandi before Shiva. Raster is purpose-built for this UI and decoded locally at deploy. */
+.bg{
+  position:absolute;inset:-2%;width:104%;height:104%;object-fit:cover;object-position:center center;
+  filter:saturate(.96) brightness(.74) contrast(1.05);transform:scale(1.02);
+  transition:filter .65s ease,transform 1.2s ease;user-select:none;pointer-events:none
+}
+.scene::before{
+  content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 61% 34%,rgba(255,201,111,.16) 0 8%,rgba(255,169,72,.055) 25%,transparent 48%),
+    linear-gradient(180deg,rgba(2,4,6,.08),transparent 38%,rgba(2,4,6,.35) 100%);
+  mix-blend-mode:screen
+}
+.scene::after{
+  content:"";position:absolute;left:30%;top:69%;width:min(44vw,620px);height:min(46vh,420px);
+  transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;z-index:2;
+  background:radial-gradient(ellipse at 50% 55%,rgba(232,198,126,.11) 0 24%,rgba(114,214,226,.045) 42%,transparent 70%);
+  filter:blur(22px);opacity:.34;mix-blend-mode:screen;transition:opacity .5s ease,filter .5s ease
+}
+.veil{
+  z-index:3;background:
+    radial-gradient(ellipse at 49% 49%,transparent 0 36%,rgba(2,5,8,.06) 62%,rgba(2,5,8,.38) 100%),
+    linear-gradient(180deg,rgba(2,5,8,.08),transparent 34%,rgba(2,5,8,.22))
+}
+.aura{
+  z-index:4;left:30%;top:68%;width:clamp(280px,36vw,590px);height:clamp(210px,35vw,500px);
+  transform:translate(-50%,-50%);border-radius:48% 52% 54% 46%/58% 54% 46% 42%;
+  opacity:.18;box-shadow:none;filter:blur(17px);mix-blend-mode:screen;
+  background:
+    radial-gradient(ellipse at 48% 48%,rgba(255,225,164,.13) 0 15%,rgba(215,181,109,.075) 31%,rgba(131,223,232,.03) 48%,transparent 72%);
+  transition:opacity .45s ease,filter .45s ease,background .45s ease
+}
+.aura::before{
+  content:"";position:absolute;left:50%;bottom:8%;width:78%;height:25%;transform:translateX(-50%);
+  border-radius:50%;background:radial-gradient(ellipse,rgba(255,202,104,.16),rgba(255,179,72,.045) 45%,transparent 74%);
+  filter:blur(12px);opacity:.65
+}
+.aura::after{
+  content:"";position:absolute;inset:14% 18% 12%;border-radius:50%;
+  background:radial-gradient(ellipse at 50% 42%,rgba(255,241,203,.10),rgba(107,221,231,.025) 46%,transparent 72%);
+  filter:blur(16px);opacity:.65
+}
+.scene.awake .bg{animation:none!important;filter:saturate(1.02) brightness(.87) contrast(1.06);transform:scale(1.018)}
+.scene.ack .bg{animation:none!important}
+.scene.awake::after{opacity:.52}
+.scene.awake .aura{opacity:.42;animation:nandiAuraV6 5.2s ease-in-out infinite}
+.scene.listening .aura{
+  opacity:.58;
+  background:radial-gradient(ellipse at 48% 48%,rgba(255,229,172,.16) 0 15%,rgba(215,181,109,.09) 31%,rgba(132,226,235,.055) 48%,transparent 72%);
+  animation:nandiListenV6 2.4s ease-in-out infinite
+}
+.scene.thinking .aura{
+  opacity:.62;
+  background:radial-gradient(ellipse at 48% 48%,rgba(255,214,126,.18) 0 16%,rgba(230,164,68,.09) 34%,transparent 72%);
+  animation:nandiThinkV6 2.1s ease-in-out infinite
+}
+.scene.speaking .aura{
+  opacity:.56;
+  background:radial-gradient(ellipse at 48% 48%,rgba(255,232,180,.17) 0 16%,rgba(215,181,109,.085) 34%,rgba(131,244,189,.035) 52%,transparent 72%);
+  animation:nandiSpeakV6 1.8s ease-in-out infinite
+}
+.scene.ack .aura{animation:nandiAckV6 1.05s cubic-bezier(.2,.8,.25,1)}
+.top{z-index:8;opacity:.84}.center{z-index:9}.answer{z-index:10}
+.status{background:rgba(5,7,9,.34);border-color:rgba(255,220,160,.16);box-shadow:0 10px 32px rgba(0,0,0,.2)}
+@keyframes nandiAuraV6{0%,100%{transform:translate(-50%,-50%) scale(.99);filter:blur(17px)}50%{transform:translate(-50%,-50%) scale(1.035);filter:blur(19px)}}
+@keyframes nandiListenV6{0%,100%{transform:translate(-50%,-50%) scale(.98)}50%{transform:translate(-50%,-50%) scale(1.065)}}
+@keyframes nandiThinkV6{0%,100%{transform:translate(-50%,-50%) scale(.99)}50%{transform:translate(-50%,-50%) scale(1.045)}}
+@keyframes nandiSpeakV6{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.04)}}
+@keyframes nandiAckV6{0%,100%{transform:translate(-50%,-50%) scale(1)}42%{transform:translate(-50%,-50%) scale(1.12)}70%{transform:translate(-50%,-50%) scale(1.03)}}
+@media(max-width:720px){
+  .bg{object-position:48% center}
+  .scene::after{left:35%;top:70%;width:70vw;height:42vh}
+  .aura{left:35%;top:70%;width:68vw;height:48vh}
+}
+
 </style>
 </head>
 <body>
 <div id="scene" class="scene">
-<div id="sceneArt" class="bg" aria-hidden="true">
-<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-<defs>
-  <linearGradient id="templeBg" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#120b08"/><stop offset=".48" stop-color="#21120b"/><stop offset="1" stop-color="#07090b"/></linearGradient>
-  <linearGradient id="stone" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#32251d"/><stop offset=".45" stop-color="#120e0c"/><stop offset="1" stop-color="#3a2719"/></linearGradient>
-  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6f4315"/><stop offset=".32" stop-color="#d79a35"/><stop offset=".58" stop-color="#ffe09a"/><stop offset="1" stop-color="#7b4815"/></linearGradient>
-  <radialGradient id="sanctumGlow"><stop stop-color="#ffdb82" stop-opacity=".74"/><stop offset=".34" stop-color="#ef982e" stop-opacity=".34"/><stop offset="1" stop-color="#ef982e" stop-opacity="0"/></radialGradient>
-  <radialGradient id="nandiStone"><stop stop-color="#e6e1d5"/><stop offset=".58" stop-color="#a9a59b"/><stop offset="1" stop-color="#686762"/></radialGradient>
-  <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#342115"/><stop offset=".5" stop-color="#17100d"/><stop offset="1" stop-color="#08090b"/></linearGradient>
-  <filter id="softGlow"><feGaussianBlur stdDeviation="18"/></filter>
-  <filter id="lampGlow"><feGaussianBlur stdDeviation="7"/></filter>
-  <filter id="shadow"><feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000" flood-opacity=".75"/></filter>
-</defs>
-<rect width="1600" height="900" fill="url(#templeBg)"/>
-<ellipse cx="800" cy="365" rx="420" ry="310" fill="url(#sanctumGlow)" opacity=".48" filter="url(#softGlow)"/>
-<g opacity=".16" fill="#ffd787">
-  <path d="M650 0h75L625 560H500z"/><path d="M790 0h45l65 560H715z"/><path d="M930 0h65l135 560H1010z"/>
-</g>
-<path d="M0 650L470 535H1130L1600 650V900H0Z" fill="url(#floor)"/>
-<g stroke="#755137" stroke-opacity=".34" fill="none">
-  <path d="M800 535L800 900"/><path d="M660 545L560 900"/><path d="M940 545L1040 900"/><path d="M520 570L300 900"/><path d="M1080 570L1300 900"/>
-  <path d="M250 735H1350"/><path d="M170 805H1430"/><path d="M90 865H1510"/>
-</g>
-<g id="temple-columns" fill="url(#stone)" stroke="#8b5b29" stroke-width="3">
-  <path d="M70 0H270L250 690H90Z"/><path d="M1330 0H1530L1510 690H1350Z"/>
-  <path d="M295 0H445L425 610H320Z"/><path d="M1155 0H1305L1280 610H1175Z"/>
-</g>
-<g stroke="#b2762f" stroke-width="6" opacity=".72" fill="none">
-  <path d="M96 118H252M92 190H255M85 500H245"/><path d="M1348 118H1510M1345 190H1515M1355 500H1520"/>
-  <path d="M320 145H430M315 230H432M318 470H426"/><path d="M1170 145H1290M1168 230H1292M1175 470H1288"/>
-</g>
-<g id="sanctum-arch" fill="none" stroke="url(#gold)" stroke-width="34" filter="url(#shadow)">
-  <path d="M585 530V315C585 195 680 112 800 112S1015 195 1015 315V530"/>
-  <path d="M630 530V325C630 235 700 170 800 170S970 235 970 325V530" stroke-width="14"/>
-</g>
-<circle cx="800" cy="104" r="34" fill="url(#gold)"/>
-<path d="M800 72l15 24 28 7-19 22 3 29-27-12-27 12 3-29-19-22 28-7z" fill="#d59a42"/>
-<g id="shiva-lingam" filter="url(#shadow)">
-  <ellipse cx="800" cy="560" rx="190" ry="46" fill="#111" stroke="#8b5b29" stroke-width="7"/>
-  <rect x="646" y="540" width="308" height="82" rx="35" fill="#191513" stroke="#6e4824" stroke-width="6"/>
-  <path d="M720 526V352c0-70 36-118 80-118s80 48 80 118v174z" fill="#17191b" stroke="#564639" stroke-width="7"/>
-  <ellipse cx="800" cy="354" rx="80" ry="120" fill="url(#sanctumGlow)" opacity=".13"/>
-  <g stroke="#e6ded1" stroke-width="12" stroke-linecap="round"><path d="M756 390h88"/><path d="M756 414h88"/><path d="M756 438h88"/></g>
-  <circle cx="800" cy="414" r="9" fill="#d84a32"/>
-  <path d="M746 330c25-24 84-27 108 0" stroke="#79a85b" stroke-width="9" fill="none"/>
-  <g fill="#d76538"><circle cx="755" cy="332" r="7"/><circle cx="778" cy="318" r="7"/><circle cx="825" cy="318" r="7"/><circle cx="848" cy="332" r="7"/></g>
-</g>
-<g id="trident" transform="translate(1080 270)" stroke="url(#gold)" fill="none" stroke-width="10" stroke-linecap="round">
-  <path d="M0 300V32M0 95c-52-20-54-66-45-97M0 95c52-20 54-66 45-97M0 95V0"/>
-  <path d="M-45 2l-8-29M45 2l8-29M0 0v-35"/>
-</g>
-<g id="lamps">
-  <g transform="translate(560 600)"><ellipse rx="33" ry="9" fill="#8d5620"/><path d="M0-12c14 18 2 33 0 33s-14-15 0-33z" fill="#ffd26f"/><ellipse cy="-2" rx="35" ry="18" fill="#ff9c32" opacity=".35" filter="url(#lampGlow)"/></g>
-  <g transform="translate(1040 600)"><ellipse rx="33" ry="9" fill="#8d5620"/><path d="M0-12c14 18 2 33 0 33s-14-15 0-33z" fill="#ffd26f"/><ellipse cy="-2" rx="35" ry="18" fill="#ff9c32" opacity=".35" filter="url(#lampGlow)"/></g>
-  <g transform="translate(670 635) scale(.75)"><ellipse rx="33" ry="9" fill="#8d5620"/><path d="M0-12c14 18 2 33 0 33s-14-15 0-33z" fill="#ffd26f"/></g>
-  <g transform="translate(930 635) scale(.75)"><ellipse rx="33" ry="9" fill="#8d5620"/><path d="M0-12c14 18 2 33 0 33s-14-15 0-33z" fill="#ffd26f"/></g>
-</g>
-<ellipse cx="640" cy="775" rx="295" ry="115" fill="#ddb663" opacity=".09" filter="url(#softGlow)"/>
-<g id="nandi-figure" filter="url(#shadow)">
-  <ellipse cx="575" cy="755" rx="235" ry="138" fill="url(#nandiStone)" stroke="#77736d" stroke-width="8"/>
-  <ellipse cx="720" cy="625" rx="96" ry="108" fill="url(#nandiStone)" stroke="#77736d" stroke-width="7"/>
-  <path d="M667 586c-40-58-58-80-86-91 8 55 25 95 66 118z" fill="#383532" stroke="#9a8359" stroke-width="7"/>
-  <path d="M773 586c40-58 58-80 86-91-8 55-25 95-66 118z" fill="#383532" stroke="#9a8359" stroke-width="7"/>
-  <path d="M647 624c-33 2-59 13-82 38 36 4 67-4 90-21zM793 624c33 2 59 13 82 38-36 4-67-4-90-21z" fill="#9c9991"/>
-  <path d="M461 792c-18 45-13 83 24 98M683 842c30 27 62 37 103 25" stroke="#77736d" stroke-width="36" stroke-linecap="round" fill="none"/>
-  <path d="M391 735c-70 18-95 76-76 129" stroke="#7b7871" stroke-width="20" fill="none" stroke-linecap="round"/>
-  <path d="M438 664c94 45 176 59 267 34" stroke="url(#gold)" stroke-width="18" fill="none"/>
-  <path d="M620 548c44 20 76 28 110 26" stroke="url(#gold)" stroke-width="13" fill="none"/>
-  <circle cx="676" cy="571" r="13" fill="#cc8b2f"/>
-</g>
-<g fill="#ffd28c" opacity=".48">
-  <circle cx="510" cy="300" r="3"/><circle cx="610" cy="245" r="2"/><circle cx="700" cy="185" r="3"/><circle cx="897" cy="205" r="2"/><circle cx="970" cy="280" r="3"/><circle cx="1130" cy="360" r="2"/><circle cx="450" cy="430" r="2"/><circle cx="1020" cy="470" r="3"/><circle cx="760" cy="285" r="2"/><circle cx="860" cy="260" r="2"/>
-</g>
-<rect width="1600" height="900" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="70"/>
-</svg>
-</div><div class="veil"></div><div class="aura"></div>
+<img id="sceneArt" class="bg" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" loading="eager" fetchpriority="high" decoding="async"><div class="veil"></div><div class="aura"></div>
 <div class="top"><span class="dot"></span><div><span class="name">NANDI</span><span id="mode" class="mode">IDLE · SAY “HI NANDI”</span></div></div>
 <div id="answer" class="answer"><b>NANDI</b><span id="answerText"></span></div>
 <div class="center"><div id="heard" class="heard"></div><button id="enable" class="enable" type="button">Enable microphone</button><div id="status" class="status">Preparing default microphone…</div></div>
