@@ -69,7 +69,7 @@ jobs:
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
           grep -q 'NANDI_VOICE_AGENT_V1' ai-team-playground/nandi.html
-          grep -q 'NANDI_AUDIO_UNLOCK_V1' ai-team-playground/src/nandi-neural-voice.mjs
+          grep -q 'NANDI_AUDIO_UNLOCK_V2' ai-team-playground/src/nandi-neural-voice.mjs
           grep -q 'VOICE BLOCKED' ai-team-playground/nandi.html
           grep -q '/assets/nandi-neural-voice.js' ai-team-playground/nandi.html
           grep -q 'barge-in' ai-team-playground/nandi.html
