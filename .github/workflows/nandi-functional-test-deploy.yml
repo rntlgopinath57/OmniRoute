@@ -1,29 +1,30 @@
-name: Nandi Functional Agent Deploy
+name: Nandi Voice Agent Deploy
 
 on:
   push:
     branches:
-      - nandi-functional-v1
+      - nandi-voice-agent-v1
     paths:
       - "ai-team-playground/nandi.html"
+      - "ai-team-playground/src/nandi-neural-voice.mjs"
       - "netlify/functions/ask.mts"
       - "cloudflare/**"
       - "relay-runtime/**"
       - "wrangler.jsonc"
-      - ".github/workflows/nandi-functional-test-deploy.yml"
+      - ".github/workflows/nandi-voice-agent-test-deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: nandi-functional-test
+  group: nandi-voice-agent-test
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 24
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
@@ -40,11 +41,27 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: nandi-functional-v1
+          ref: nandi-voice-agent-v1
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
+
+      - name: Build pinned neural voice bundle
+        shell: bash
+        run: |
+          rm -rf /tmp/nandi-voice-build
+          mkdir -p /tmp/nandi-voice-build ai-team-playground/assets
+          cd /tmp/nandi-voice-build
+          npm init -y >/dev/null 2>&1
+          npm install --silent --no-audit --no-fund --ignore-scripts kokoro-js@1.2.1 esbuild@0.28.2
+          NODE_PATH=/tmp/nandi-voice-build/node_modules ./node_modules/.bin/esbuild             "$GITHUB_WORKSPACE/ai-team-playground/src/nandi-neural-voice.mjs"             --bundle --format=esm --platform=browser --target=es2022             --outfile="$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
+          test -s "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
+          test "$(wc -c < "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js")" -gt 100000
+          grep -q 'NANDI_NEURAL_VOICE_V1' "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
+          cd "$GITHUB_WORKSPACE"
+          npx --yes esbuild@0.28.2 netlify/functions/ask.mts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/nandi-ask-check.mjs >/dev/null
+          test -s /tmp/nandi-ask-check.mjs
 
       - name: Validate Nandi page
         run: |
@@ -52,6 +69,15 @@ jobs:
           grep -q 'Hi Nandi' ai-team-playground/nandi.html
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
+          grep -q 'NANDI_VOICE_AGENT_V1' ai-team-playground/nandi.html
+          grep -q '/assets/nandi-neural-voice.js' ai-team-playground/nandi.html
+          grep -q 'barge-in' ai-team-playground/nandi.html
+          grep -q 'stream_reset' ai-team-playground/nandi.html
+          grep -q 'likelyEcho' ai-team-playground/nandi.html
+          ! grep -q 'SpeechSynthesisUtterance' ai-team-playground/nandi.html
+          grep -q 'voiceStreamSafe' netlify/functions/ask.mts
+          grep -q 'type: "delta"' netlify/functions/ask.mts
+          grep -q 'callModelStreaming' netlify/functions/ask.mts
           grep -q 'NANDI_UI_V2' ai-team-playground/nandi.html
           grep -q 'LIVE TRACE' ai-team-playground/nandi.html
           grep -q '>LISTEN<' ai-team-playground/nandi.html
@@ -68,7 +94,7 @@ jobs:
 
       - name: Deploy isolated Nandi worker
         run: |
-          npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-functional-test
+          npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-voice-agent-test
 
       - name: Sync configured Relay secrets
         shell: bash
@@ -80,7 +106,7 @@ jobs:
               echo "Skipped $key"
               return 0
             fi
-            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-functional-test >/dev/null
+            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-voice-agent-test >/dev/null
             echo "Synced $key"
           }
           put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
@@ -97,12 +123,14 @@ jobs:
       - name: Smoke Nandi page
         run: |
           for attempt in 1 2 3 4 5 6; do
-            if body="$(curl --location --fail --silent --show-error https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
+            if body="$(curl --location --fail --silent --show-error https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
               if printf '%s' "$body" | grep -q 'NANDI' \
                 && printf '%s' "$body" | grep -q 'LIVE TRACE' \
                 && printf '%s' "$body" | grep -q 'Ask Nandi anything' \
                 && printf '%s' "$body" | grep -q 'listenPulse' \
-                && printf '%s' "$body" | grep -q '/api/ask'; then
+                && printf '%s' "$body" | grep -q '/api/ask' \
+                && printf '%s' "$body" | grep -q 'NANDI_VOICE_AGENT_V1' \
+                && printf '%s' "$body" | grep -q '/assets/nandi-neural-voice.js'; then
                 exit 0
               fi
             fi
@@ -110,20 +138,20 @@ jobs:
           done
           exit 1
 
-      - name: Browser verify animated agent states
+      - name: Browser verify animated voice-agent states
         shell: bash
         run: |
-          rm -rf /tmp/nandi-functional-pw
-          mkdir -p /tmp/nandi-functional-pw
-          cd /tmp/nandi-functional-pw
+          rm -rf /tmp/nandi-voice-pw
+          mkdir -p /tmp/nandi-voice-pw
+          cd /tmp/nandi-voice-pw
           npm init -y >/dev/null 2>&1
           npm install --silent --no-audit --no-fund @playwright/test@1.63.0
           npx playwright install chromium
-          cat > nandi-functional.spec.js <<'NODE'
+          cat > nandi-voice.spec.js <<'NODE'
           const { test, expect } = require('@playwright/test');
 
-          test('Nandi functional shell animates real agent states', async ({ page }) => {
-            await page.goto('https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'networkidle' });
+          test('Nandi voice shell animates and exposes voice-agent controls', async ({ page }) => {
+            await page.goto('https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'domcontentloaded' });
 
             await expect(page.locator('#agent')).toHaveClass(/idle/);
             await expect(page.locator('.agent-zone')).toBeVisible();
@@ -167,9 +195,45 @@ jobs:
             });
             const verifyAnimation = await page.locator('.ring.r3').evaluate(el => getComputedStyle(el).animationName);
             expect(verifyAnimation).toBe('verifyScan');
+
+            const markers = await page.evaluate(() => ({
+              voiceAgent: document.documentElement.outerHTML.includes('NANDI_VOICE_AGENT_V1'),
+              noBrowserReadAloud: !document.documentElement.outerHTML.includes('SpeechSynthesisUtterance'),
+              neuralModuleTag: !!document.querySelector('script[src="/assets/nandi-neural-voice.js"]'),
+            }));
+            expect(markers.voiceAgent).toBeTruthy();
+            expect(markers.noBrowserReadAloud).toBeTruthy();
+            expect(markers.neuralModuleTag).toBeTruthy();
           });
           NODE
-          npx playwright test nandi-functional.spec.js --workers=1 --reporter=line
+          npx playwright test nandi-voice.spec.js --workers=1 --reporter=line
+
+      - name: Verify real neural voice generation
+        shell: bash
+        run: |
+          cd /tmp/nandi-voice-pw
+          cat > nandi-neural.spec.js <<'NODE'
+          const { test, expect } = require('@playwright/test');
+          test.setTimeout(180000);
+
+          test('Nandi generates real Kokoro audio locally', async ({ page }) => {
+            const errors = [];
+            page.on('pageerror', e => errors.push(String(e)));
+            await page.goto('https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'domcontentloaded' });
+            await expect.poll(
+              () => page.evaluate(() => window.NandiNeuralVoiceVersion || ''),
+              { timeout: 20000 }
+            ).toBe('NANDI_NEURAL_VOICE_V1');
+
+            const result = await page.evaluate(async () => {
+              return await window.NandiNeuralVoice.probe('Nandi is ready.');
+            });
+            expect(result.ok).toBeTruthy();
+            expect(result.bytes).toBeGreaterThan(1000);
+            expect(errors).toEqual([]);
+          });
+          NODE
+          npx playwright test nandi-neural.spec.js --workers=1 --reporter=line
 
       - name: Verify real Relay response
         shell: bash
@@ -177,13 +241,15 @@ jobs:
           response="$(curl --location --fail --silent --show-error --max-time 65 \
             -H 'Content-Type: application/json' \
             --data '{"question":"Reply briefly with: Nandi functional agent is working.","history":[]}' \
-            https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+            https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
           printf '%s\n' "$response"
           ! printf '%s' "$response" | grep -q '"type":"error"'
           printf '%s' "$response" | grep -q '"type":"planner"'
           printf '%s' "$response" | grep -Eq '"type":"worker"|"type":"worker_selected"'
           printf '%s' "$response" | grep -q '"type":"done"'
           printf '%s' "$response" | grep -q '"answer"'
+          printf '%s' "$response" | grep -q '"voiceStreamSafe"'
+          printf '%s' "$response" | grep -q '"type":"delta"'
 
       - name: Verify GitHub action routing
         shell: bash
@@ -191,7 +257,7 @@ jobs:
           response="$(curl --location --fail --silent --show-error --max-time 65 \
             -H 'Content-Type: application/json' \
             --data '{"question":"can you access all my get hub report and all the work flows inside them and tell me the status of each workflow","history":[]}' \
-            https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+            https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
           printf '%s\n' "$response"
           printf '%s' "$response" | grep -q '"type":"tool"'
           printf '%s' "$response" | grep -q '"tool":"github"'
@@ -203,9 +269,9 @@ jobs:
 
       - name: Record verified deployment
         run: |
-          printf '{"status":"GREEN","url":"https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"functional-animated"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
+          printf '{"status":"GREEN","url":"https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"conversational-neural-voice","tts":"kokoro-js-1.2.1","barge_in":true,"echo_guard":true}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
           git config user.name "nandi-test-bot"
           git config user.email "nandi-test-bot@users.noreply.github.com"
           git add ai-team-playground/nandi-deploy-status.json
           git commit -m "Record verified Nandi test deployment [skip ci]"
-          git push origin HEAD:nandi-functional-v1
+          git push origin HEAD:nandi-voice-agent-v1
