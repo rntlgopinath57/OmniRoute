@@ -255,11 +255,16 @@ const ACTIVE_WORKFLOW_REPOS = [
 ];
 
 function workflowInventoryIntent(text: string) {
-  const q = String(text || "").toLowerCase();
+  const q = String(text || "")
+    .toLowerCase()
+    .replace(/\bget\s+hub\b/g, "github")
+    .replace(/\bgit\s+hub\b/g, "github")
+    .replace(/\bwork\s+flows?\b/g, "workflows");
   return (
-    /\b(list|show|check|review|summari[sz]e|what(?:'s| is| are)?)\b[\s\S]{0,60}\b(workflows?|github actions?|automations?)\b/.test(q)
-    || /\b(my|all)\b[\s\S]{0,35}\b(workflows?|github actions?)\b/.test(q)
-    || /\b(workflows?|github actions?)\b[\s\S]{0,35}\b(my|all)\b/.test(q)
+    /\b(list|show|check|review|summari[sz]e|status|statuses|access|inspect|tell)\b[\s\S]{0,90}\b(workflows?|github actions?|automations?)\b/.test(q)
+    || /\b(my|all)\b[\s\S]{0,60}\b(workflows?|github actions?)\b/.test(q)
+    || /\b(workflows?|github actions?)\b[\s\S]{0,60}\b(my|all|status|statuses)\b/.test(q)
+    || /\bgithub\b[\s\S]{0,90}\b(workflows?|actions?|repos?|repositories?)\b/.test(q)
   );
 }
 
