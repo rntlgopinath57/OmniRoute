@@ -51,7 +51,8 @@ jobs:
           grep -q 'Hi Nandi' ai-team-playground/nandi.html
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
-          grep -q 'LIVE FLOW' ai-team-playground/nandi.html
+          grep -q 'NANDI_UI_V2' ai-team-playground/nandi.html
+          grep -q 'LIVE TRACE' ai-team-playground/nandi.html
           grep -q '01 · LISTEN' ai-team-playground/nandi.html
           grep -q '02 · ROUTE' ai-team-playground/nandi.html
           grep -q '03 · ACT' ai-team-playground/nandi.html
@@ -124,6 +125,12 @@ jobs:
             await page.goto('https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'networkidle' });
 
             await expect(page.locator('#agent')).toHaveClass(/idle/);
+            await expect(page.locator('.agent-zone')).toBeVisible();
+            await expect(page.locator('.pipeline')).toBeVisible();
+            await expect(page.locator('.composer')).toBeVisible();
+            await expect(page.locator('.activity')).toBeVisible();
+            const uiMarker = await page.locator('html').evaluate(() => document.documentElement.outerHTML.includes('NANDI_UI_V2'));
+            expect(uiMarker).toBeTruthy();
             await expect(page.locator('[data-stage="listen"]')).toBeVisible();
             await expect(page.locator('[data-stage="route"]')).toBeVisible();
             await expect(page.locator('[data-stage="act"]')).toBeVisible();
