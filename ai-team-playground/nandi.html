@@ -460,6 +460,18 @@ enable.addEventListener('click',start);talk.addEventListener('click',function(){
 })();
 </script>
 
+
+<script>
+setTimeout(function(){
+  if(document.documentElement.dataset.nandi3d!=='ready'){
+    document.documentElement.dataset.nandi3d='failed';
+    const mode=document.getElementById('mode'),status=document.getElementById('status');
+    if(mode)mode.textContent='3D LAYER FAILED';
+    if(status)status.textContent='Nandi 3D renderer did not start.';
+  }
+},7000);
+</script>
+
 <script type="module">
 // NANDI_TRUE3D_SPIKE_V1
 import * as THREE from '/assets/vendor/three.module.js';
@@ -467,6 +479,7 @@ import * as THREE from '/assets/vendor/three.module.js';
 const canvas=document.getElementById('nandi3d');
 const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,premultipliedAlpha:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
+renderer.setClearColor(0x000000,0);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.12;
@@ -546,7 +559,7 @@ nandi.position.set(base.x,base.y,base.z);
 nandi.scale.setScalar(base.s);
 nandi.rotation.y=.03;
 
-let state='idle',ackAt=-999,pointerX=0,pointerY=0;
+let state='idle',ackAt=-999,pointerX=0,pointerY=0,visibleReported=false,visibleProbeFrames=0;
 window.addEventListener('nandi-state',e=>{state=e.detail||'idle'});
 window.addEventListener('nandi-ack',()=>{ackAt=performance.now()});
 window.addEventListener('pointermove',e=>{
@@ -612,6 +625,23 @@ function animate(){
   camera.lookAt(-.55,.25,0);
 
   renderer.render(world,camera);
+  if(!visibleReported && visibleProbeFrames++<180){
+    const gl=renderer.getContext(),w=gl.drawingBufferWidth,h=gl.drawingBufferHeight,p=new Uint8Array(4);
+    let hit=false;
+    for(let xi=1;xi<=9&&!hit;xi++){
+      for(let yi=1;yi<=9&&!hit;yi++){
+        const x=Math.floor(w*(.03+xi*.055)),y=Math.floor(h*(.08+yi*.075));
+        gl.readPixels(x,y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,p);
+        if(p[3]>16) hit=true;
+      }
+    }
+    if(hit){
+      visibleReported=true;
+      document.documentElement.dataset.nandi3dVisible='yes';
+    }else if(visibleProbeFrames>=180){
+      document.documentElement.dataset.nandi3dVisible='no';
+    }
+  }
 }
 animate();
 document.documentElement.dataset.nandi3d='ready';
