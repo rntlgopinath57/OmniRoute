@@ -355,11 +355,14 @@ async function warmVoice(){
  return voiceReady
 }
 async function unlockVoice(retryPending=true){
- const voice=await waitVoiceModule();if(!voice)return false;
- if(!voiceReady)await warmVoice();
- const ok=typeof voice.unlock==='function'?await voice.unlock():Boolean(navigator.userActivation?.hasBeenActive);
+ const immediate=window.NandiNeuralVoice;
+ const voice=immediate||await waitVoiceModule();if(!voice)return false;
+ const unlockPromise=typeof voice.unlock==='function'?voice.unlock():Promise.resolve(Boolean(navigator.userActivation?.hasBeenActive));
+ if(!voiceReady)warmVoice();
+ const ok=await unlockPromise;
  if(ok){
-  voiceReady=Boolean(voice.status?.().ready);voiceBlocked=false;enable.classList.remove('show');
+  voiceBlocked=false;enable.classList.remove('show');
+  const st=voice.status?.();if(st?.ready)voiceReady=true;
   if(awake&&!busy&&!voiceSpeaking){setAgent('listening','LISTENING','Ready for your voice');setStatus('Listening…')}
   if(retryPending&&pendingVoiceText){const pending=pendingVoiceText;pendingVoiceText='';enqueueVoice(pending)}
  }
@@ -500,8 +503,8 @@ if(new URLSearchParams(location.search).has('nandi_test')){
  };
 }
 askForm.addEventListener('submit',ev=>{ev.preventDefault();const q=prompt.value.trim();if(!q)return;prompt.value='';if(!awake)wake(false);ask(q,{interrupt:busy})});
-micBtn.addEventListener('click',async()=>{await unlockVoice();if(!rec)startMic();if(!awake)wake(true);else{if(voiceSpeaking||busy)beginBarge('voice interruption');setAgent('listening','LISTENING','Speak now')}});
-enable.addEventListener('click',async()=>{await unlockVoice();startMic()});
+micBtn.addEventListener('click',()=>{unlockVoice();if(!rec)startMic();if(!awake)wake(true);else{if(voiceSpeaking||busy)beginBarge('voice interruption');setAgent('listening','LISTENING','Speak now')}});
+enable.addEventListener('click',()=>{unlockVoice();startMic()});
 muteBtn.addEventListener('click',()=>{muted=!muted;muteBtn.textContent=muted?'×':'◧';if(muted)resetVoiceQueue('muted');else warmVoice()});
 clearBtn.addEventListener('click',()=>{interruptTurn('session cleared');history=[];events.innerHTML='';answer.classList.remove('show');heard.textContent='';awake=false;app.classList.remove('awake');resetStages();setAgent('idle','READY','Say “Hi Nandi” or ask directly');setStatus('Waiting for “Hi Nandi”…')});
 nav.addEventListener('click',ev=>{const b=ev.target.closest('button[data-mode]');if(!b)return;[...nav.querySelectorAll('button')].forEach(x=>x.classList.remove('active'));b.classList.add('active');currentMode=b.dataset.mode;modeTitle.textContent=currentMode.toUpperCase()+' · '+(awake?'ACTIVE':'SAY “HI NANDI” OR TYPE');prompt.placeholder='Ask Nandi in '+currentMode+' mode…';addEvent('MODE',currentMode)});
