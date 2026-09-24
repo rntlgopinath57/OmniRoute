@@ -98,7 +98,7 @@ jobs:
           for attempt in 1 2 3 4 5 6; do
             if body="$(curl --location --fail --silent --show-error https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
               if printf '%s' "$body" | grep -q 'NANDI' \
-                && printf '%s' "$body" | grep -q 'LIVE FLOW' \
+                && printf '%s' "$body" | grep -q 'LIVE TRACE' \
                 && printf '%s' "$body" | grep -q 'Ask Nandi anything' \
                 && printf '%s' "$body" | grep -q 'listenPulse' \
                 && printf '%s' "$body" | grep -q '/api/ask'; then
