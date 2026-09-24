@@ -125,9 +125,9 @@ jobs:
               if printf '%s' "$body" | grep -q 'NANDI' \
                 && printf '%s' "$body" | grep -q 'Hi Nandi' \
                 && printf '%s' "$body" | grep -q 'NANDI_SCENE_V6' \
-                && printf '%s' "$body" | grep -q 'NANDI_AGENT_V7' \
+                && printf '%s' "$body" | grep -q 'NANDI_PHOTOGRAMMETRY_SPIKE_V1' \
                 && printf '%s' "$body" | grep -q 'Ask Nandi anything' \
-                && printf '%s' "$body" | grep -q 'class="nandi-agent"'; then
+                && printf '%s' "$body" | grep -q 'af7fa7bb03dc46cd87ecf6633fc50700'; then
                 if curl --location --fail --silent --show-error https://nandi-photo-spike.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg \
                   && test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000 \
                   && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'; then
