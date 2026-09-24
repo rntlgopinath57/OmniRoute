@@ -427,6 +427,16 @@ function buildMic(){
 }
 async function startMic(){try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});s.getTracks().forEach(t=>t.stop())}if(!rec&&!buildMic())return;try{rec.start()}catch(_){}warmVoice()}catch(e){enable.classList.add('show');setStatus('Allow microphone access to start voice mode.')}}
 
+if(new URLSearchParams(location.search).has('nandi_test')){
+ window.__NANDI_VOICE_TEST__={
+  setEcho(text){currentVoiceText=String(text||'');lastVoiceText=currentVoiceText;voiceSpeaking=true;lastVoiceEndedAt=Date.now()},
+  clearEcho(){currentVoiceText='';lastVoiceText='';voiceSpeaking=false;lastVoiceEndedAt=0},
+  likelyEcho(text){return likelyEcho(text)},
+  armAbortProbe(){const c=new AbortController();window.__NANDI_ABORT_OBSERVED__=false;c.signal.addEventListener('abort',()=>{window.__NANDI_ABORT_OBSERVED__=true},{once:true});activeController=c;busy=true;bargePending=false;return true},
+  barge(text){beginBarge(String(text||'new instruction'));return {aborted:window.__NANDI_ABORT_OBSERVED__===true,bargePending,busy,agentClass:agent.className}},
+  state(){return {busy,voiceSpeaking,bargePending,turnId,agentClass:agent.className}}
+ };
+}
 askForm.addEventListener('submit',ev=>{ev.preventDefault();const q=prompt.value.trim();if(!q)return;prompt.value='';if(!awake)wake(false);ask(q,{interrupt:busy})});
 micBtn.addEventListener('click',()=>{warmVoice();if(!rec)startMic();if(!awake)wake(true);else{if(voiceSpeaking||busy)beginBarge('voice interruption');setAgent('listening','LISTENING','Speak now')}});
 enable.addEventListener('click',()=>{warmVoice();startMic()});
