@@ -6,6 +6,7 @@ on:
       - nandi-functional-v1
     paths:
       - "ai-team-playground/nandi.html"
+      - "netlify/functions/ask.mts"
       - "cloudflare/**"
       - "relay-runtime/**"
       - "wrangler.jsonc"
@@ -183,6 +184,22 @@ jobs:
           printf '%s' "$response" | grep -Eq '"type":"worker"|"type":"worker_selected"'
           printf '%s' "$response" | grep -q '"type":"done"'
           printf '%s' "$response" | grep -q '"answer"'
+
+      - name: Verify GitHub action routing
+        shell: bash
+        run: |
+          response="$(curl --location --fail --silent --show-error --max-time 65 \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"can you access all my get hub report and all the work flows inside them and tell me the status of each workflow","history":[]}' \
+            https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -q '"type":"tool"'
+          printf '%s' "$response" | grep -q '"tool":"github"'
+          printf '%s' "$response" | grep -q '"status":"complete"'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/OmniRoute'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/gopi_alerts'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/safeqr'
+          ! printf '%s' "$response" | grep -qi "don't have the ability to access.*github"
 
       - name: Record verified deployment
         run: |
