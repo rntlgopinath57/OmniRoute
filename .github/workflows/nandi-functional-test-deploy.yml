@@ -53,11 +53,11 @@ jobs:
           grep -q '/api/ask' ai-team-playground/nandi.html
           grep -q 'NANDI_UI_V2' ai-team-playground/nandi.html
           grep -q 'LIVE TRACE' ai-team-playground/nandi.html
-          grep -q '01 · LISTEN' ai-team-playground/nandi.html
-          grep -q '02 · ROUTE' ai-team-playground/nandi.html
-          grep -q '03 · ACT' ai-team-playground/nandi.html
-          grep -q '04 · VERIFY' ai-team-playground/nandi.html
-          grep -q '05 · RESPOND' ai-team-playground/nandi.html
+          grep -q '>LISTEN<' ai-team-playground/nandi.html
+          grep -q '>ROUTE<' ai-team-playground/nandi.html
+          grep -q '>ACT<' ai-team-playground/nandi.html
+          grep -q '>VERIFY<' ai-team-playground/nandi.html
+          grep -q '>RESPOND<' ai-team-playground/nandi.html
           grep -q 'listenPulse' ai-team-playground/nandi.html
           grep -q 'verifyScan' ai-team-playground/nandi.html
           grep -q 'wave' ai-team-playground/nandi.html
