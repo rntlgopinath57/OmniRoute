@@ -29,7 +29,7 @@ async function load() {
   const token = ++generation;
   loading = (async () => {
     try {
-      device = navigator.gpu ? "webgpu" : "wasm";
+      device = "wasm";
       emit("loading", { progress: 0, device });
       const tts = await KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: "q8",
