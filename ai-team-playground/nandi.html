@@ -265,29 +265,167 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
   .aura{left:35%;top:70%;width:68vw;height:48vh}
 }
 
+
+/* NANDI_AGENT_V7 — Nandi is the reactive agent; Shiva remains the spatial anchor. */
+.nandi-agent{
+  position:absolute;inset:-2%;z-index:5;width:104%;height:104%;
+  object-fit:cover;object-position:center center;pointer-events:none;user-select:none;
+  transform:scale(1.02);opacity:.26;
+  filter:saturate(1.06) brightness(1.04) contrast(1.06) drop-shadow(0 0 12px rgba(139,229,238,.10));
+  -webkit-mask-image:
+    radial-gradient(ellipse 31% 34% at 22% 83%,#000 0 56%,transparent 76%),
+    radial-gradient(ellipse 18% 30% at 31% 52%,#000 0 47%,transparent 73%);
+  -webkit-mask-repeat:no-repeat;
+  mask-image:
+    radial-gradient(ellipse 31% 34% at 22% 83%,#000 0 56%,transparent 76%),
+    radial-gradient(ellipse 18% 30% at 31% 52%,#000 0 47%,transparent 73%);
+  mask-repeat:no-repeat;
+  transition:opacity .45s ease,filter .45s ease
+}
+.scene.awake .nandi-agent{animation:nandiAgentIdleV7 4.8s ease-in-out infinite}
+.scene.listening .nandi-agent{animation:nandiAgentListenV7 2.2s ease-in-out infinite}
+.scene.thinking .nandi-agent{animation:nandiAgentThinkV7 2.15s ease-in-out infinite}
+.scene.speaking .nandi-agent{animation:nandiAgentSpeakV7 1.55s ease-in-out infinite}
+.scene.ack .nandi-agent{animation:nandiAgentAckV7 .9s cubic-bezier(.2,.8,.25,1)}
+.aura{
+  left:29%;top:63%;width:min(48vw,690px);height:min(60vh,540px);
+  opacity:.20;filter:blur(26px);
+  background:radial-gradient(ellipse at 54% 48%,
+    rgba(145,231,241,.16) 0 11%,
+    rgba(255,219,152,.12) 24%,
+    rgba(231,161,65,.045) 43%,
+    transparent 70%);
+  mix-blend-mode:screen
+}
+.aura::before{
+  left:50%;bottom:1%;width:86%;height:27%;transform:translateX(-50%);
+  background:radial-gradient(ellipse,
+    rgba(248,195,100,.23) 0,
+    rgba(117,220,232,.075) 38%,
+    transparent 73%);
+  filter:blur(14px);opacity:.72
+}
+.aura::after{
+  inset:18% 23% 21%;
+  background:radial-gradient(ellipse at 52% 42%,
+    rgba(248,242,215,.13),
+    rgba(121,227,238,.055) 40%,
+    transparent 72%);
+  filter:blur(18px);opacity:.72
+}
+.scene.awake .aura{opacity:.48;animation:nandiPresenceV7 4.6s ease-in-out infinite}
+.scene.listening .aura{opacity:.72;animation:nandiListenAuraV7 2.1s ease-in-out infinite}
+.scene.thinking .aura{
+  opacity:.67;
+  background:radial-gradient(ellipse at 54% 48%,
+    rgba(255,215,132,.20) 0 12%,rgba(231,164,70,.11) 29%,rgba(139,229,238,.025) 48%,transparent 72%);
+  animation:nandiThinkAuraV7 2s ease-in-out infinite
+}
+.scene.speaking .aura{
+  opacity:.64;
+  background:radial-gradient(ellipse at 54% 48%,
+    rgba(255,228,171,.19) 0 12%,rgba(215,181,109,.10) 30%,rgba(131,244,189,.055) 50%,transparent 72%);
+  animation:nandiSpeakAuraV7 1.45s ease-in-out infinite
+}
+.center{
+  z-index:12;bottom:20px;width:min(760px,78vw);max-width:none;gap:8px
+}
+.heard{font-size:12px;min-height:18px;opacity:.92}
+.status{
+  position:relative;padding:8px 13px 8px 34px;
+  border-color:rgba(255,219,155,.16);
+  background:rgba(4,7,10,.42);backdrop-filter:blur(16px)
+}
+.status::before{
+  content:"▮ ▮▮ ▮";position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  color:#97edf6;font-size:7px;letter-spacing:1px;opacity:.8;
+  animation:nandiWaveV7 1s ease-in-out infinite
+}
+.composer{
+  width:100%;display:flex;align-items:center;gap:8px;padding:9px;
+  border:1px solid rgba(255,219,155,.18);
+  background:rgba(4,7,10,.56);backdrop-filter:blur(22px);
+  border-radius:999px;box-shadow:0 20px 72px rgba(0,0,0,.34),0 0 28px rgba(215,181,109,.045)
+}
+.composer input{
+  min-width:0;flex:1;border:0;outline:0;background:transparent;color:#edf3f7;
+  font:inherit;font-size:14px;padding:0 6px
+}
+.composer input::placeholder{color:#aab5bd}
+.composer button{
+  flex:0 0 42px;width:42px;height:42px;border-radius:50%;cursor:pointer;
+  display:grid;place-items:center;border:1px solid rgba(255,255,255,.08);font-size:17px
+}
+.talk{background:rgba(255,255,255,.065);color:#edf6fa}
+.send{
+  background:linear-gradient(145deg,#e3bd70,#9b6228);color:#130d07;
+  border-color:rgba(255,226,171,.28)!important;box-shadow:0 0 24px rgba(215,181,109,.16)
+}
+.composer button:disabled,.composer input:disabled{opacity:.48;cursor:not-allowed}
+.answer{
+  right:24px;bottom:104px;width:min(450px,36vw);max-height:40vh;
+  background:linear-gradient(180deg,rgba(8,7,7,.56),rgba(10,7,6,.70));
+  border-color:rgba(255,219,155,.14)
+}
+@keyframes nandiAgentIdleV7{
+  0%,100%{opacity:.27;filter:saturate(1.05) brightness(1.04) contrast(1.06) drop-shadow(0 0 10px rgba(139,229,238,.08))}
+  50%{opacity:.36;filter:saturate(1.08) brightness(1.075) contrast(1.07) drop-shadow(0 0 18px rgba(139,229,238,.16))}
+}
+@keyframes nandiAgentListenV7{
+  0%,100%{opacity:.32;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(139,229,238,.13))}
+  50%{opacity:.47;filter:saturate(1.10) brightness(1.11) contrast(1.08) drop-shadow(0 0 26px rgba(139,229,238,.25))}
+}
+@keyframes nandiAgentThinkV7{
+  0%,100%{opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 12px rgba(231,170,82,.12))}
+  50%{opacity:.46;filter:saturate(1.11) brightness(1.10) contrast(1.08) drop-shadow(0 0 25px rgba(231,170,82,.24))}
+}
+@keyframes nandiAgentSpeakV7{
+  0%,100%{opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(131,244,189,.11))}
+  50%{opacity:.44;filter:saturate(1.10) brightness(1.095) contrast(1.08) drop-shadow(0 0 22px rgba(131,244,189,.20))}
+}
+@keyframes nandiAgentAckV7{
+  0%,100%{opacity:.30;filter:brightness(1.05)}
+  45%{opacity:.52;filter:brightness(1.14) drop-shadow(0 0 28px rgba(255,219,155,.24))}
+  72%{opacity:.39;filter:brightness(1.09)}
+}
+@keyframes nandiPresenceV7{50%{transform:translate(-50%,-50%) scale(1.045);filter:blur(28px)}}
+@keyframes nandiListenAuraV7{50%{transform:translate(-50%,-50%) scale(1.075);filter:blur(28px)}}
+@keyframes nandiThinkAuraV7{50%{transform:translate(-50%,-50%) scale(1.055);filter:blur(29px)}}
+@keyframes nandiSpeakAuraV7{50%{transform:translate(-50%,-50%) scale(1.045);filter:blur(27px)}}
+@keyframes nandiWaveV7{50%{opacity:.35;letter-spacing:2px}}
+@media(max-width:720px){
+  .nandi-agent{object-position:48% center}
+  .aura{left:35%;top:64%;width:76vw;height:54vh}
+  .center{width:94vw;bottom:12px}
+  .answer{left:14px;right:14px;width:auto;bottom:104px;max-height:34vh}
+}
+@media(prefers-reduced-motion:reduce){
+  .nandi-agent,.aura,.status::before{animation:none!important;transition:none!important}
+}
+
 </style>
 </head>
 <body>
 <div id="scene" class="scene">
-<img id="sceneArt" class="bg" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" loading="eager" fetchpriority="high" decoding="async"><div class="veil"></div><div class="aura"></div>
+<img id="sceneArt" class="bg" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" loading="eager" fetchpriority="high" decoding="async"><div class="aura"></div><img id="nandiAgent" class="nandi-agent" src="/assets/nandi-shiva-cinematic.jpg" alt="" aria-hidden="true" decoding="async"><div class="veil"></div>
 <div class="top"><span class="dot"></span><div><span class="name">NANDI</span><span id="mode" class="mode">IDLE · SAY “HI NANDI”</span></div></div>
 <div id="answer" class="answer"><b>NANDI</b><span id="answerText"></span></div>
-<div class="center"><div id="heard" class="heard"></div><button id="enable" class="enable" type="button">Enable microphone</button><div id="status" class="status">Preparing default microphone…</div></div>
+<div class="center"><div id="heard" class="heard"></div><button id="enable" class="enable" type="button">Enable microphone</button><div id="status" class="status">Preparing default microphone…</div><form id="askForm" class="composer" autocomplete="off"><button id="talk" class="talk" type="button" aria-label="Talk to Nandi">●</button><input id="prompt" type="text" inputmode="text" placeholder="Ask Nandi anything…" aria-label="Ask Nandi anything"><button id="send" class="send" type="submit" aria-label="Send to Nandi">➤</button></form></div>
 </div>
 <script>
 (function(){
-const scene=document.getElementById('scene'),status=document.getElementById('status'),heard=document.getElementById('heard'),mode=document.getElementById('mode'),enable=document.getElementById('enable'),answer=document.getElementById('answer'),answerText=document.getElementById('answerText');
+const scene=document.getElementById('scene'),status=document.getElementById('status'),heard=document.getElementById('heard'),mode=document.getElementById('mode'),enable=document.getElementById('enable'),answer=document.getElementById('answer'),answerText=document.getElementById('answerText'),askForm=document.getElementById('askForm'),promptInput=document.getElementById('prompt'),talk=document.getElementById('talk'),send=document.getElementById('send');
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,awake=false,busy=false,restart=null,history=[];
 function setState(s){scene.classList.remove('listening','thinking','speaking');if(s)scene.classList.add(s)}
-function setStatus(t){status.textContent=t;if(/Working|Understanding|Thinking|Using|Verifying/.test(t))setState('thinking');else if(/Listening/.test(t))setState('listening')}
-function say(t){if(!('speechSynthesis' in window)||!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.98;u.pitch=.92;u.volume=.92;u.onstart=function(){setState('speaking')};u.onend=function(){if(awake&&!busy)setState('listening')};speechSynthesis.speak(u)}
+function setStatus(t){status.textContent=t;if(/Working|Understanding|Thinking|Using|Verifying/.test(t)){setState('thinking');if(awake)mode.textContent='ACTIVE · THINKING'}else if(/Listening/.test(t)){setState('listening');if(awake)mode.textContent='ACTIVE · LISTENING'}}
+function say(t){if(!('speechSynthesis' in window)||!t)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.98;u.pitch=.92;u.volume=.92;u.onstart=function(){setState('speaking');if(awake)mode.textContent='ACTIVE · SPEAKING'};u.onend=function(){if(awake&&!busy){setState('listening');mode.textContent='ACTIVE · LISTENING'}};speechSynthesis.speak(u)}
 function wake(){setState('listening');scene.classList.remove('ack');void scene.offsetWidth;scene.classList.add('ack','awake');awake=true;mode.textContent='ACTIVE · LISTENING';setStatus('Listening…');say("I'm listening.")}
 function sleep(){setState('');awake=false;scene.classList.remove('awake');mode.textContent='IDLE · SAY “HI NANDI”';setStatus('Waiting for “Hi Nandi”…');answer.classList.remove('show');say('Going quiet.')}
-async function ask(q){if(busy)return;busy=true;setStatus('Working…');heard.textContent='“'+q+'”';answer.classList.remove('show');try{const c=new AbortController();const timer=setTimeout(function(){c.abort()},55000);const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,history:history.slice(-6)}),signal:c.signal});clearTimeout(timer);if(!r.ok)throw new Error('Relay returned '+r.status);if(!r.body)throw new Error('Streaming unavailable');const rd=r.body.getReader(),dec=new TextDecoder();let buf='',final='';while(true){const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';for(const line of lines){if(!line.trim())continue;const e=JSON.parse(line);if(e.type==='planner')setStatus('Understanding…');if(e.type==='worker'||e.type==='worker_selected')setStatus('Thinking…');if(e.type==='tool')setStatus('Using '+String(e.tool||'tool')+'…');if(e.type==='reviewer')setStatus('Verifying…');if(e.type==='done')final=String(e.answer||'').trim();if(e.type==='error')throw new Error(e.message||'Relay error')}if(p.done)break}if(buf.trim()){const e=JSON.parse(buf);if(e.type==='done')final=String(e.answer||'').trim()}if(!final)final='I finished, but no answer text came back.';answerText.textContent=final;answer.classList.add('show');history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);setStatus('Listening…');say(final)}catch(e){const m=e&&e.name==='AbortError'?'That took too long. I stopped the request.':'I hit a problem: '+(e.message||String(e));answerText.textContent=m;answer.classList.add('show');setStatus('Listening…');say(m)}finally{busy=false}}
+async function ask(q){if(busy)return;if(!awake){awake=true;scene.classList.add('awake');mode.textContent='ACTIVE · THINKING'}busy=true;promptInput.disabled=true;send.disabled=true;setStatus('Working…');heard.textContent='“'+q+'”';answer.classList.remove('show');try{const c=new AbortController();const timer=setTimeout(function(){c.abort()},55000);const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,history:history.slice(-6)}),signal:c.signal});clearTimeout(timer);if(!r.ok)throw new Error('Relay returned '+r.status);if(!r.body)throw new Error('Streaming unavailable');const rd=r.body.getReader(),dec=new TextDecoder();let buf='',final='';while(true){const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';for(const line of lines){if(!line.trim())continue;const e=JSON.parse(line);if(e.type==='planner')setStatus('Understanding…');if(e.type==='worker'||e.type==='worker_selected')setStatus('Thinking…');if(e.type==='tool')setStatus('Using '+String(e.tool||'tool')+'…');if(e.type==='reviewer')setStatus('Verifying…');if(e.type==='done')final=String(e.answer||'').trim();if(e.type==='error')throw new Error(e.message||'Relay error')}if(p.done)break}if(buf.trim()){const e=JSON.parse(buf);if(e.type==='done')final=String(e.answer||'').trim()}if(!final)final='I finished, but no answer text came back.';answerText.textContent=final;answer.classList.add('show');history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);setStatus('Listening…');say(final)}catch(e){const m=e&&e.name==='AbortError'?'That took too long. I stopped the request.':'I hit a problem: '+(e.message||String(e));answerText.textContent=m;answer.classList.add('show');setStatus('Listening…');say(m)}finally{busy=false;promptInput.disabled=false;send.disabled=false}}
 function handle(t){t=String(t||'').trim();if(!t)return;heard.textContent='“'+t+'”';const l=t.toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();if(!awake){if(/(^|\s)(hi|hey)\s+nandi(\s|$)/.test(l)||l==='nandi')wake();else setStatus('Waiting for “Hi Nandi”…');return}if(/\b(go to sleep|sleep nandi|nandi sleep)\b/.test(l)){sleep();return}if(/\b(stop talking|stop speaking)\b/.test(l)){if('speechSynthesis' in window)speechSynthesis.cancel();return}ask(t)}
 function build(){if(!SR){mode.textContent='BROWSER VOICE UNSUPPORTED';setStatus('Voice recognition is not available in this browser.');return false}rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-IN';rec.onstart=function(){enable.classList.remove('show');setStatus(awake?'Listening…':'Waiting for “Hi Nandi”…')};rec.onresult=function(ev){let inter='';for(let i=ev.resultIndex;i<ev.results.length;i++){const tx=ev.results[i][0].transcript;if(ev.results[i].isFinal)handle(tx);else inter+=tx}if(inter&&!busy)heard.textContent=inter};rec.onerror=function(ev){if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){enable.classList.add('show');setStatus('Microphone permission needed once.')}else if(ev.error!=='no-speech'&&ev.error!=='aborted')setStatus('Mic issue: '+ev.error)};rec.onend=function(){clearTimeout(restart);restart=setTimeout(function(){try{rec.start()}catch(_){}},650)};return true}
 async function start(){try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const s=await navigator.mediaDevices.getUserMedia({audio:true});s.getTracks().forEach(function(t){t.stop()})}if(!rec&&!build())return;try{rec.start()}catch(_){}}catch(e){enable.classList.add('show');setStatus('Allow microphone access to start Nandi.')}}
-enable.addEventListener('click',start);window.addEventListener('load',function(){setTimeout(start,500)})
+enable.addEventListener('click',start);talk.addEventListener('click',function(){if(!rec){start();return}if(!awake)wake();else setStatus('Listening…')});askForm.addEventListener('submit',function(ev){ev.preventDefault();const q=promptInput.value.trim();if(!q||busy)return;promptInput.value='';ask(q)});window.addEventListener('load',function(){setTimeout(start,500)})
 })();
 </script>
 </body>
