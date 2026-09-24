@@ -11,7 +11,8 @@ on:
       - "cloudflare/**"
       - "relay-runtime/**"
       - "wrangler.jsonc"
-      - ".github/workflows/nandi-voice-agent-test-deploy.yml"
+      - ".github/workflows/nandi-functional-test-deploy.yml"
+      - ".github/workflows/nandi-voice-agent-deploy.yml"
   workflow_dispatch:
 
 permissions:
