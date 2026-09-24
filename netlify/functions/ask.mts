@@ -297,9 +297,7 @@ function mentionedRepos(text: string) {
 
 async function githubRepoContext(text: string) {
   const repos = mentionedRepos(text);
-  if (!repos.length) {
-    return { context: "", repos: [], inaccessible: [] as string[], liveWorkflowRuns: 0 };
-  }
+  if (!repos.length) return { context: "", repos: [], inaccessible: [] as string[], liveWorkflowRunCount: 0 };
 
   const token = envGet("RELAY_GITHUB_TOKEN") || envGet("GITHUB_TOKEN") || "";
   const headers: Record<string, string> = {
@@ -312,7 +310,7 @@ async function githubRepoContext(text: string) {
   const blocks: string[] = [];
   const accessible: string[] = [];
   const inaccessible: string[] = [];
-  let liveWorkflowRuns = 0;
+  let liveWorkflowRunCount = 0;
   const wantsWorkflows = workflowInventoryIntent(text);
 
   for (const repo of repos) {
@@ -336,7 +334,7 @@ async function githubRepoContext(text: string) {
           { headers: { ...headers, "Accept": "application/vnd.github.raw+json" } },
           5000,
         );
-        if (readmeResponse.ok) readme = (await readmeResponse.text()).slice(0, 7000);
+        if (readmeResponse.ok) readme = (await readmeResponse.text()).slice(0, 6000);
       } catch {}
 
       let rootFiles = "";
@@ -386,26 +384,12 @@ async function githubRepoContext(text: string) {
           );
           if (runsResponse.ok) {
             const payload = await runsResponse.json();
-            const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
-            const latest = new Map<string, any>();
-            for (const run of runs) {
-              const key = String(run?.path || run?.name || run?.workflow_id || "");
-              if (key && !latest.has(key)) latest.set(key, run);
-            }
-            const rows = [...latest.values()].slice(0, 18).map((run: any) => {
-              liveWorkflowRuns += 1;
-              const result = run?.status === "completed"
-                ? (run?.conclusion || "completed")
-                : (run?.status || "unknown");
-              return [
-                String(run?.name || run?.path || "workflow"),
-                `status=${result}`,
-                run?.head_branch ? `branch=${run.head_branch}` : "",
-                run?.run_started_at || run?.created_at ? `started=${run.run_started_at || run.created_at}` : "",
-                run?.html_url ? `url=${run.html_url}` : "",
-              ].filter(Boolean).join(" | ");
-            });
-            workflowRuns = rows.join("\n");
+            const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs.slice(0, 16) : [];
+            liveWorkflowRunCount += runs.length;
+            workflowRuns = runs.map((run: any) => {
+              const state = run?.status === "completed" ? (run?.conclusion || "completed") : (run?.status || "unknown");
+              return `- ${run?.name || "workflow"} | ${state} | event=${run?.event || ""} | branch=${run?.head_branch || ""} | updated=${run?.updated_at || ""} | run_id=${run?.id || ""}`;
+            }).join("\n");
           }
         } catch {}
       }
@@ -421,10 +405,10 @@ async function githubRepoContext(text: string) {
         meta?.source?.full_name ? `Upstream: ${meta.source.full_name}` : "",
         rootFiles ? `Root files: ${rootFiles}` : "",
         wantsWorkflows
-          ? (workflowFiles ? `GitHub workflows: ${workflowFiles}` : "GitHub workflows: none found or workflow directory unavailable")
+          ? (workflowFiles ? `GitHub workflow files: ${workflowFiles}` : "GitHub workflow files: none found or workflow directory unavailable")
           : "",
         wantsWorkflows
-          ? (workflowRuns ? `LIVE GITHUB ACTIONS RUNS (GitHub API):\n${workflowRuns}` : "LIVE GITHUB ACTIONS RUNS: unavailable")
+          ? (workflowRuns ? `LIVE GITHUB ACTIONS RUNS (newest first):\n${workflowRuns}` : "LIVE GITHUB ACTIONS RUNS: unavailable or no runs returned")
           : "",
         readme ? `README:\n${readme}` : "README unavailable",
       ].filter(Boolean).join("\n"));
@@ -437,7 +421,7 @@ async function githubRepoContext(text: string) {
     context: blocks.join("\n\n---\n\n"),
     repos: accessible,
     inaccessible,
-    liveWorkflowRuns,
+    liveWorkflowRunCount,
   };
 }
 

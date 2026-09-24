@@ -1,142 +1,63 @@
 import { envGet } from "../../relay-runtime/env.mts";
 
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 12;
-const buckets = new Map<string, { started: number; count: number }>();
+const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 
-function clientKey(request: Request) {
-  return request.headers.get("CF-Connecting-IP")
-    || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    || "unknown";
-}
-
-function allowRequest(request: Request) {
-  const now = Date.now();
-  const key = clientKey(request);
-  const current = buckets.get(key);
-  if (!current || now - current.started >= WINDOW_MS) {
-    buckets.set(key, { started: now, count: 1 });
-  } else {
-    current.count += 1;
-    if (current.count > MAX_PER_WINDOW) return false;
-  }
-  if (buckets.size > 500) {
-    for (const [k, v] of buckets) {
-      if (now - v.started >= WINDOW_MS) buckets.delete(k);
-    }
-  }
-  return true;
-}
-
-function safeMime(type: string) {
-  const value = String(type || "").toLowerCase().split(";")[0].trim();
-  return new Set([
-    "audio/webm",
-    "audio/mp4",
-    "audio/mpeg",
-    "audio/mp3",
-    "audio/mpga",
-    "audio/m4a",
-    "audio/ogg",
-    "audio/wav",
-    "audio/flac",
-  ]).has(value);
-}
-
-function extension(type: string) {
-  const value = String(type || "").toLowerCase();
-  if (value.includes("mp4") || value.includes("m4a")) return "m4a";
-  if (value.includes("ogg")) return "ogg";
-  if (value.includes("wav")) return "wav";
-  if (value.includes("mpeg") || value.includes("mp3")) return "mp3";
-  if (value.includes("flac")) return "flac";
-  return "webm";
-}
-
-export default async function transcribeHandler(request: Request) {
+export default async (request: Request) => {
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const requestUrl = new URL(request.url);
-  const origin = request.headers.get("Origin");
-  if (origin && origin !== requestUrl.origin) {
-    return Response.json({ error: "Cross-origin voice requests are not allowed" }, { status: 403 });
-  }
-  if (request.headers.get("X-Nandi-Voice") !== "1") {
-    return Response.json({ error: "Missing Nandi voice header" }, { status: 403 });
-  }
-  if (!allowRequest(request)) {
-    return Response.json({ error: "Voice rate limit reached. Try again shortly." }, { status: 429 });
-  }
-
-  const key = envGet("GROQ_API_KEY");
-  if (!key) {
-    return Response.json({ error: "Speech recognition is not configured" }, { status: 503 });
+  const apiKey = envGet("GROQ_API_KEY");
+  if (!apiKey) {
+    return Response.json({ error: "Speech recognition gateway is not configured" }, { status: 503 });
   }
 
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return Response.json({ error: "Invalid audio upload" }, { status: 400 });
+    return Response.json({ error: "Expected multipart audio upload" }, { status: 400 });
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
+  const value = form.get("file");
+  if (!(value instanceof File)) {
     return Response.json({ error: "Audio file is required" }, { status: 400 });
   }
-  if (!file.size || file.size > 10 * 1024 * 1024) {
-    return Response.json({ error: "Audio file must be between 1 byte and 10 MB" }, { status: 413 });
-  }
-  if (!safeMime(file.type)) {
-    return Response.json({ error: "Unsupported audio format" }, { status: 415 });
+  if (!value.size) return Response.json({ error: "Audio file is empty" }, { status: 400 });
+  if (value.size > MAX_AUDIO_BYTES) {
+    return Response.json({ error: "Audio clip is too large" }, { status: 413 });
   }
 
-  const outgoing = new FormData();
-  outgoing.append(
-    "file",
-    new File([await file.arrayBuffer()], `nandi-voice.${extension(file.type)}`, { type: file.type }),
-  );
-  outgoing.append("model", "whisper-large-v3-turbo");
-  outgoing.append("response_format", "json");
-  outgoing.append("temperature", "0");
-
-  const language = String(form.get("language") || "").trim().toLowerCase();
-  if (/^[a-z]{2}$/.test(language)) outgoing.append("language", language);
+  const upstream = new FormData();
+  upstream.append("file", value, value.name || "nandi-audio.webm");
+  upstream.append("model", "whisper-large-v3-turbo");
+  upstream.append("response_format", "json");
+  upstream.append("temperature", "0");
+  upstream.append("prompt", "Nandi voice assistant. Terms may include GitHub, workflows, OmniRoute, gopi_alerts, Bharosa, safeqr.");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  const timer = setTimeout(() => controller.abort(), 25000);
   try {
-    const upstream = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}` },
-      body: outgoing,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: upstream,
       signal: controller.signal,
     });
-    const raw = await upstream.text();
-    if (!upstream.ok) {
-      return Response.json(
-        { error: upstream.status === 429 ? "Speech recognition is busy. Try again shortly." : "Speech recognition failed", status: upstream.status },
-        { status: upstream.status === 429 ? 429 : 502 },
-      );
+    const raw = await response.text();
+    if (!response.ok) {
+      return Response.json({ error: "Speech recognition failed", upstreamStatus: response.status, detail: raw.slice(0, 500) }, { status: 502 });
     }
-    let parsed: any = {};
-    try { parsed = JSON.parse(raw); } catch {}
-    const text = String(parsed?.text || "").trim();
+    let data: any = {};
+    try { data = JSON.parse(raw); } catch {}
     return Response.json({
-      ok: true,
-      text,
-      provider: "groq-whisper",
+      text: String(data?.text || "").trim(),
       model: "whisper-large-v3-turbo",
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error: any) {
     const timedOut = error?.name === "AbortError";
-    return Response.json(
-      { error: timedOut ? "Speech recognition timed out" : "Speech recognition failed" },
-      { status: timedOut ? 504 : 502 },
-    );
+    return Response.json({ error: timedOut ? "Speech recognition timed out" : "Speech recognition request failed" }, { status: timedOut ? 504 : 502 });
   } finally {
     clearTimeout(timer);
   }
-}
+};
