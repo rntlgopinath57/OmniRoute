@@ -51,6 +51,10 @@ jobs:
           grep -q 'Hi Nandi' ai-team-playground/nandi.html
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
+          # Visual regression guard: preserve the natural scene treatment.
+          grep -q 'NANDI_SCENE_V2' ai-team-playground/nandi.html
+          grep -q 'animation:nandiNodV2' ai-team-playground/nandi.html
+          grep -q 'box-shadow:none' ai-team-playground/nandi.html
 
       - name: Deploy isolated Nandi worker
         run: |
