@@ -318,7 +318,9 @@ body:after{
   </main>
 </div>
 
+<script type="module" src="/assets/nandi-neural-voice.js"></script>
 <script>
+// NANDI_VOICE_AGENT_V1
 (function(){
 const $=id=>document.getElementById(id);
 const app=$('app'),agent=$('agent'),brandMode=$('brandMode'),modeTitle=$('modeTitle'),heard=$('heard'),statusLine=$('statusLine'),
@@ -327,129 +329,113 @@ enable=$('enable'),muteBtn=$('muteBtn'),clearBtn=$('clearBtn'),nav=$('nav');
 const stages=[...document.querySelectorAll('.stage')];
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let rec=null,awake=false,busy=false,restart=null,history=[],muted=false,currentMode='Chat';
+let activeController=null,turnId=0,lastBargeAt=0,bargePending=false;
+let voiceEpoch=0,voiceChain=Promise.resolve(),voiceSpeaking=false,currentVoiceText='',lastVoiceText='',lastVoiceEndedAt=0;
+let speechBuffer='',voiceWarmStarted=false,voiceReady=false;
 
 function stageEl(name){return document.querySelector('[data-stage="'+name+'"]')}
 function resetStages(){stages.forEach(x=>x.classList.remove('active','done','fail'));$('sListen').textContent='waiting';$('sRoute').textContent='—';$('sAct').textContent='—';$('sVerify').textContent='—';$('sRespond').textContent='—'}
-function setStage(name,state,label){
- const el=stageEl(name); if(!el)return;
- el.classList.remove('active','done','fail'); if(state)el.classList.add(state);
- const map={listen:'sListen',route:'sRoute',act:'sAct',verify:'sVerify',respond:'sRespond'}; if(label)$(map[name]).textContent=label;
-}
-function addEvent(title,detail){
- const d=document.createElement('div');d.className='event';d.innerHTML='<b>'+escapeHtml(title)+'</b>'+(detail?' · '+escapeHtml(detail):'');events.prepend(d);
- while(events.children.length>8)events.removeChild(events.lastChild);
-}
+function setStage(name,state,label){const el=stageEl(name);if(!el)return;el.classList.remove('active','done','fail');if(state)el.classList.add(state);const map={listen:'sListen',route:'sRoute',act:'sAct',verify:'sVerify',respond:'sRespond'};if(label)$(map[name]).textContent=label}
+function addEvent(title,detail){const d=document.createElement('div');d.className='event';d.innerHTML='<b>'+escapeHtml(title)+'</b>'+(detail?' · '+escapeHtml(detail):'');events.prepend(d);while(events.children.length>8)events.removeChild(events.lastChild)}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function setAgent(state,title,sub){
- agent.className='agent '+state;
- $('agentState').textContent=title||state.toUpperCase();
- $('agentSub').textContent=sub||'';
- brandMode.textContent=(awake?'ACTIVE · ':'')+(title||state).toUpperCase();
-}
+function setAgent(state,title,sub){agent.className='agent '+state;$('agentState').textContent=title||state.toUpperCase();$('agentSub').textContent=sub||'';brandMode.textContent=(awake?'ACTIVE · ':'')+(title||state).toUpperCase()}
 function setStatus(t){statusLine.textContent=t}
-function wake(){
- awake=true;app.classList.add('awake');setAgent('wake','AWAKE','I’m listening');
- setStage('listen','active','wake detected');addEvent('WAKE','Hi Nandi');
- setTimeout(()=>{if(!busy){setAgent('listening','LISTENING','Speak naturally');setStage('listen','active','listening')}},850);
-}
-function sleep(){
- awake=false;app.classList.remove('awake');resetStages();setAgent('idle','READY','Say “Hi Nandi” or ask directly');
- modeTitle.textContent=currentMode.toUpperCase()+' · SAY “HI NANDI” OR TYPE';setStatus('Waiting for “Hi Nandi”…');answer.classList.remove('show');
- if(!muted)say('Going quiet.');
-}
-function say(t){
- if(muted||!('speechSynthesis' in window)||!t)return;
- speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.98;u.pitch=.92;u.volume=.92;
- u.onstart=()=>{setAgent('speaking','SPEAKING','Responding');setStage('respond','active','speaking')};
- u.onend=()=>{setStage('respond','done','delivered');if(awake&&!busy)setAgent('listening','LISTENING','Ready for the next request')};
- speechSynthesis.speak(u);
-}
-function modePrefix(q){
- if(currentMode==='Chat')return q;
- return '['+currentMode+' mode] '+q;
-}
-async function ask(raw){
- const q=String(raw||'').trim();if(!q||busy)return;
+function shortModel(m){m=String(m||'');return m.replace(/^.*\//,'').replace(/:free$/,'').slice(0,24)||'model'}
+
+function waitVoiceModule(timeout=12000){return new Promise(resolve=>{if(window.NandiNeuralVoice)return resolve(window.NandiNeuralVoice);const started=Date.now();const timer=setInterval(()=>{if(window.NandiNeuralVoice){clearInterval(timer);resolve(window.NandiNeuralVoice)}else if(Date.now()-started>timeout){clearInterval(timer);resolve(null)}},80)})}
+async function warmVoice(){if(voiceWarmStarted)return;voiceWarmStarted=true;const voice=await waitVoiceModule();if(!voice){setStatus('Neural voice module unavailable.');addEvent('VOICE','module unavailable');return}setStatus('Loading neural voice locally…');const loaded=await voice.load();const st=voice.status();voiceReady=Boolean(loaded&&st.ready);if(voiceReady){setStatus(awake?'Listening…':'Waiting for “Hi Nandi”…');addEvent('VOICE','Kokoro '+st.voice+' · '+st.device)}else{setStatus('Neural voice could not load. Text mode remains available.');addEvent('VOICE','load failed')}}
+window.addEventListener('nandi-voice',ev=>{const e=ev.detail||{};if(e.type==='loading'&&!busy)setStatus('Loading neural voice '+Math.round((e.progress||0)*100)+'%…');if(e.type==='ready'){voiceReady=true;addEvent('VOICE','ready · '+String(e.voice||''))}if(e.type==='error'){voiceReady=false;addEvent('VOICE ERROR',String(e.error||'unknown').slice(0,80))}if(e.type==='start'){voiceSpeaking=true;currentVoiceText=String(e.text||'');setAgent('speaking','SPEAKING','Conversational response');setStage('respond','active','speaking')}if(e.type==='cancelled'){voiceSpeaking=false;currentVoiceText=''}});
+
+function cleanForSpeech(text){return String(text||'').replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g,' ').replace(/\x60([^\x60]+)\x60/g,'$1').replace(/https?:\/\/\S+/g,'link').replace(/[*_#>|~]/g,' ').replace(/\[([^\]]+)\]\([^\)]+\)/g,'$1').replace(/\s+/g,' ').trim()}
+function spokenSummary(text){const clean=cleanForSpeech(text);if(clean.length<=420)return clean;const parts=clean.match(/[^.!?]+[.!?]+/g)||[];let out='';for(const p of parts){if((out+p).length>420)break;out+=p}return (out.trim()||clean.slice(0,400).trim())+' I’ve put the remaining details on screen.'}
+function resetVoiceQueue(reason=''){voiceEpoch++;speechBuffer='';voiceChain=Promise.resolve();const v=window.NandiNeuralVoice;if(v)try{v.cancel()}catch(_){}voiceSpeaking=false;currentVoiceText='';if(reason)addEvent('VOICE STOP',reason)}
+function enqueueVoice(text){const cleaned=cleanForSpeech(text);if(!cleaned||muted)return;const epoch=voiceEpoch;voiceChain=voiceChain.then(async()=>{if(epoch!==voiceEpoch||muted)return false;const voice=await waitVoiceModule();if(!voice){voiceReady=false;return false}if(!voiceReady){await warmVoice();if(!voiceReady)return false}currentVoiceText=cleaned;voiceSpeaking=true;setAgent('speaking','SPEAKING','Responding naturally');setStage('respond','active','speaking');const ok=await voice.speak(cleaned,{voice:'bm_george',speed:.96,volume:.97});if(epoch!==voiceEpoch)return false;voiceSpeaking=false;lastVoiceText=cleaned;lastVoiceEndedAt=Date.now();currentVoiceText='';if(ok&&awake&&!busy){setStage('respond','done','delivered');setAgent('listening','LISTENING','Ready for the next request');setStatus('Listening…')}return ok})}
+function feedSpeechDelta(delta,flush=false){if(delta)speechBuffer+=delta;let clean=speechBuffer;let cut=-1;const re=/[.!?](?:["')\]]*)\s+/g;let m;while((m=re.exec(clean))!==null){if(m.index>=24)cut=re.lastIndex}if(cut>0){const ready=clean.slice(0,cut);speechBuffer=clean.slice(cut);enqueueVoice(ready)}if(flush&&speechBuffer.trim()){const rest=speechBuffer;speechBuffer='';enqueueVoice(rest)}}
+function tokenSet(s){return new Set(String(s||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(x=>x.length>1))}
+function likelyEcho(text){const heardSet=tokenSet(text);if(!heardSet.size)return false;const reference=(currentVoiceText+' '+lastVoiceText).trim();if(!reference)return false;const h=String(text||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').trim();const r=reference.toLowerCase().replace(/[^a-z0-9\s]/g,' ').trim();if(h.length>5&&(r.includes(h)||h.includes(r.slice(0,Math.min(r.length,80)))))return true;const refSet=tokenSet(reference);let overlap=0;for(const w of heardSet)if(refSet.has(w))overlap++;const ratio=overlap/Math.max(1,heardSet.size);const nearTail=Date.now()-lastVoiceEndedAt<1200;return ratio>=.72&&(voiceSpeaking||nearTail)}
+function interruptTurn(reason='interrupted'){turnId++;if(activeController){try{activeController.abort()}catch(_){}activeController=null}busy=false;prompt.disabled=false;sendBtn.disabled=false;resetVoiceQueue(reason);bargePending=true;setStage('respond','','interrupted');setAgent('listening','LISTENING','I’m listening to the new instruction');setStatus('Interrupted · listening…')}
+function beginBarge(text){if(Date.now()-lastBargeAt<700)return;if(likelyEcho(text))return;lastBargeAt=Date.now();interruptTurn('barge-in');heard.textContent=text;addEvent('BARGE-IN','new instruction detected')}
+function wake(ack=true){awake=true;app.classList.add('awake');setAgent('wake','AWAKE','I’m listening');setStage('listen','active','wake detected');addEvent('WAKE','Hi Nandi');if(!voiceWarmStarted)warmVoice();setTimeout(()=>{if(!busy&&!voiceSpeaking){setAgent('listening','LISTENING','Speak naturally');setStage('listen','active','listening')}},700);if(ack)setTimeout(()=>enqueueVoice('Yes?'),120)}
+function sleep(){awake=false;app.classList.remove('awake');resetStages();setAgent('idle','READY','Say “Hi Nandi” or ask directly');modeTitle.textContent=currentMode.toUpperCase()+' · SAY “HI NANDI” OR TYPE';setStatus('Waiting for “Hi Nandi”…');answer.classList.remove('show');resetVoiceQueue();if(!muted)enqueueVoice('Going quiet.')}
+function modePrefix(q){const voiceGuide='[Nandi voice session] Respond naturally and concisely in one to three short spoken sentences unless I explicitly ask for detail. Never claim a tool is unavailable before trying an available tool. Do not narrate that you are about to use a tool; use it first, then report the result.';if(currentMode==='Chat')return voiceGuide+' '+q;return voiceGuide+' ['+currentMode+' mode] '+q}
+
+async function ask(raw,{interrupt=false}={}){
+ const q=String(raw||'').trim();if(!q)return;
+ if(busy){if(!interrupt)return;interruptTurn('new request')}
  if(!awake){awake=true;app.classList.add('awake')}
- busy=true;prompt.disabled=true;sendBtn.disabled=true;answer.classList.remove('show');heard.textContent='“'+q+'”';
+ const myTurn=++turnId;busy=true;bargePending=false;prompt.disabled=true;sendBtn.disabled=true;answer.classList.remove('show');heard.textContent='“'+q+'”';speechBuffer='';
  resetStages();setStage('listen','done','captured');setStage('route','active','classifying');setAgent('routing','ROUTING','Choosing the right path');setStatus('Routing request…');addEvent('INPUT',currentMode);
+ const c=new AbortController();activeController=c;const timer=setTimeout(()=>c.abort(),65000);let streamedSpeech=false;
  try{
-  const c=new AbortController(),timer=setTimeout(()=>c.abort(),55000);
   const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:modePrefix(q),history:history.slice(-6)}),signal:c.signal});
-  clearTimeout(timer);if(!r.ok)throw new Error('Relay returned '+r.status);if(!r.body)throw new Error('Streaming unavailable');
-  const rd=r.body.getReader(),dec=new TextDecoder();let buf='',final='',worker='';
+  if(!r.ok)throw new Error('Relay returned '+r.status);if(!r.body)throw new Error('Streaming unavailable');
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='',final='',worker='',voiceStreamed=false;
   while(true){
-   const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';
+   const p=await rd.read();if(myTurn!==turnId)throw new DOMException('Superseded','AbortError');
+   buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';
    for(const line of lines){
     if(!line.trim())continue;const e=JSON.parse(line);
-    if(e.type==='planner'){
-      setStage('route','active',e.taskType||'planned');setAgent('routing','ROUTING',String(e.taskType||'planning'));addEvent('PLAN',e.taskType||'general');
-    }
-    if(e.type==='worker'||e.type==='worker_selected'){
-      worker=e.model||worker;setStage('route','done',shortModel(worker));setStage('act','active','model working');setAgent('acting','WORKING',shortModel(worker));addEvent('MODEL',shortModel(worker));
-    }
-    if(e.type==='fallback'||e.type==='emergency_fallback'){
-      setStage('route','active','fallback');addEvent('FALLBACK',shortModel(e.model));
-    }
-    if(e.type==='tool'){
-      setStage('act',e.status==='unavailable'?'fail':'active',String(e.tool||'tool'));setAgent('acting','USING TOOL',String(e.tool||'tool'));addEvent('TOOL',String(e.tool||'tool')+' '+String(e.status||''));
-    }
+    if(e.type==='planner'){voiceStreamed=Boolean(e.voiceStreamSafe);setStage('route','active',e.taskType||'planned');setAgent('routing','ROUTING',String(e.taskType||'planning'));addEvent('PLAN',e.taskType||'general')}
+    if(e.type==='worker'||e.type==='worker_selected'){worker=e.model||worker;setStage('route','done',shortModel(worker));setStage('act','active','model working');setAgent('acting','WORKING',shortModel(worker));addEvent('MODEL',shortModel(worker))}
+    if(e.type==='fallback'||e.type==='emergency_fallback'){setStage('route','active','fallback');addEvent('FALLBACK',shortModel(e.model))}
+    if(e.type==='tool'){setStage('act',e.status==='unavailable'?'fail':'active',String(e.tool||'tool'));setAgent('acting','USING TOOL',String(e.tool||'tool'));addEvent('TOOL',String(e.tool||'tool')+' '+String(e.status||''))}
     if(e.type==='render'){setStage('act','active','rendering');addEvent('RENDER',e.presentation?.label||'visual')}
-    if(e.type==='reviewer'){
-      setStage('act','done','complete');setStage('verify','active',shortModel(e.model||'reviewer'));setAgent('verifying','VERIFYING','Independent review');addEvent('REVIEW',shortModel(e.model));
-    }
+    if(e.type==='delta'){streamedSpeech=true;voiceStreamed=true;feedSpeechDelta(String(e.text||''),false);setStage('respond','active','streaming');if(!voiceSpeaking)setAgent('acting','RESPONDING','Preparing speech')}
+    if(e.type==='stream_reset'){resetVoiceQueue('provider stream reset');streamedSpeech=false;voiceStreamed=false}
+    if(e.type==='reviewer'){setStage('act','done','complete');setStage('verify','active',shortModel(e.model||'reviewer'));setAgent('verifying','VERIFYING','Independent review');addEvent('REVIEW',shortModel(e.model))}
     if(e.type==='review_failed'||e.type==='retry'){setStage('verify','active','refining');addEvent('REFINE','review requested changes')}
     if(e.type==='review_skipped'||e.type==='fast_path'){setStage('verify','done',e.type==='fast_path'?'fast path':'skipped')}
-    if(e.type==='done'){
-      final=String(e.answer||'').trim();setStage('act','done','complete');setStage('verify','done',String(e.review||'done'));setStage('respond','active','preparing');
-    }
+    if(e.type==='done'){final=String(e.answer||'').trim();voiceStreamed=Boolean(e.voiceStreamed||voiceStreamed);setStage('act','done','complete');setStage('verify','done',String(e.review||'done'));setStage('respond','active',voiceStreamed?'finishing speech':'preparing speech')}
     if(e.type==='error')throw new Error(e.message||'Relay error');
    }
    if(p.done)break;
   }
-  if(buf.trim()){const e=JSON.parse(buf);if(e.type==='done')final=String(e.answer||'').trim()}
-  if(!final)final='I finished, but no answer text came back.';
+  if(buf.trim()){const e=JSON.parse(buf);if(e.type==='done'){final=String(e.answer||'').trim();voiceStreamed=Boolean(e.voiceStreamed||voiceStreamed)}}
+  if(myTurn!==turnId)return;if(!final)final='I finished, but no answer text came back.';
   answerText.textContent=final;answer.classList.add('show');history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);
-  setStage('respond','active','speaking');setAgent('success','COMPLETE','Verified response ready');setStatus('Complete');addEvent('DONE','response ready');
-  setTimeout(()=>say(final),280);
+  if(voiceStreamed||streamedSpeech)feedSpeechDelta('',true);else enqueueVoice(spokenSummary(final));
+  setStage('respond','active','speaking');setStatus('Complete');addEvent('DONE',voiceStreamed?'streamed voice':'verified response');if(!voiceSpeaking)setAgent('success','COMPLETE','Response ready');
  }catch(e){
-  const m=e&&e.name==='AbortError'?'That took too long. I stopped the request.':'I hit a problem: '+(e.message||String(e));
-  answerText.textContent=m;answer.classList.add('show');setStage('act','fail','failed');setStage('verify','fail','not reached');setStage('respond','fail','error');
-  setAgent('failure','FAILED','See the response panel');setStatus('Request failed');addEvent('ERROR',e.message||String(e));if(!muted)say(m);
- }finally{busy=false;prompt.disabled=false;sendBtn.disabled=false}
+  if(myTurn!==turnId)return;
+  if(e&&e.name==='AbortError'){if(!bargePending){setStatus('Request stopped.');setAgent('listening','LISTENING','Ready for a new request')}return}
+  const m='I hit a problem: '+(e.message||String(e));answerText.textContent=m;answer.classList.add('show');setStage('act','fail','failed');setStage('verify','fail','not reached');setStage('respond','fail','error');setAgent('failure','FAILED','See the response panel');setStatus('Request failed');addEvent('ERROR',e.message||String(e));enqueueVoice('I hit a problem. The details are on screen.');
+ }finally{clearTimeout(timer);if(myTurn===turnId){busy=false;activeController=null;prompt.disabled=false;sendBtn.disabled=false;if(!voiceSpeaking&&awake)setAgent('listening','LISTENING','Ready for the next request')}}
 }
-function shortModel(m){m=String(m||'');return m.replace(/^.*\//,'').replace(/:free$/,'').slice(0,24)||'model'}
+
 function handle(t){
- t=String(t||'').trim();if(!t)return;heard.textContent='“'+t+'”';
- const l=t.toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();
- if(!awake){
-  if(/(^|\s)(hi|hey)\s+nandi(\s|$)/.test(l)||l==='nandi'){wake();if(l.replace(/^(hi|hey)?\s*nandi\s*/,'').trim())setTimeout(()=>ask(t.replace(/^(hi|hey)?\s*nandi[,:]?\s*/i,'')),900)}
-  else setStatus('Waiting for “Hi Nandi”…');
-  return;
- }
+ t=String(t||'').trim();if(!t)return;heard.textContent='“'+t+'”';const l=t.toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();
+ if(likelyEcho(t)){addEvent('ECHO','suppressed');return}
+ if(!awake){if(/(^|\s)(hi|hey)\s+nandi(\s|$)/.test(l)||l==='nandi'){const rest=t.replace(/^(hi|hey)?\s*nandi[,:]?\s*/i,'').trim();wake(!rest);if(rest)setTimeout(()=>ask(rest),280)}else setStatus('Waiting for “Hi Nandi”…');return}
  if(/\b(go to sleep|sleep nandi|nandi sleep)\b/.test(l)){sleep();return}
- if(/\b(stop talking|stop speaking)\b/.test(l)){if('speechSynthesis'in window)speechSynthesis.cancel();setAgent('listening','LISTENING','Speech stopped');return}
- ask(t);
+ if(/\b(stop talking|stop speaking|be quiet)\b/.test(l)){resetVoiceQueue('user stop');setAgent('listening','LISTENING','Speech stopped');setStatus('Listening…');return}
+ if(/\b(cancel that|cancel it|never mind|nevermind)\b/.test(l)){interruptTurn('cancelled by user');setStatus('Cancelled. Listening…');return}
+ ask(t,{interrupt:busy||bargePending});
 }
 function buildMic(){
  if(!SR){setStatus('Voice recognition is not available in this browser.');return false}
  rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang='en-IN';
  rec.onstart=()=>{enable.classList.remove('show');setStatus(awake?'Listening…':'Waiting for “Hi Nandi”…')};
- rec.onresult=ev=>{let inter='';for(let i=ev.resultIndex;i<ev.results.length;i++){const tx=ev.results[i][0].transcript;if(ev.results[i].isFinal)handle(tx);else inter+=tx}if(inter&&!busy){heard.textContent=inter;if(awake)setAgent('listening','LISTENING','Hearing you…')}};
+ rec.onresult=ev=>{
+  let inter='',finals=[];
+  for(let i=ev.resultIndex;i<ev.results.length;i++){const tx=ev.results[i][0].transcript.trim();if(ev.results[i].isFinal){if(tx)finals.push(tx)}else inter+=tx+' '}
+  inter=inter.trim();
+  if(inter){heard.textContent=inter;const words=inter.split(/\s+/).filter(Boolean).length;if((voiceSpeaking||busy)&&words>=3&&!likelyEcho(inter))beginBarge(inter);else if(awake&&!busy)setAgent('listening','LISTENING','Hearing you…')}
+  for(const tx of finals){if(likelyEcho(tx))continue;if((voiceSpeaking||busy)&&!bargePending)beginBarge(tx);handle(tx)}
+ };
  rec.onerror=ev=>{if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){enable.classList.add('show');setStatus('Microphone permission needed once.')}else if(ev.error!=='no-speech'&&ev.error!=='aborted')setStatus('Mic issue: '+ev.error)};
- rec.onend=()=>{clearTimeout(restart);restart=setTimeout(()=>{try{rec.start()}catch(_){}},650)};return true;
+ rec.onend=()=>{clearTimeout(restart);restart=setTimeout(()=>{try{rec.start()}catch(_){}},450)};return true;
 }
-async function startMic(){
- try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const s=await navigator.mediaDevices.getUserMedia({audio:true});s.getTracks().forEach(t=>t.stop())}if(!rec&&!buildMic())return;try{rec.start()}catch(_){}}
- catch(e){enable.classList.add('show');setStatus('Allow microphone access to start voice mode.')}
-}
-askForm.addEventListener('submit',ev=>{ev.preventDefault();const q=prompt.value.trim();if(!q)return;prompt.value='';if(!awake)wake();setTimeout(()=>ask(q),awake?0:650)});
-micBtn.addEventListener('click',()=>{if(!rec)startMic();if(!awake)wake();else setAgent('listening','LISTENING','Speak now')});
-enable.addEventListener('click',startMic);
-muteBtn.addEventListener('click',()=>{muted=!muted;muteBtn.textContent=muted?'×':'◧';if(muted&&'speechSynthesis'in window)speechSynthesis.cancel()});
-clearBtn.addEventListener('click',()=>{history=[];events.innerHTML='';answer.classList.remove('show');heard.textContent='';sleep()});
+async function startMic(){try{if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});s.getTracks().forEach(t=>t.stop())}if(!rec&&!buildMic())return;try{rec.start()}catch(_){}warmVoice()}catch(e){enable.classList.add('show');setStatus('Allow microphone access to start voice mode.')}}
+
+askForm.addEventListener('submit',ev=>{ev.preventDefault();const q=prompt.value.trim();if(!q)return;prompt.value='';if(!awake)wake(false);ask(q,{interrupt:busy})});
+micBtn.addEventListener('click',()=>{warmVoice();if(!rec)startMic();if(!awake)wake(true);else{if(voiceSpeaking||busy)beginBarge('voice interruption');setAgent('listening','LISTENING','Speak now')}});
+enable.addEventListener('click',()=>{warmVoice();startMic()});
+muteBtn.addEventListener('click',()=>{muted=!muted;muteBtn.textContent=muted?'×':'◧';if(muted)resetVoiceQueue('muted');else warmVoice()});
+clearBtn.addEventListener('click',()=>{interruptTurn('session cleared');history=[];events.innerHTML='';answer.classList.remove('show');heard.textContent='';awake=false;app.classList.remove('awake');resetStages();setAgent('idle','READY','Say “Hi Nandi” or ask directly');setStatus('Waiting for “Hi Nandi”…')});
 nav.addEventListener('click',ev=>{const b=ev.target.closest('button[data-mode]');if(!b)return;[...nav.querySelectorAll('button')].forEach(x=>x.classList.remove('active'));b.classList.add('active');currentMode=b.dataset.mode;modeTitle.textContent=currentMode.toUpperCase()+' · '+(awake?'ACTIVE':'SAY “HI NANDI” OR TYPE');prompt.placeholder='Ask Nandi in '+currentMode+' mode…';addEvent('MODE',currentMode)});
-window.addEventListener('load',()=>{resetStages();setTimeout(startMic,500)});
+window.addEventListener('pointerdown',()=>warmVoice(),{once:true});
+window.addEventListener('keydown',()=>warmVoice(),{once:true});
+window.addEventListener('load',()=>{resetStages();setTimeout(startMic,500);setTimeout(warmVoice,1200)});
 })();
 </script>
 </body>
