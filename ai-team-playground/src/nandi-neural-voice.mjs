@@ -131,6 +131,22 @@ async function speak(text, opts = {}) {
   }
 }
 
+async function probe(text = "Nandi is ready.") {
+  const tts = await load();
+  if (!tts) return { ok: false, bytes: 0, error: lastError };
+  try {
+    const audio = await tts.generate(String(text || "Nandi is ready."), {
+      voice: DEFAULT_VOICE,
+      speed: 0.96,
+    });
+    const blob = audio.toBlob();
+    return { ok: blob.size > 1000, bytes: blob.size, type: blob.type || "audio/wav", device, voice: DEFAULT_VOICE };
+  } catch (err) {
+    lastError = String(err?.message || err);
+    return { ok: false, bytes: 0, error: lastError, device, voice: DEFAULT_VOICE };
+  }
+}
+
 function status() {
   return {
     ready: Boolean(model),
@@ -146,4 +162,4 @@ function status() {
 }
 
 window.NandiNeuralVoiceVersion = "NANDI_NEURAL_VOICE_V1";
-window.NandiNeuralVoice = { load, speak, cancel, status };
+window.NandiNeuralVoice = { load, speak, cancel, probe, status };
