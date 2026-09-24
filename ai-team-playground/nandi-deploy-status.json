@@ -1,1 +1,1 @@
-{"status":"GREEN","url":"https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"4c09d47818cfd547d01c6a9f9119b42a6ddc38ca","mode":"functional-animated"}
+{"status":"GREEN","url":"https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"dce8ac3fba509cdf9963cdec22740a825b811490","mode":"conversational-neural-voice","tts":"kokoro-js-1.2.1","barge_in":true,"echo_guard":true}
