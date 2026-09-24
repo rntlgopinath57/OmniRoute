@@ -145,4 +145,5 @@ function status() {
   };
 }
 
+window.NandiNeuralVoiceVersion = "NANDI_NEURAL_VOICE_V1";
 window.NandiNeuralVoice = { load, speak, cancel, status };
