@@ -164,6 +164,33 @@ jobs:
           done
           exit 1
 
+      - name: Browser verify live 3D layer
+        shell: bash
+        run: |
+          rm -rf /tmp/nandi-pw
+          mkdir -p /tmp/nandi-pw
+          cd /tmp/nandi-pw
+          npm init -y >/dev/null 2>&1
+          npm install --silent --no-audit --no-fund @playwright/test@1.63.0
+          npx playwright install chromium
+          cat > nandi-live.spec.js <<'NODE'
+          const { test, expect } = require('@playwright/test');
+          test('live Nandi renders real WebGL pixels', async ({ page }) => {
+            const pageErrors = [];
+            page.on('pageerror', e => pageErrors.push(String(e)));
+            await page.goto('https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'networkidle' });
+            await expect.poll(() => page.evaluate(() => document.documentElement.dataset.nandi3d), { timeout: 15000 }).toBe('ready');
+            await expect.poll(() => page.evaluate(() => document.documentElement.dataset.nandi3dVisible), { timeout: 15000 }).toBe('yes');
+            const canvas = page.locator('#nandi3d');
+            await expect(canvas).toBeVisible();
+            const box = await canvas.boundingBox();
+            expect(box && box.width).toBeGreaterThan(500);
+            expect(box && box.height).toBeGreaterThan(300);
+            if (pageErrors.length) throw new Error('page errors: ' + pageErrors.join(' | '));
+          });
+          NODE
+          npx playwright test nandi-live.spec.js --workers=1 --reporter=line
+
       - name: Record verified deployment
         run: |
           printf '{"status":"GREEN","url":"https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
