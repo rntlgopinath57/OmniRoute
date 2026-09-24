@@ -9,7 +9,7 @@ on:
       - "cloudflare/**"
       - "relay-runtime/**"
       - "wrangler.jsonc"
-      - ".github/workflows/nandi-voice-test-deploy.yml"
+      - ".github/workflows/nandi-3d-spike-deploy.yml"
   workflow_dispatch:
 
 permissions:
@@ -136,7 +136,10 @@ jobs:
                 && printf '%s' "$body" | grep -q 'id="nandi3d"'; then
                 if curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg \
                   && test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000 \
-                  && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'; then
+                  && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data' \
+                  && curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/assets/vendor/three.module.js --output /tmp/three-live.js \
+                  && test "$(wc -c < /tmp/three-live.js)" -gt 500000 \
+                  && grep -q 'WebGLRenderer' /tmp/three-live.js; then
                   exit 0
                 fi
               fi
