@@ -12,7 +12,6 @@ on:
       - "relay-runtime/**"
       - "wrangler.jsonc"
       - ".github/workflows/nandi-functional-test-deploy.yml"
-      - ".github/workflows/nandi-voice-agent-deploy.yml"
   workflow_dispatch:
 
 permissions:
@@ -75,6 +74,7 @@ jobs:
           grep -q 'barge-in' ai-team-playground/nandi.html
           grep -q 'stream_reset' ai-team-playground/nandi.html
           grep -q 'likelyEcho' ai-team-playground/nandi.html
+          grep -q '__NANDI_VOICE_TEST__' ai-team-playground/nandi.html
           ! grep -q 'SpeechSynthesisUtterance' ai-team-playground/nandi.html
           grep -q 'voiceStreamSafe' netlify/functions/ask.mts
           grep -q 'type: "delta"' netlify/functions/ask.mts
@@ -206,6 +206,29 @@ jobs:
             expect(markers.noBrowserReadAloud).toBeTruthy();
             expect(markers.neuralModuleTag).toBeTruthy();
           });
+          test('Nandi suppresses echo and aborts on barge-in', async ({ page }) => {
+            await page.goto('https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi?nandi_test=1', { waitUntil: 'domcontentloaded' });
+            await expect.poll(() => page.evaluate(() => Boolean(window.__NANDI_VOICE_TEST__)), { timeout: 10000 }).toBeTruthy();
+
+            const result = await page.evaluate(() => {
+              const t = window.__NANDI_VOICE_TEST__;
+              t.setEcho('I can access your workflows and show their status.');
+              const echoRejected = t.likelyEcho('I can access your workflows and show their status.');
+              const newSpeechRejected = t.likelyEcho('stop and show only failures');
+              t.clearEcho();
+              t.armAbortProbe();
+              const barge = t.barge('stop and show only failures');
+              return { echoRejected, newSpeechRejected, barge };
+            });
+
+            expect(result.echoRejected).toBeTruthy();
+            expect(result.newSpeechRejected).toBeFalsy();
+            expect(result.barge.aborted).toBeTruthy();
+            expect(result.barge.bargePending).toBeTruthy();
+            expect(result.barge.busy).toBeFalsy();
+            expect(result.barge.agentClass).toContain('listening');
+          });
+
           NODE
           npx playwright test nandi-voice.spec.js --workers=1 --reporter=line
 
@@ -246,7 +269,7 @@ jobs:
         run: |
           response="$(curl --location --fail --silent --show-error --max-time 65 \
             -H 'Content-Type: application/json' \
-            --data '{"question":"Reply briefly with: Nandi functional agent is working.","history":[]}' \
+            --data '{"question":"Reply briefly with: Nandi voice agent is working.","history":[]}' \
             https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
           printf '%s\n' "$response"
           ! printf '%s' "$response" | grep -q '"type":"error"'
