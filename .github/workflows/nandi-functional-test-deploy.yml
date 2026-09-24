@@ -40,8 +40,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: nandi-voice-agent-v1
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -55,6 +53,7 @@ jobs:
           cd /tmp/nandi-voice-build
           npm init -y >/dev/null 2>&1
           npm install --silent --no-audit --no-fund --ignore-scripts kokoro-js@1.2.1 esbuild@0.28.2
+          grep -q 'Apache License' node_modules/kokoro-js/LICENSE
           NODE_PATH=/tmp/nandi-voice-build/node_modules ./node_modules/.bin/esbuild             "$GITHUB_WORKSPACE/ai-team-playground/src/nandi-neural-voice.mjs"             --bundle --format=esm --platform=browser --target=es2022             --outfile="$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
           test -s "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
           test "$(wc -c < "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js")" -gt 100000
@@ -79,6 +78,8 @@ jobs:
           grep -q 'voiceStreamSafe' netlify/functions/ask.mts
           grep -q 'type: "delta"' netlify/functions/ask.mts
           grep -q 'callModelStreaming' netlify/functions/ask.mts
+          grep -q 'Kokoro-82M-v1.0-ONNX/resolve/' cloudflare/worker.ts
+          grep -q 'Model path not allowed' cloudflare/worker.ts
           grep -q 'NANDI_UI_V2' ai-team-playground/nandi.html
           grep -q 'LIVE TRACE' ai-team-playground/nandi.html
           grep -q '>LISTEN<' ai-team-playground/nandi.html
