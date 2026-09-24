@@ -45,34 +45,39 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Build cinematic Nandi scene
+        shell: bash
+        run: |
+          test -f ai-team-playground/assets/nandi-shiva-cinematic.jpg.b64
+          base64 --decode ai-team-playground/assets/nandi-shiva-cinematic.jpg.b64 > ai-team-playground/assets/nandi-shiva-cinematic.jpg
+          test "$(wc -c < ai-team-playground/assets/nandi-shiva-cinematic.jpg)" -gt 20000
+          file ai-team-playground/assets/nandi-shiva-cinematic.jpg | grep -qi 'JPEG image data'
+
       - name: Validate Nandi page
         run: |
           test -f ai-team-playground/nandi.html
           grep -q 'Hi Nandi' ai-team-playground/nandi.html
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
-          # Visual regression guard: preserve the purpose-built Nandi scene.
-          grep -q 'NANDI_SCENE_V5' ai-team-playground/nandi.html
-          grep -q 'animation:nandiNodV2' ai-team-playground/nandi.html
+          grep -q 'NANDI_SCENE_V6' ai-team-playground/nandi.html
+          grep -q '/assets/nandi-shiva-cinematic.jpg' ai-team-playground/nandi.html
+          grep -q 'nandiAuraV6' ai-team-playground/nandi.html
           grep -q 'box-shadow:none' ai-team-playground/nandi.html
-          grep -q 'id="nandi-figure"' ai-team-playground/nandi.html
-          grep -q 'id="shiva-lingam"' ai-team-playground/nandi.html
-          ! grep -q 'data:image/jpeg;base64' ai-team-playground/nandi.html
           ! grep -q 'commons.wikimedia.org' ai-team-playground/nandi.html
+          ! grep -q '<svg viewBox="0 0 1600 900"' ai-team-playground/nandi.html
 
-      - name: Verify self-contained Nandi scene
+      - name: Verify cinematic Nandi scene
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('ai-team-playground/nandi.html','utf8');
-          for (const marker of ['NANDI_SCENE_V5','id="nandi-figure"','id="shiva-lingam"','id="trident"','id="lamps"']) {
+          for (const marker of ['NANDI_SCENE_V6','/assets/nandi-shiva-cinematic.jpg','nandiAuraV6','nandiListenV6']) {
             if (!html.includes(marker)) throw new Error('missing scene marker: ' + marker);
           }
           if (html.includes('commons.wikimedia.org')) throw new Error('borrowed temple image dependency returned');
-          if (html.includes('data:image/jpeg;base64')) throw new Error('raster scene dependency returned');
-          if (!html.includes('<svg viewBox="0 0 1600 900"')) throw new Error('self-contained scene SVG missing');
-          console.log('Self-contained Nandi scene verified');
+          if (html.includes('<svg viewBox="0 0 1600 900"')) throw new Error('flat vector scene returned');
+          console.log('Cinematic Nandi scene verified');
           NODE
 
       - name: Deploy isolated Nandi worker
@@ -109,6 +114,10 @@ jobs:
             if body="$(curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi)"; then
               printf '%s' "$body" | grep -q 'NANDI'
               printf '%s' "$body" | grep -q 'Hi Nandi'
+              printf '%s' "$body" | grep -q 'NANDI_SCENE_V6'
+              curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg
+              test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000
+              file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'
               exit 0
             fi
             sleep 5
