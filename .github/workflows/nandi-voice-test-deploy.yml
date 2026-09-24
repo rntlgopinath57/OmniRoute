@@ -60,8 +60,14 @@ jobs:
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
           grep -q 'NANDI_SCENE_V6' ai-team-playground/nandi.html
+          grep -q 'NANDI_AGENT_V7' ai-team-playground/nandi.html
           grep -q '/assets/nandi-shiva-cinematic.jpg' ai-team-playground/nandi.html
+          grep -q 'class="nandi-agent"' ai-team-playground/nandi.html
+          grep -q 'id="prompt"' ai-team-playground/nandi.html
+          grep -q 'Ask Nandi anything' ai-team-playground/nandi.html
+          grep -q 'askForm.addEventListener' ai-team-playground/nandi.html
           grep -q 'nandiAuraV6' ai-team-playground/nandi.html
+          grep -q 'nandiAgentListenV7' ai-team-playground/nandi.html
           grep -q 'box-shadow:none' ai-team-playground/nandi.html
           ! grep -q 'commons.wikimedia.org' ai-team-playground/nandi.html
           ! grep -q '<svg viewBox="0 0 1600 900"' ai-team-playground/nandi.html
@@ -72,8 +78,11 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('ai-team-playground/nandi.html','utf8');
-          for (const marker of ['NANDI_SCENE_V6','/assets/nandi-shiva-cinematic.jpg','nandiAuraV6','nandiListenV6']) {
-            if (!html.includes(marker)) throw new Error('missing scene marker: ' + marker);
+          for (const marker of ['NANDI_SCENE_V6','NANDI_AGENT_V7','/assets/nandi-shiva-cinematic.jpg','class="nandi-agent"','id="prompt"','Ask Nandi anything','askForm.addEventListener','nandiAgentListenV7','nandiAgentThinkV7','nandiAgentSpeakV7']) {
+            if (!html.includes(marker)) throw new Error('missing agent marker: ' + marker);
+          }
+          for (const legacy of ['SpeechRecognition','/api/ask','history.slice(-6)','go to sleep','stop talking']) {
+            if (!html.includes(legacy)) throw new Error('voice/Relay regression: ' + legacy);
           }
           if (html.includes('commons.wikimedia.org')) throw new Error('borrowed temple image dependency returned');
           if (html.includes('<svg viewBox="0 0 1600 900"')) throw new Error('flat vector scene returned');
@@ -115,6 +124,9 @@ jobs:
               printf '%s' "$body" | grep -q 'NANDI'
               printf '%s' "$body" | grep -q 'Hi Nandi'
               printf '%s' "$body" | grep -q 'NANDI_SCENE_V6'
+              printf '%s' "$body" | grep -q 'NANDI_AGENT_V7'
+              printf '%s' "$body" | grep -q 'Ask Nandi anything'
+              printf '%s' "$body" | grep -q 'class="nandi-agent"'
               curl --location --fail --silent --show-error https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/assets/nandi-shiva-cinematic.jpg --output /tmp/nandi-live.jpg
               test "$(wc -c < /tmp/nandi-live.jpg)" -gt 20000
               file /tmp/nandi-live.jpg | grep -qi 'JPEG image data'
