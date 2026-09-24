@@ -1166,7 +1166,7 @@ export default async (request: Request) => {
         const contextNote = disambiguationContext(contextualQuestion);
         const repoLookup = await githubRepoContext(contextualQuestion);
         if (repoLookup.repos.length) {
-          emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos, liveWorkflowRuns: repoLookup.liveWorkflowRuns, live: repoLookup.liveWorkflowRuns > 0 });
+          emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos, liveWorkflowRuns: repoLookup.liveWorkflowRunCount > 0, runCount: repoLookup.liveWorkflowRunCount, live: repoLookup.liveWorkflowRunCount > 0 });
         } else if (mentionedRepos(contextualQuestion).length) {
           emit({ type: "tool", tool: "github", status: "unavailable", repos: repoLookup.inaccessible });
         }
