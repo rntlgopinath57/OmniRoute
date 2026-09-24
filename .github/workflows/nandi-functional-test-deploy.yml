@@ -219,7 +219,9 @@ jobs:
 
           test('Nandi generates real Kokoro audio locally', async ({ page }) => {
             const errors = [];
+            const consoleErrors = [];
             page.on('pageerror', e => errors.push(String(e)));
+            page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
             await page.goto('https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'domcontentloaded' });
             await expect.poll(
               () => page.evaluate(() => window.NandiNeuralVoiceVersion || ''),
@@ -229,6 +231,9 @@ jobs:
             const result = await page.evaluate(async () => {
               return await window.NandiNeuralVoice.probe('Nandi is ready.');
             });
+            console.log('NEURAL_PROBE_RESULT=' + JSON.stringify(result));
+            console.log('NEURAL_PAGE_ERRORS=' + JSON.stringify(errors));
+            console.log('NEURAL_CONSOLE_ERRORS=' + JSON.stringify(consoleErrors));
             expect(result.ok).toBeTruthy();
             expect(result.bytes).toBeGreaterThan(1000);
             expect(errors).toEqual([]);
