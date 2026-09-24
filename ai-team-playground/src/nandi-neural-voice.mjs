@@ -2,9 +2,25 @@
 // Browser-local neural TTS. Kokoro is bundled at build time; model weights load
 // from the Apache-2.0 ONNX model once and are cached by the browser.
 import { KokoroTTS } from "kokoro-js";
+import { env as transformersEnv } from "@huggingface/transformers";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const DEFAULT_VOICE = "bm_george";
+const NANDI_HF_ORIGIN = "https://huggingface.co/";
+const NANDI_HF_MODEL_PREFIX = "onnx-community/Kokoro-82M-v1.0-ONNX/resolve/";
+const NANDI_HF_PROXY_PREFIX = "/api/hf/";
+
+const nativeFetch = globalThis.fetch.bind(globalThis);
+function proxiedFetch(input, init) {
+  const raw = typeof input === "string" ? input : input?.url;
+  if (typeof raw === "string" && raw.startsWith(NANDI_HF_ORIGIN + NANDI_HF_MODEL_PREFIX)) {
+    const relative = raw.slice(NANDI_HF_ORIGIN.length);
+    return nativeFetch(NANDI_HF_PROXY_PREFIX + relative, init);
+  }
+  return nativeFetch(input, init);
+}
+transformersEnv.fetch = proxiedFetch;
+globalThis.fetch = proxiedFetch;
 
 let model = null;
 let loading = null;
