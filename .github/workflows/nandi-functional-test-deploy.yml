@@ -163,6 +163,20 @@ jobs:
           NODE
           npx playwright test nandi-functional.spec.js --workers=1 --reporter=line
 
+      - name: Verify real Relay response
+        shell: bash
+        run: |
+          response="$(curl --location --fail --silent --show-error --max-time 65 \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"Reply briefly with: Nandi functional agent is working.","history":[]}' \
+            https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+          printf '%s\n' "$response"
+          ! printf '%s' "$response" | grep -q '"type":"error"'
+          printf '%s' "$response" | grep -q '"type":"planner"'
+          printf '%s' "$response" | grep -Eq '"type":"worker"|"type":"worker_selected"'
+          printf '%s' "$response" | grep -q '"type":"done"'
+          printf '%s' "$response" | grep -q '"answer"'
+
       - name: Record verified deployment
         run: |
           printf '{"status":"GREEN","url":"https://nandi-functional-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"functional-animated"}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
