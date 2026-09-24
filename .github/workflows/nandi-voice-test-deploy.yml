@@ -52,9 +52,19 @@ jobs:
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
           # Visual regression guard: preserve the natural scene treatment.
-          grep -q 'NANDI_SCENE_V2' ai-team-playground/nandi.html
+          grep -q 'NANDI_SCENE_V3' ai-team-playground/nandi.html
           grep -q 'animation:nandiNodV2' ai-team-playground/nandi.html
           grep -q 'box-shadow:none' ai-team-playground/nandi.html
+          grep -q 'Ridhanath_Riddheshwar_mandir%2C_Handia_Madhya_Pradesh_019.jpg' ai-team-playground/nandi.html
+          ! grep -q 'data:image/jpeg;base64' ai-team-playground/nandi.html
+
+      - name: Verify Nandi scene asset
+        shell: bash
+        run: |
+          scene_url='https://commons.wikimedia.org/wiki/Special:FilePath/Ridhanath_Riddheshwar_mandir%2C_Handia_Madhya_Pradesh_019.jpg?width=1920'
+          curl --location --fail --silent --show-error "$scene_url" --output /tmp/nandi-scene.jpg
+          test "$(wc -c < /tmp/nandi-scene.jpg)" -gt 50000
+          file /tmp/nandi-scene.jpg | grep -qi 'JPEG image data'
 
       - name: Deploy isolated Nandi worker
         run: |
