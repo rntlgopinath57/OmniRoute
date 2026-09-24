@@ -125,6 +125,22 @@ jobs:
           test "$code" = "400"
           grep -q 'Audio file is required\|Invalid audio upload' /tmp/stt.json
 
+      - name: Verify Groq speech-to-text gateway
+        shell: bash
+        run: |
+          python - <<'PY'
+          import wave, math, struct
+          rate=16000
+          with wave.open('/tmp/nandi-probe.wav','wb') as w:
+              w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+              frames=[struct.pack('<h',int(1200*math.sin(2*math.pi*440*i/rate))) for i in range(rate)]
+              w.writeframes(b''.join(frames))
+          PY
+          response="$(curl --fail --silent --show-error --max-time 35 -F 'file=@/tmp/nandi-probe.wav;type=audio/wav' https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/api/transcribe)"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -q '"model":"whisper-large-v3-turbo"'
+          printf '%s' "$response" | grep -q '"text"'
+
       - name: Browser verify iPhone flow and talkback
         shell: bash
         run: |
@@ -165,21 +181,25 @@ jobs:
             await expect(page.locator('#drawer')).toHaveClass(/show/);
           });
 
-          test('iPhone WebKit exposes the recording primitives Nandi uses', async () => {
+          test('iPhone-sized WebKit renders Nandi without the desktop-only assumptions', async () => {
             const browser=await webkit.launch();
             const context=await browser.newContext({...devices['iPhone 15']});
             const page=await context.newPage();
             await page.goto(URL+'/nandi',{waitUntil:'domcontentloaded'});
-            const support=await page.evaluate(()=>({
-              mediaRecorder:typeof MediaRecorder==='function',
-              getUserMedia:Boolean(navigator.mediaDevices&&typeof navigator.mediaDevices.getUserMedia==='function'),
-              speechSynthesis:'speechSynthesis' in window,
-              noLegacyRecognition:!document.documentElement.innerHTML.includes('SpeechRecognition')
+            await expect(page.locator('#startBtn')).toBeVisible();
+            await expect(page.locator('#presence')).toBeVisible();
+            await expect(page.locator('.composer')).toBeVisible();
+            await expect(page.locator('img')).toHaveCount(0);
+            const contract=await page.evaluate(()=>({
+              noLegacyRecognition:!document.documentElement.innerHTML.includes('SpeechRecognition'),
+              usesRecorder:document.documentElement.innerHTML.includes('MediaRecorder'),
+              usesServerStt:document.documentElement.innerHTML.includes('/api/transcribe'),
+              hasSystemVoiceFallback:document.documentElement.innerHTML.includes('systemSpeak')
             }));
-            expect(support.mediaRecorder).toBeTruthy();
-            expect(support.getUserMedia).toBeTruthy();
-            expect(support.speechSynthesis).toBeTruthy();
-            expect(support.noLegacyRecognition).toBeTruthy();
+            expect(contract.noLegacyRecognition).toBeTruthy();
+            expect(contract.usesRecorder).toBeTruthy();
+            expect(contract.usesServerStt).toBeTruthy();
+            expect(contract.hasSystemVoiceFallback).toBeTruthy();
             await browser.close();
           });
           NODE
