@@ -270,7 +270,7 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
 .nandi-agent{
   position:absolute;inset:-2%;z-index:5;width:104%;height:104%;
   object-fit:cover;object-position:center center;pointer-events:none;user-select:none;
-  transform:scale(1.02);opacity:.26;
+  transform:scale(1.02);transform-origin:29% 72%;opacity:.26;
   filter:saturate(1.06) brightness(1.04) contrast(1.06) drop-shadow(0 0 12px rgba(139,229,238,.10));
   -webkit-mask-image:
     radial-gradient(ellipse 31% 34% at 22% 83%,#000 0 56%,transparent 76%),
@@ -368,25 +368,25 @@ radial-gradient(circle at 50% 76%,rgba(215,181,109,.06),transparent 32%);mix-ble
   border-color:rgba(255,219,155,.14)
 }
 @keyframes nandiAgentIdleV7{
-  0%,100%{opacity:.27;filter:saturate(1.05) brightness(1.04) contrast(1.06) drop-shadow(0 0 10px rgba(139,229,238,.08))}
-  50%{opacity:.36;filter:saturate(1.08) brightness(1.075) contrast(1.07) drop-shadow(0 0 18px rgba(139,229,238,.16))}
+  0%,100%{transform:scale(1.02);opacity:.27;filter:saturate(1.05) brightness(1.04) contrast(1.06) drop-shadow(0 0 10px rgba(139,229,238,.08))}
+  50%{transform:scale(1.022);opacity:.36;filter:saturate(1.08) brightness(1.075) contrast(1.07) drop-shadow(0 0 18px rgba(139,229,238,.16))}
 }
 @keyframes nandiAgentListenV7{
-  0%,100%{opacity:.32;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(139,229,238,.13))}
-  50%{opacity:.47;filter:saturate(1.10) brightness(1.11) contrast(1.08) drop-shadow(0 0 26px rgba(139,229,238,.25))}
+  0%,100%{transform:scale(1.02);opacity:.32;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(139,229,238,.13))}
+  50%{transform:scale(1.024);opacity:.47;filter:saturate(1.10) brightness(1.11) contrast(1.08) drop-shadow(0 0 26px rgba(139,229,238,.25))}
 }
 @keyframes nandiAgentThinkV7{
-  0%,100%{opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 12px rgba(231,170,82,.12))}
-  50%{opacity:.46;filter:saturate(1.11) brightness(1.10) contrast(1.08) drop-shadow(0 0 25px rgba(231,170,82,.24))}
+  0%,100%{transform:scale(1.02);opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 12px rgba(231,170,82,.12))}
+  50%{transform:scale(1.0215) translateY(-1px);opacity:.46;filter:saturate(1.11) brightness(1.10) contrast(1.08) drop-shadow(0 0 25px rgba(231,170,82,.24))}
 }
 @keyframes nandiAgentSpeakV7{
-  0%,100%{opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(131,244,189,.11))}
-  50%{opacity:.44;filter:saturate(1.10) brightness(1.095) contrast(1.08) drop-shadow(0 0 22px rgba(131,244,189,.20))}
+  0%,100%{transform:scale(1.02);opacity:.34;filter:saturate(1.07) brightness(1.05) contrast(1.07) drop-shadow(0 0 13px rgba(131,244,189,.11))}
+  50%{transform:scale(1.023);opacity:.44;filter:saturate(1.10) brightness(1.095) contrast(1.08) drop-shadow(0 0 22px rgba(131,244,189,.20))}
 }
 @keyframes nandiAgentAckV7{
-  0%,100%{opacity:.30;filter:brightness(1.05)}
-  45%{opacity:.52;filter:brightness(1.14) drop-shadow(0 0 28px rgba(255,219,155,.24))}
-  72%{opacity:.39;filter:brightness(1.09)}
+  0%,100%{transform:scale(1.02) translateY(0);opacity:.30;filter:brightness(1.05)}
+  45%{transform:scale(1.024) translateY(2px);opacity:.52;filter:brightness(1.14) drop-shadow(0 0 28px rgba(255,219,155,.24))}
+  72%{transform:scale(1.021) translateY(-1px);opacity:.39;filter:brightness(1.09)}
 }
 @keyframes nandiPresenceV7{50%{transform:translate(-50%,-50%) scale(1.045);filter:blur(28px)}}
 @keyframes nandiListenAuraV7{50%{transform:translate(-50%,-50%) scale(1.075);filter:blur(28px)}}
