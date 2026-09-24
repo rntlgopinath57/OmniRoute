@@ -255,11 +255,16 @@ const ACTIVE_WORKFLOW_REPOS = [
 ];
 
 function workflowInventoryIntent(text: string) {
-  const q = String(text || "").toLowerCase();
+  const q = String(text || "")
+    .toLowerCase()
+    .replace(/\bget\s+hub\b/g, "github")
+    .replace(/\bgit\s+hub\b/g, "github")
+    .replace(/\bwork\s+flows?\b/g, "workflows");
   return (
-    /\b(list|show|check|review|summari[sz]e|what(?:'s| is| are)?)\b[\s\S]{0,60}\b(workflows?|github actions?|automations?)\b/.test(q)
-    || /\b(my|all)\b[\s\S]{0,35}\b(workflows?|github actions?)\b/.test(q)
-    || /\b(workflows?|github actions?)\b[\s\S]{0,35}\b(my|all)\b/.test(q)
+    /\b(list|show|check|review|summari[sz]e|status|statuses|access|inspect|tell)\b[\s\S]{0,90}\b(workflows?|github actions?|automations?)\b/.test(q)
+    || /\b(my|all)\b[\s\S]{0,60}\b(workflows?|github actions?)\b/.test(q)
+    || /\b(workflows?|github actions?)\b[\s\S]{0,60}\b(my|all|status|statuses)\b/.test(q)
+    || /\bgithub\b[\s\S]{0,90}\b(workflows?|actions?|repos?|repositories?)\b/.test(q)
   );
 }
 
@@ -819,6 +824,122 @@ async function callFreeLlmApiPublic(model: string, messages: ChatMessage[], maxT
   return answer.trim();
 }
 
+async function callOpenAICompatibleStreaming(
+  url: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+  timeoutMs: number,
+  label: string,
+  onDelta: (delta: string) => void,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${label} ${response.status}: ${text.slice(0, 220)}`);
+    }
+    if (!response.body) throw new Error(`${label} streaming body unavailable`);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer = "";
+
+    while (true) {
+      const part = await reader.read();
+      buffer += decoder.decode(part.value || new Uint8Array(), { stream: !part.done });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        let json: any;
+        try { json = JSON.parse(data); } catch { continue; }
+        const delta =
+          json?.choices?.[0]?.delta?.content
+          ?? json?.choices?.[0]?.text
+          ?? "";
+        if (typeof delta === "string" && delta) {
+          answer += delta;
+          onDelta(delta);
+        }
+      }
+      if (part.done) break;
+    }
+
+    const cleaned = answer.trim();
+    if (!cleaned) throw new Error(`${label} returned an empty streaming response`);
+    return cleaned;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function modelSupportsStreaming(model: string) {
+  const provider = providerForModel(model);
+  return provider === "groq" || provider === "openrouter" || provider === "openai";
+}
+
+async function callModelStreaming(
+  model: string,
+  messages: ChatMessage[],
+  maxTokens: number,
+  timeoutMs: number,
+  onDelta: (delta: string) => void,
+) {
+  const provider = providerForModel(model);
+
+  if (provider === "groq") {
+    const apiKey = envGet("GROQ_API_KEY");
+    if (!apiKey) throw new Error("Groq gateway is unavailable.");
+    const actualModel = model.replace(/^groq:/, "");
+    return callOpenAICompatibleStreaming(
+      "https://api.groq.com/openai/v1/chat/completions",
+      { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      { model: actualModel, messages, max_tokens: maxTokens },
+      timeoutMs,
+      "Groq",
+      onDelta,
+    );
+  }
+
+  if (provider === "openrouter") {
+    const baseUrl = envGet("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1";
+    const apiKey = envGet("OPENROUTER_API_KEY");
+    if (!apiKey) throw new Error("OpenRouter gateway is unavailable.");
+    return callOpenAICompatibleStreaming(
+      `${baseUrl.replace(/\/$/, "")}/chat/completions`,
+      { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      { model, messages, max_tokens: maxTokens },
+      timeoutMs,
+      "OpenRouter",
+      onDelta,
+    );
+  }
+
+  const baseUrl = envGet("OPENAI_BASE_URL") || "https://api.openai.com";
+  const apiKey = envGet("OPENAI_API_KEY");
+  if (!baseUrl || !apiKey) throw new Error("OpenAI gateway is unavailable.");
+  return callOpenAICompatibleStreaming(
+    `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`,
+    { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    { model, messages, max_completion_tokens: maxTokens },
+    timeoutMs,
+    "OpenAI",
+    onDelta,
+  );
+}
+
 async function callModel(
   model: string,
   messages: ChatMessage[],
@@ -887,8 +1008,10 @@ export default async (request: Request) => {
         maxTokens: number,
         timeoutMs: number,
         phase = "generating",
+        streamToClient = false,
       ) => {
         const started = Date.now();
+        let streamed = false;
         const heartbeat = setInterval(() => {
           emit({
             type: "progress",
@@ -898,7 +1021,26 @@ export default async (request: Request) => {
           });
         }, 4000);
         try {
-          return await callModel(model, messages, maxTokens, timeoutMs);
+          if (streamToClient && modelSupportsStreaming(model)) {
+            return await callModelStreaming(
+              model,
+              messages,
+              maxTokens,
+              timeoutMs,
+              (delta) => {
+                streamed = true;
+                emit({ type: "delta", text: delta, model });
+              },
+            );
+          }
+          const answer = await callModel(model, messages, maxTokens, timeoutMs);
+          if (streamToClient && answer) {
+            emit({ type: "delta", text: answer, model, complete: true });
+          }
+          return answer;
+        } catch (error) {
+          if (streamed) emit({ type: "stream_reset", model });
+          throw error;
         } finally {
           clearInterval(heartbeat);
         }
@@ -934,6 +1076,10 @@ export default async (request: Request) => {
           taskType,
           history,
         });
+        const voiceStreamSafe =
+          useFastPath(question, taskType, presentation)
+          && !explicitRoute.explicit
+          && presentation.format === "default";
         const stickyModel = !explicitRoute.explicit && !explicitRoute.comparison && followUp && allowedStickyModel(preferredModel)
           ? preferredModel
           : "";
@@ -976,6 +1122,7 @@ export default async (request: Request) => {
           requestedFamily: explicitRoute.family || undefined,
           routingLane: routingPolicy.lane,
           routingReason: routingPolicy.reason,
+          voiceStreamSafe,
         });
         await new Promise((resolve) => setTimeout(resolve, 180));
         if (presentation.format !== "default") {
@@ -1107,6 +1254,7 @@ export default async (request: Request) => {
               maxTokens,
               timeoutMs,
               "drafting",
+              voiceStreamSafe,
             );
             actualWorkerModel = model;
             markProviderHealthy(model);
@@ -1330,6 +1478,7 @@ export default async (request: Request) => {
           reviewer: reviewStatus === "FAST_PATH" || reviewStatus === "SKIPPED" ? "" : actualReviewerModel,
           taskType,
           presentation,
+          voiceStreamed: voiceStreamSafe,
         });
       } catch (error) {
         emit({
