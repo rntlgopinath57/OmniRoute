@@ -171,6 +171,106 @@ jobs:
           done
           exit 1
 
+      - name: Browser verify cinematic agent output
+        shell: bash
+        run: |
+          rm -rf /tmp/nandi-cinematic-pw
+          mkdir -p /tmp/nandi-cinematic-pw
+          cd /tmp/nandi-cinematic-pw
+          npm init -y >/dev/null 2>&1
+          npm install --silent --no-audit --no-fund @playwright/test@1.63.0
+          npx playwright install chromium
+          cat > nandi-cinematic.spec.js <<'NODE'
+          const { test, expect } = require('@playwright/test');
+          test.setTimeout(180000);
+
+          test('cinematic Nandi is primary and diagnostics stay secondary', async ({ page }) => {
+            await page.goto('https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi?nandi_test=1', { waitUntil: 'domcontentloaded' });
+            await expect(page.locator('#sceneArt')).toBeVisible();
+            await expect(page.locator('#nandiAgent')).toBeVisible();
+            await expect(page.locator('.composer')).toBeVisible();
+            await expect(page.locator('#debugDrawer')).not.toHaveClass(/show/);
+            await expect(page.locator('.sidebar')).toHaveCount(0);
+            await expect(page.locator('body')).not.toContainText('LIVE TRACE');
+
+            const composition = await page.evaluate(() => {
+              const scene = document.querySelector('#scene').getBoundingClientRect();
+              const composer = document.querySelector('.composer').getBoundingClientRect();
+              const nandi = document.querySelector('#nandiAgent').getBoundingClientRect();
+              return {
+                composerWidthRatio: composer.width / scene.width,
+                nandiAreaRatio: (nandi.width * nandi.height) / (scene.width * scene.height),
+              };
+            });
+            expect(composition.composerWidthRatio).toBeLessThan(.82);
+            expect(composition.nandiAreaRatio).toBeGreaterThan(.8);
+
+            await page.locator('#activityBtn').click();
+            await expect(page.locator('#debugDrawer')).toHaveClass(/show/);
+            for (const s of ['listen','route','act','verify','respond']) {
+              await expect(page.locator('[data-stage="'+s+'"]')).toBeVisible();
+            }
+            await page.locator('#debugClose').click();
+            await expect(page.locator('#debugDrawer')).not.toHaveClass(/show/);
+
+            await expect.poll(() => page.evaluate(() => Boolean(window.__NANDI_CINEMATIC_TEST__)), { timeout: 10000 }).toBeTruthy();
+            await page.evaluate(() => window.__NANDI_CINEMATIC_TEST__.setState('listening','ACTIVE · LISTENING','Listening'));
+            await expect(page.locator('#scene')).toHaveClass(/listening/);
+            await page.evaluate(() => window.__NANDI_CINEMATIC_TEST__.setState('thinking','ACTIVE · THINKING','Thinking'));
+            await expect(page.locator('#scene')).toHaveClass(/thinking/);
+            await page.evaluate(() => window.__NANDI_CINEMATIC_TEST__.setState('speaking','ACTIVE · SPEAKING','Speaking'));
+            await expect(page.locator('#scene')).toHaveClass(/speaking/);
+          });
+
+          test('browser audio block recovers after one user interaction', async ({ page }) => {
+            await page.goto('https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi?nandi_test=1', { waitUntil: 'domcontentloaded' });
+            await expect.poll(() => page.evaluate(() => Boolean(window.NandiNeuralVoice?.unlock)), { timeout: 20000 }).toBeTruthy();
+            await page.evaluate(() => window.dispatchEvent(new CustomEvent('nandi-voice',{detail:{type:'blocked',error:'autoplay blocked'}})));
+            await expect(page.locator('#enable')).toHaveClass(/show/);
+            await page.locator('#enable').click();
+            await expect.poll(() => page.evaluate(() => Boolean(window.NandiNeuralVoice?.status?.().unlocked)), { timeout: 10000 }).toBeTruthy();
+          });
+
+          test('real Kokoro audio is generated inside the cinematic shell', async ({ page }) => {
+            await page.goto('https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'domcontentloaded' });
+            await expect.poll(() => page.evaluate(() => window.NandiNeuralVoiceVersion || ''), { timeout: 20000 }).toBe('NANDI_NEURAL_VOICE_V1');
+            const result = await page.evaluate(async () => await window.NandiNeuralVoice.probe('Nandi is ready.'));
+            expect(result.ok).toBeTruthy();
+            expect(result.bytes).toBeGreaterThan(1000);
+          });
+          NODE
+          npx playwright test nandi-cinematic.spec.js --workers=1 --reporter=line
+
+      - name: Verify real Relay response
+        shell: bash
+        run: |
+          response="$(curl --location --fail --silent --show-error --max-time 65 \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"Reply briefly with: Nandi cinematic agent is working.","history":[]}' \
+            https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+          printf '%s\n' "$response"
+          ! printf '%s' "$response" | grep -q '"type":"error"'
+          printf '%s' "$response" | grep -q '"type":"planner"'
+          printf '%s' "$response" | grep -Eq '"type":"worker"|"type":"worker_selected"'
+          printf '%s' "$response" | grep -q '"type":"done"'
+          printf '%s' "$response" | grep -q '"type":"delta"'
+
+      - name: Verify GitHub action routing
+        shell: bash
+        run: |
+          response="$(curl --location --fail --silent --show-error --max-time 65 \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"can you access all my get hub report and all the work flows inside them and tell me the status of each workflow","history":[]}' \
+            https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/api/ask)"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -q '"type":"tool"'
+          printf '%s' "$response" | grep -q '"tool":"github"'
+          printf '%s' "$response" | grep -q '"status":"complete"'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/OmniRoute'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/gopi_alerts'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/safeqr'
+          ! printf '%s' "$response" | grep -qi "don't have the ability to access.*github"
+
       - name: Record verified deployment
         run: |
           printf '{"status":"GREEN","url":"https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"cinematic-neural-agent","tts":"kokoro-js-1.2.1","ui":"NANDI_CINEMATIC_AGENT_V8","diagnostics":"collapsed","barge_in":true,"echo_guard":true}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
