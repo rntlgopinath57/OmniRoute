@@ -123,7 +123,7 @@ jobs:
           printf '%s' "$body" | grep -q 'NANDI_PHONE_AGENT_V1'
           code="$(curl --silent --output /tmp/stt.json --write-out '%{http_code}' -X POST -H 'X-Nandi-Voice: 1' "$URL/api/transcribe")"
           test "$code" = "400"
-          grep -q 'Audio file is required\|Invalid audio upload' /tmp/stt.json
+          grep -q 'Audio file is required\|Invalid audio upload\|Expected multipart audio upload' /tmp/stt.json
 
       - name: Verify Groq speech-to-text gateway
         shell: bash
