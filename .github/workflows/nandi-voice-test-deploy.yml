@@ -52,27 +52,27 @@ jobs:
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
           # Visual regression guard: preserve the purpose-built Nandi scene.
-          grep -q 'NANDI_SCENE_V4' ai-team-playground/nandi.html
+          grep -q 'NANDI_SCENE_V5' ai-team-playground/nandi.html
           grep -q 'animation:nandiNodV2' ai-team-playground/nandi.html
           grep -q 'box-shadow:none' ai-team-playground/nandi.html
-          grep -q 'data:image/jpeg;base64' ai-team-playground/nandi.html
+          grep -q 'id="nandi-figure"' ai-team-playground/nandi.html
+          grep -q 'id="shiva-lingam"' ai-team-playground/nandi.html
+          ! grep -q 'data:image/jpeg;base64' ai-team-playground/nandi.html
           ! grep -q 'commons.wikimedia.org' ai-team-playground/nandi.html
 
-      - name: Verify embedded Nandi scene
+      - name: Verify self-contained Nandi scene
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('ai-team-playground/nandi.html','utf8');
-          const m = html.match(/src="data:image\/jpeg;base64,([A-Za-z0-9+/=]+)"/);
-          if (!m) throw new Error('embedded Nandi scene missing');
-          if (m[1].length < 20000) throw new Error('embedded Nandi scene unexpectedly small');
-          const buf = Buffer.from(m[1], 'base64');
-          if (buf[0] !== 0xff || buf[1] !== 0xd8 || buf.at(-2) !== 0xff || buf.at(-1) !== 0xd9) {
-            throw new Error('embedded Nandi scene is not a valid JPEG');
+          for (const marker of ['NANDI_SCENE_V5','id="nandi-figure"','id="shiva-lingam"','id="trident"','id="lamps"']) {
+            if (!html.includes(marker)) throw new Error('missing scene marker: ' + marker);
           }
           if (html.includes('commons.wikimedia.org')) throw new Error('borrowed temple image dependency returned');
-          console.log('Embedded Nandi scene bytes:', buf.length);
+          if (html.includes('data:image/jpeg;base64')) throw new Error('raster scene dependency returned');
+          if (!html.includes('<svg viewBox="0 0 1600 900"')) throw new Error('self-contained scene SVG missing');
+          console.log('Self-contained Nandi scene verified');
           NODE
 
       - name: Deploy isolated Nandi worker
