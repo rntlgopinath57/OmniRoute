@@ -1,5 +1,5 @@
 // NANDI_NEURAL_VOICE_V1
-// NANDI_AUDIO_UNLOCK_V2 — persistent Web Audio graph; unlock once on a real gesture.
+// NANDI_AUDIO_UNLOCK_V3_MOBILE — persistent Web Audio graph; unlock once on a real gesture.
 // Browser-local neural TTS. Kokoro is bundled at build time; model weights load
 // from the Apache-2.0 ONNX model once and are cached by the browser.
 import { KokoroTTS } from "kokoro-js";
@@ -7,6 +7,8 @@ import { env as transformersEnv } from "@huggingface/transformers";
 
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const DEFAULT_VOICE = "bm_george";
+const MOBILE_DEVICE = /iPhone|iPad|iPod|Android/i.test(globalThis.navigator?.userAgent || "");
+const MODEL_DTYPE = MOBILE_DEVICE ? "q4" : "q8";
 const NANDI_HF_ORIGIN = "https://huggingface.co/";
 const NANDI_HF_MODEL_PREFIX = "onnx-community/Kokoro-82M-v1.0-ONNX/resolve/";
 const NANDI_HF_PROXY_PREFIX = "/api/hf/";
@@ -103,7 +105,7 @@ async function load() {
       device = "wasm";
       emit("loading", { progress: 0, device });
       const tts = await KokoroTTS.from_pretrained(MODEL_ID, {
-        dtype: "q8",
+        dtype: MODEL_DTYPE,
         device,
         progress_callback: (p) => {
           const pct = typeof p?.progress === "number" ? p.progress / 100 : progress;
@@ -114,7 +116,7 @@ async function load() {
       if (token !== generation) return null;
       model = tts;
       progress = 1;
-      emit("ready", { device, voice: DEFAULT_VOICE });
+      emit("ready", { device, voice: DEFAULT_VOICE, dtype: MODEL_DTYPE, mobile: MOBILE_DEVICE });
       return model;
     } catch (err) {
       lastError = String(err?.message || err);
@@ -238,6 +240,8 @@ async function probe(text = "Nandi is ready.") {
       type: blob.type || "audio/wav",
       device,
       voice: DEFAULT_VOICE,
+      dtype: MODEL_DTYPE,
+      mobile: MOBILE_DEVICE,
     };
   } catch (err) {
     lastError = String(err?.message || err);
@@ -258,6 +262,8 @@ function status() {
     speaking: Boolean(currentSource),
     speakingText,
     lastError,
+    dtype: MODEL_DTYPE,
+    mobile: MOBILE_DEVICE,
   };
 }
 

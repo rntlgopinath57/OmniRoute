@@ -297,7 +297,9 @@ function mentionedRepos(text: string) {
 
 async function githubRepoContext(text: string) {
   const repos = mentionedRepos(text);
-  if (!repos.length) return { context: "", repos: [], inaccessible: [] as string[] };
+  if (!repos.length) {
+    return { context: "", repos: [], inaccessible: [] as string[], liveWorkflowRuns: 0 };
+  }
 
   const token = envGet("RELAY_GITHUB_TOKEN") || envGet("GITHUB_TOKEN") || "";
   const headers: Record<string, string> = {
@@ -310,6 +312,8 @@ async function githubRepoContext(text: string) {
   const blocks: string[] = [];
   const accessible: string[] = [];
   const inaccessible: string[] = [];
+  let liveWorkflowRuns = 0;
+  const wantsWorkflows = workflowInventoryIntent(text);
 
   for (const repo of repos) {
     try {
@@ -329,12 +333,7 @@ async function githubRepoContext(text: string) {
       try {
         const readmeResponse = await fetchWithTimeout(
           `https://api.github.com/repos/${repo}/readme`,
-          {
-            headers: {
-              ...headers,
-              "Accept": "application/vnd.github.raw+json",
-            },
-          },
+          { headers: { ...headers, "Accept": "application/vnd.github.raw+json" } },
           5000,
         );
         if (readmeResponse.ok) readme = (await readmeResponse.text()).slice(0, 7000);
@@ -358,7 +357,8 @@ async function githubRepoContext(text: string) {
       } catch {}
 
       let workflowFiles = "";
-      if (workflowInventoryIntent(text)) {
+      let workflowRuns = "";
+      if (wantsWorkflows) {
         try {
           const workflowResponse = await fetchWithTimeout(
             `https://api.github.com/repos/${repo}/contents/.github/workflows?ref=${encodeURIComponent(meta?.default_branch || "main")}`,
@@ -377,6 +377,37 @@ async function githubRepoContext(text: string) {
             }
           }
         } catch {}
+
+        try {
+          const runsResponse = await fetchWithTimeout(
+            `https://api.github.com/repos/${repo}/actions/runs?per_page=40`,
+            { headers },
+            6500,
+          );
+          if (runsResponse.ok) {
+            const payload = await runsResponse.json();
+            const runs = Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
+            const latest = new Map<string, any>();
+            for (const run of runs) {
+              const key = String(run?.path || run?.name || run?.workflow_id || "");
+              if (key && !latest.has(key)) latest.set(key, run);
+            }
+            const rows = [...latest.values()].slice(0, 18).map((run: any) => {
+              liveWorkflowRuns += 1;
+              const result = run?.status === "completed"
+                ? (run?.conclusion || "completed")
+                : (run?.status || "unknown");
+              return [
+                String(run?.name || run?.path || "workflow"),
+                `status=${result}`,
+                run?.head_branch ? `branch=${run.head_branch}` : "",
+                run?.run_started_at || run?.created_at ? `started=${run.run_started_at || run.created_at}` : "",
+                run?.html_url ? `url=${run.html_url}` : "",
+              ].filter(Boolean).join(" | ");
+            });
+            workflowRuns = rows.join("\n");
+          }
+        } catch {}
       }
 
       blocks.push([
@@ -389,8 +420,11 @@ async function githubRepoContext(text: string) {
         `Fork: ${Boolean(meta?.fork)}`,
         meta?.source?.full_name ? `Upstream: ${meta.source.full_name}` : "",
         rootFiles ? `Root files: ${rootFiles}` : "",
-        workflowInventoryIntent(text)
+        wantsWorkflows
           ? (workflowFiles ? `GitHub workflows: ${workflowFiles}` : "GitHub workflows: none found or workflow directory unavailable")
+          : "",
+        wantsWorkflows
+          ? (workflowRuns ? `LIVE GITHUB ACTIONS RUNS (GitHub API):\n${workflowRuns}` : "LIVE GITHUB ACTIONS RUNS: unavailable")
           : "",
         readme ? `README:\n${readme}` : "README unavailable",
       ].filter(Boolean).join("\n"));
@@ -403,9 +437,9 @@ async function githubRepoContext(text: string) {
     context: blocks.join("\n\n---\n\n"),
     repos: accessible,
     inaccessible,
+    liveWorkflowRuns,
   };
 }
-
 
 type PresentationIntent = {
   format: string;
@@ -1148,7 +1182,7 @@ export default async (request: Request) => {
         const contextNote = disambiguationContext(contextualQuestion);
         const repoLookup = await githubRepoContext(contextualQuestion);
         if (repoLookup.repos.length) {
-          emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos });
+          emit({ type: "tool", tool: "github", status: "complete", repos: repoLookup.repos, liveWorkflowRuns: repoLookup.liveWorkflowRuns, live: repoLookup.liveWorkflowRuns > 0 });
         } else if (mentionedRepos(contextualQuestion).length) {
           emit({ type: "tool", tool: "github", status: "unavailable", repos: repoLookup.inaccessible });
         }
@@ -1161,7 +1195,7 @@ export default async (request: Request) => {
               + (contextNote ? " IMPORTANT CONTEXT: " + contextNote : "")
               + presentationInstruction(presentation)
               + (repoLookup.context
-                ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories. If the user asks for workflows, list the workflow files from this evidence directly and group them by repository:\n\n" + repoLookup.context
+                ? " LIVE GITHUB EVIDENCE follows. Use it as current repository evidence and do not claim you cannot access these repositories. If the user asks for workflows, use the LIVE GITHUB ACTIONS RUNS lines as current run-status evidence, list the relevant workflow files/runs, and never say live status is unavailable when those lines are present. Group results by repository:\n\n" + repoLookup.context
                 : repoLookup.inaccessible.length
                   ? " NOTE: The requested repository appears private or unavailable to Relay's live GitHub reader. Say that clearly; do not pretend it was inspected."
                   : ""),
