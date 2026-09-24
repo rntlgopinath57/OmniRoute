@@ -53,6 +53,14 @@ jobs:
           test "$(wc -c < ai-team-playground/assets/nandi-shiva-cinematic.jpg)" -gt 20000
           file ai-team-playground/assets/nandi-shiva-cinematic.jpg | grep -qi 'JPEG image data'
 
+      - name: Build pinned Three.js runtime
+        shell: bash
+        run: |
+          mkdir -p ai-team-playground/assets/vendor
+          curl --location --fail --silent --show-error             https://raw.githubusercontent.com/mrdoob/three.js/r186/build/three.core.js             --output ai-team-playground/assets/vendor/three.core.js
+          test "$(wc -c < ai-team-playground/assets/vendor/three.core.js)" -gt 500000
+          grep -q 'export' ai-team-playground/assets/vendor/three.core.js
+
       - name: Validate Nandi page
         run: |
           test -f ai-team-playground/nandi.html
@@ -72,6 +80,10 @@ jobs:
           grep -q 'window.addEventListener('"'"'nandi-state'"'"'' ai-team-playground/nandi.html
           test -f ai-team-playground/assets/vendor/three.module.js
           test "$(wc -c < ai-team-playground/assets/vendor/three.module.js)" -gt 500000
+          test -f ai-team-playground/assets/vendor/three.core.js
+          test "$(wc -c < ai-team-playground/assets/vendor/three.core.js)" -gt 500000
+          grep -q 'nandi3dVisible' ai-team-playground/nandi.html
+          grep -q '3D LAYER FAILED' ai-team-playground/nandi.html
           grep -q 'askForm.addEventListener' ai-team-playground/nandi.html
           grep -q 'nandiAuraV6' ai-team-playground/nandi.html
           grep -q 'NANDI_TRUE3D_SPIKE_V1' ai-team-playground/nandi.html
@@ -139,7 +151,10 @@ jobs:
                   && file /tmp/nandi-live.jpg | grep -qi 'JPEG image data' \
                   && curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/assets/vendor/three.module.js --output /tmp/three-live.js \
                   && test "$(wc -c < /tmp/three-live.js)" -gt 500000 \
-                  && grep -q 'WebGLRenderer' /tmp/three-live.js; then
+                  && grep -q 'WebGLRenderer' /tmp/three-live.js \
+                  && curl --location --fail --silent --show-error https://nandi-3d-spike.gopi-alerts-3859dc2239de.workers.dev/assets/vendor/three.core.js --output /tmp/three-core-live.js \
+                  && test "$(wc -c < /tmp/three-core-live.js)" -gt 500000 \
+                  && grep -q 'Vector3' /tmp/three-core-live.js; then
                   exit 0
                 fi
               fi
