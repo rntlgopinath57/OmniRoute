@@ -69,6 +69,8 @@ jobs:
           grep -q 'SpeechRecognition' ai-team-playground/nandi.html
           grep -q '/api/ask' ai-team-playground/nandi.html
           grep -q 'NANDI_VOICE_AGENT_V1' ai-team-playground/nandi.html
+          grep -q 'NANDI_AUDIO_UNLOCK_V1' ai-team-playground/src/nandi-neural-voice.mjs
+          grep -q 'VOICE BLOCKED' ai-team-playground/nandi.html
           grep -q '/assets/nandi-neural-voice.js' ai-team-playground/nandi.html
           grep -q 'barge-in' ai-team-playground/nandi.html
           grep -q 'stream_reset' ai-team-playground/nandi.html
@@ -228,6 +230,31 @@ jobs:
             expect(result.barge.bargePending).toBeTruthy();
             expect(result.barge.busy).toBeFalsy();
             expect(result.barge.agentClass).toContain('listening');
+          });
+
+          test('Nandi recovers from browser autoplay blocking', async ({ page }) => {
+            await page.goto('https://nandi-voice-agent-test.gopi-alerts-3859dc2239de.workers.dev/nandi', { waitUntil: 'domcontentloaded' });
+            await expect.poll(
+              () => page.evaluate(() => Boolean(window.NandiNeuralVoice && typeof window.NandiNeuralVoice.unlock === 'function')),
+              { timeout: 20000 }
+            ).toBeTruthy();
+
+            await page.evaluate(() => {
+              window.dispatchEvent(new CustomEvent('nandi-voice', {
+                detail: { type: 'blocked', error: "play() failed because the user didn't interact with the document first." }
+              }));
+            });
+
+            await expect(page.locator('#enable')).toHaveClass(/show/);
+            await expect(page.locator('#statusLine')).toContainText('Browser blocked audio');
+            await expect(page.locator('#agent')).not.toHaveClass(/speaking/);
+
+            await page.locator('#enable').click();
+            await expect.poll(
+              () => page.evaluate(() => Boolean(window.NandiNeuralVoice?.status?.().unlocked)),
+              { timeout: 10000 }
+            ).toBeTruthy();
+            await expect(page.locator('#enable')).not.toHaveClass(/show/);
           });
 
           NODE
