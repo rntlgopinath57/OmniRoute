@@ -10,7 +10,7 @@ when the skill is loaded, before the model answers, so provider-specific tool-ca
 round trips are not part of this read-only check.
 
 ## Live evidence
-!\`python ${HERMES_SKILL_DIR}/check_repo.py "Gopi Alerts"\`
+!`python ${HERMES_SKILL_DIR}/check_repo.py "Gopi Alerts"`
 
 ## Response contract
 1. Use only the live evidence printed above.
