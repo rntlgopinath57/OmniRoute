@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-6
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-7
   workflow_dispatch:
     inputs:
       ref:
