@@ -276,6 +276,30 @@ jobs:
           NODE
           npx playwright test nandi-live.spec.js --workers=1 --reporter=line
 
+      - name: Verify fast live workflow path
+        shell: bash
+        run: |
+          URL=https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev
+          start="$(python -c 'import time; print(time.time())')"
+          response="$(curl --location --fail --silent --show-error --max-time 20 -H 'Content-Type: application/json' --data '{"question":"Show workflows.","history":[]}' "$URL/api/nandi")"
+          end="$(python -c 'import time; print(time.time())')"
+          elapsed="$(python - "$start" "$end" <<'PY'
+          import sys
+          print(float(sys.argv[2]) - float(sys.argv[1]))
+          PY
+          )"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -q '"runtime":"fast-workflow-bridge-v1"'
+          printf '%s' "$response" | grep -q '"tool":"github"'
+          printf '%s' "$response" | grep -q '"fastPath":true'
+          printf '%s' "$response" | grep -q 'rntlgopinath57/gopi_alerts'
+          python - "$elapsed" <<'PY'
+          import sys
+          elapsed=float(sys.argv[1])
+          assert elapsed < 8.0, f"workflow fast path too slow: {elapsed:.2f}s"
+          print(f"NANDI_WORKFLOW_FAST_PATH: PASS {elapsed:.2f}s")
+          PY
+
       - name: Verify live Gopi Alerts through Nandi
         shell: bash
         run: |
