@@ -50,10 +50,12 @@ class Nandi(Agent):
                 "This is a proof of a real conversational agent, not a general chatbot. "
                 "For any request about Gopi Alerts, including likely speech-to-text variants such as "
                 "Gopy, Goopy, or Gobi Alerts, always call check_gopi_alerts before answering. "
-                "For requests to show, check, list, or review workflows or GitHub Actions, always call "
-                "show_workflows before answering. Never invent repository or workflow status. "
-                "The workflow tool returns the complete workflow-file inventory plus recent run status. "
-                "If the user asks for all workflows, report the complete inventory grouped by repository. "
+                "For requests to list, count, enumerate, or name workflows, always call list_workflows. "
+                "For requests about workflow status, health, failures, or recent GitHub Actions runs, always call "
+                "workflow_health. Never substitute recent run names for the workflow-file inventory. "
+                "When list_workflows returns a total and repository groups, use that total exactly and list the "
+                "workflow files from those groups without recalculating from other context. "
+                "Never invent repository or workflow status. "
                 "Otherwise speak only the useful conclusion in one or two short sentences. "
                 "Do not read commit hashes, raw JSON, or internal tool names aloud. "
                 "For unrelated questions, answer briefly. If speech is unclear or fragmentary, ask the user "
@@ -83,59 +85,68 @@ class Nandi(Agent):
         }
 
     @function_tool()
-    async def show_workflows(self, context: RunContext) -> dict[str, Any]:
-        """Return the complete GitHub Actions workflow inventory and recent run status across the active repositories."""
-        async def repo_evidence(repo: str) -> dict[str, Any]:
-            inventory_data, runs_data = await asyncio.gather(
-                github_json(f"https://api.github.com/repos/{repo}/contents/.github/workflows"),
-                github_json(f"https://api.github.com/repos/{repo}/actions/runs?per_page=5"),
-            )
+    async def list_workflows(self, context: RunContext) -> dict[str, Any]:
+        """List and count every GitHub Actions workflow file configured across the active repositories."""
+        async def repo_inventory(repo: str) -> dict[str, Any]:
+            data = await github_json(f"https://api.github.com/repos/{repo}/contents/.github/workflows")
             workflow_files = sorted(
                 str(item.get("name") or "")
-                for item in inventory_data
+                for item in data
                 if isinstance(item, dict)
                 and item.get("type") == "file"
                 and str(item.get("name") or "").endswith((".yml", ".yaml"))
             )
+            return {
+                "repository": repo,
+                "workflow_count": len(workflow_files),
+                "workflow_files": workflow_files,
+            }
+
+        repositories = await asyncio.gather(*(repo_inventory(repo) for repo in GITHUB_REPOS))
+        workflow_count = sum(item["workflow_count"] for item in repositories)
+        logger.info("Workflow inventory verified: %s files", workflow_count)
+        return {
+            "status": "PASS",
+            "source": ".github/workflows",
+            "workflow_count": workflow_count,
+            "repositories": repositories,
+            "instruction": (
+                "Use workflow_count exactly as returned. The repositories array is the complete inventory. "
+                "Do not use recent run names or infer a different count."
+            ),
+        }
+
+    @function_tool()
+    async def workflow_health(self, context: RunContext) -> dict[str, Any]:
+        """Check recent GitHub Actions run health across the active repositories."""
+        async def repo_runs(repo: str) -> dict[str, Any]:
+            data = await github_json(f"https://api.github.com/repos/{repo}/actions/runs?per_page=5")
             runs = []
-            for run in (runs_data.get("workflow_runs") or [])[:5]:
+            for run in (data.get("workflow_runs") or [])[:5]:
                 state = run.get("conclusion") if run.get("status") == "completed" else run.get("status")
                 runs.append({
                     "name": str(run.get("name") or "workflow"),
                     "state": str(state or "unknown"),
                     "updated_at": str(run.get("updated_at") or ""),
                 })
-            return {
-                "repository": repo,
-                "workflow_count": len(workflow_files),
-                "workflow_files": workflow_files,
-                "recent_runs": runs,
-            }
+            return {"repository": repo, "runs": runs}
 
-        repositories = await asyncio.gather(*(repo_evidence(repo) for repo in GITHUB_REPOS))
-        workflow_count = sum(item["workflow_count"] for item in repositories)
-        recent_run_count = sum(len(item["recent_runs"]) for item in repositories)
-        recent_failures = sum(
+        repositories = await asyncio.gather(*(repo_runs(repo) for repo in GITHUB_REPOS))
+        run_count = sum(len(item["runs"]) for item in repositories)
+        failures = sum(
             1
             for item in repositories
-            for run in item["recent_runs"]
+            for run in item["runs"]
             if run["state"] in {"failure", "cancelled", "timed_out"}
         )
-        logger.info(
-            "Workflow inventory verified: %s files, %s recent runs, %s recent failures",
-            workflow_count,
-            recent_run_count,
-            recent_failures,
-        )
+        logger.info("Workflow health verified: %s runs, %s recent failures", run_count, failures)
         return {
             "status": "PASS",
-            "workflow_count": workflow_count,
-            "recent_run_count": recent_run_count,
-            "recent_failure_count": recent_failures,
+            "recent_run_count": run_count,
+            "recent_failure_count": failures,
             "repositories": repositories,
             "spoken_summary": (
-                f"I verified {workflow_count} workflow files across {len(repositories)} repositories. "
-                f"Among the latest {recent_run_count} runs, {recent_failures} are recent failures."
+                f"I checked {run_count} recent workflow runs and found {failures} recent failures."
             ),
         }
 
