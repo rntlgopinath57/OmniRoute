@@ -1,0 +1,33 @@
+name: Nandi LiveKit Runtime Diagnose
+
+on:
+  push:
+    branches:
+      - nandi-livekit-proof
+    paths:
+      - ".github/workflows/nandi-livekit-diagnose.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+      LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+      LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nandi-livekit-proof
+      - name: Install LiveKit CLI
+        run: curl -sSL https://get.livekit.io/cli | bash
+      - name: Capture recent Nandi runtime logs
+        shell: bash
+        run: |
+          set +e
+          timeout 15s lk agent logs --id CA_YT7UoRxEaQ5J --log-type deploy 2>&1 | tee /tmp/nandi-livekit-runtime.log
+          test -s /tmp/nandi-livekit-runtime.log
+          echo "NANDI_RUNTIME_LOG_CAPTURED"
