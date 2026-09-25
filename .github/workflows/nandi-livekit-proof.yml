@@ -47,7 +47,8 @@ jobs:
           grep -q 'whisper-large-v3-turbo' livekit-nandi/agent.py
           grep -q 'silero.VAD.load' livekit-nandi/agent.py
           grep -q 'check_gopi_alerts' livekit-nandi/agent.py
-          grep -q 'show_workflows' livekit-nandi/agent.py
+          grep -q 'list_workflows' livekit-nandi/agent.py
+          grep -q 'workflow_health' livekit-nandi/agent.py
 
       - name: Create LiveKit agent
         if: ${{ hashFiles('livekit-nandi/livekit.toml') == '' }}
