@@ -33,7 +33,7 @@ export default async (request: Request) => {
   upstream.append("model", "whisper-large-v3-turbo");
   upstream.append("response_format", "json");
   upstream.append("temperature", "0");
-  upstream.append("prompt", "Nandi voice assistant. Terms may include GitHub, workflows, OmniRoute, gopi_alerts, Bharosa, safeqr.");
+  upstream.append("language", "en");
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);

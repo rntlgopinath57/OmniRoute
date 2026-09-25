@@ -145,6 +145,13 @@ jobs:
           printf '%s' "$response" | grep -q '"model":"whisper-large-v3-turbo"'
           printf '%s' "$response" | grep -q '"text"'
 
+      - name: Guard STT against prompt hallucination
+        shell: bash
+        run: |
+          ! grep -F 'Terms may include GitHub' netlify/functions/transcribe.mts
+          ! grep -F 'upstream.append("prompt"' netlify/functions/transcribe.mts
+          grep -F 'upstream.append("language", "en")' netlify/functions/transcribe.mts
+
       - name: Browser verify iPhone flow and talkback
         shell: bash
         run: |
@@ -234,6 +241,30 @@ jobs:
             expect(spoken[1]).toContain('12 live workflow runs');
             expect(spoken.every(s=>s.length<180)).toBeTruthy();
             expect(spoken.join(' ')).not.toContain('WORKFLOW_DETAILS');
+          });
+
+          test('Nandi ignores its own recent spoken text instead of re-querying', async ({ page }) => {
+            let apiCalls=0;
+            await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
+              contentType:'application/javascript',
+              body:`window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async()=>true};`
+            }));
+            await page.route('**/api/nandi', route => {
+              apiCalls++;
+              return route.fulfill({
+                contentType:'application/x-ndjson',
+                body:[
+                  JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
+                  JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Status: PASS.',review:'PASS'})
+                ].join('\n')+'\n'
+              });
+            });
+            await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
+            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Check Gopi Alerts'));
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified');
+            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Gopi Alerts is verified. The latest main update is confirmed.'));
+            await page.waitForTimeout(500);
+            expect(apiCalls).toBe(1);
           });
 
           test('iPhone-sized WebKit renders Nandi without the desktop-only assumptions', async () => {
