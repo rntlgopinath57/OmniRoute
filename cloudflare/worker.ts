@@ -1,5 +1,5 @@
 import askHandler from "../netlify/functions/ask.mts";
-import transcribeHandler from "../netlify/functions/transcribe.mts";
+import nandiHandler from "../netlify/functions/nandi.mts";
 import transcribeHandler from "../netlify/functions/transcribe.mts";
 import mediaHandler from "../netlify/functions/media.mts";
 import healthHandler from "../netlify/functions/health.mts";
@@ -82,8 +82,8 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/hf/")) return secure(await kokoroModelProxy(request, url));
+    if (url.pathname === "/api/nandi") return secure(await nandiHandler(request));
     if (url.pathname === "/api/ask") return secure(await askHandler(request));
-    if (url.pathname === "/api/transcribe") return secure(await transcribeHandler(request));
     if (url.pathname === "/api/transcribe") return secure(await transcribeHandler(request));
     if (url.pathname === "/api/media") return secure(await mediaHandler(request));
     if (url.pathname === "/api/health") return secure(await healthHandler());

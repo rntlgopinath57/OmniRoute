@@ -8,6 +8,7 @@ on:
       - "ai-team-playground/nandi.html"
       - "ai-team-playground/src/nandi-neural-voice.mjs"
       - "netlify/functions/ask.mts"
+      - "netlify/functions/nandi.mts"
       - "netlify/functions/transcribe.mts"
       - "cloudflare/**"
       - "relay-runtime/**"
@@ -63,6 +64,7 @@ jobs:
             --outfile="$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-neural-voice.js"
           cd "$GITHUB_WORKSPACE"
           npx --yes esbuild@0.28.2 netlify/functions/ask.mts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/nandi-ask-check.mjs >/dev/null
+          npx --yes esbuild@0.28.2 netlify/functions/nandi.mts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/nandi-runtime-check.mjs >/dev/null
           npx --yes esbuild@0.28.2 netlify/functions/transcribe.mts --bundle --platform=node --format=esm --packages=external --outfile=/tmp/nandi-stt-check.mjs >/dev/null
           test "$(wc -c < ai-team-playground/assets/nandi-neural-voice.js)" -gt 100000
 
@@ -71,7 +73,9 @@ jobs:
           grep -q 'NANDI_PHONE_AGENT_V1' ai-team-playground/nandi.html
           grep -q 'MediaRecorder' ai-team-playground/nandi.html
           grep -q '/api/transcribe' ai-team-playground/nandi.html
-          grep -q '/api/ask' ai-team-playground/nandi.html
+          grep -q '/api/nandi' ai-team-playground/nandi.html
+          grep -q 'verified-skill-bridge-v1' netlify/functions/nandi.mts
+          grep -q '/api/nandi' cloudflare/worker.ts
           grep -q 'NANDI_AUDIO_UNLOCK_V3_MOBILE' ai-team-playground/src/nandi-neural-voice.mjs
           grep -q 'MODEL_DTYPE = MOBILE_DEVICE ? "q4" : "q8"' ai-team-playground/src/nandi-neural-voice.mjs
           grep -q 'whisper-large-v3-turbo' netlify/functions/transcribe.mts
@@ -160,13 +164,13 @@ jobs:
               contentType:'application/javascript',
               body:`window.NandiNeuralVoiceVersion='NANDI_NEURAL_VOICE_V1';window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async(t)=>{window.dispatchEvent(new CustomEvent('nandi-voice',{detail:{type:'start',text:t}}));await new Promise(r=>setTimeout(r,250));return true;}};`
             }));
-            await page.route('**/api/ask', route => route.fulfill({
+            await page.route('**/api/nandi', route => route.fulfill({
               contentType:'application/x-ndjson',
               body:[
                 JSON.stringify({type:'planner',taskType:'automation'}),
                 JSON.stringify({type:'worker',model:'groq:qwen/qwen3.8-27b'}),
-                JSON.stringify({type:'tool',tool:'github',status:'complete',liveWorkflowRuns:true,runCount:6}),
-                JSON.stringify({type:'done',answer:'Your repositories are connected and live workflow status is available.',review:'PASS'})
+                JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
+                JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Status: PASS.',review:'PASS'})
               ].join('\n')+'\n'
             }));
             await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
@@ -175,8 +179,8 @@ jobs:
             await expect(page.locator('img')).toHaveCount(0);
             await expect(page.locator('body')).not.toContainText('LIVE TRACE');
             await expect.poll(()=>page.evaluate(()=>Boolean(window.__NANDI_PHONE_TEST__)),{timeout:10000}).toBeTruthy();
-            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('check my workflow status'));
-            await expect(page.locator('#answerText')).toContainText('live workflow status is available');
+            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Hi Nandi check Gopi Alerts'));
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified');
             await page.locator('#activity').click();
             await expect(page.locator('#drawer')).toHaveClass(/show/);
           });
@@ -205,24 +209,23 @@ jobs:
           NODE
           npx playwright test nandi.spec.js --workers=1 --reporter=line
 
-      - name: Verify live GitHub workflow status through Nandi
+      - name: Verify live Gopi Alerts through Nandi
         shell: bash
         run: |
           URL=https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev
-          response="$(curl --location --fail --silent --show-error --max-time 70 \
-            -H 'Content-Type: application/json' \
-            --data '{"question":"Check my repositories and tell me the current live status of my GitHub Actions workflows.","history":[]}' \
-            "$URL/api/ask")"
+          expected="$(curl --fail --silent -H "Authorization: Bearer $RELAY_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/rntlgopinath57/gopi_alerts/commits/main | python -c "import sys,json; print(json.load(sys.stdin)['sha'])")"
+          response="$(curl --location --fail --silent --show-error --max-time 70 -H 'Content-Type: application/json' --data '{"question":"Check Gopi Alerts.","history":[]}' "$URL/api/nandi")"
           printf '%s\n' "$response"
-          printf '%s' "$response" | grep -q '"tool":"github"'
-          printf '%s' "$response" | grep -q '"liveWorkflowRuns":true'
-          printf '%s' "$response" | grep -Eq '"runCount":[1-9][0-9]*'
-          printf '%s' "$response" | grep -q '"type":"done"'
-          ! printf '%s' "$response" | grep -Eqi 'manual check required|status is unknown|cannot provide the real-time status'
+          printf '%s' "$response" | grep -q '"tool":"nandi-repo-check"'
+          printf '%s' "$response" | grep -q '"evidence":"github-live"'
+          printf '%s' "$response" | grep -q "rntlgopinath57/gopi_alerts"
+          printf '%s' "$response" | grep -q "$expected"
+          printf '%s' "$response" | grep -q '"review":"PASS"'
+          echo "NANDI_BROWSER_BACKEND_E2E: PASS"
 
       - name: Record verified mobile deployment
         run: |
-          printf '{"status":"GREEN","url":"https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"phone-first-voice-agent","stt":"groq-whisper-large-v3-turbo","tts":"kokoro-q4-with-system-fallback","github_live_actions":true,"ui":"NANDI_PHONE_AGENT_V1","webkit_verified":true}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
+          printf '{"status":"GREEN","url":"https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev/nandi.html","source_commit":"%s","mode":"phone-first-voice-agent","stt":"groq-whisper-large-v3-turbo","tts":"kokoro-q4-with-system-fallback","github_live_actions":true,"backend":"verified-skill-bridge-v1","wake":"hi-nandi","ui":"NANDI_PHONE_AGENT_V1","webkit_verified":true}\n' "$GITHUB_SHA" > ai-team-playground/nandi-deploy-status.json
           git config user.name "nandi-test-bot"
           git config user.email "nandi-test-bot@users.noreply.github.com"
           git add ai-team-playground/nandi-deploy-status.json
