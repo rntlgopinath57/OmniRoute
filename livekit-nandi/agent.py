@@ -133,8 +133,8 @@ async def nandi_session(ctx: JobContext) -> None:
             language="en",
         ),
         llm=groq.LLM(
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,
+            model="openai/gpt-oss-120b",
+            parallel_tool_calls=False,
         ),
         tts=groq.TTS(
             model="canopylabs/orpheus-v1-english",
