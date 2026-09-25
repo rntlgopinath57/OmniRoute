@@ -209,6 +209,32 @@ jobs:
           NODE
           npx playwright test nandi.spec.js --workers=1 --reporter=line
 
+      - name: Browser verify live UI-to-Nandi backend
+        shell: bash
+        run: |
+          cd /tmp/nandi-pw
+          cat > nandi-live.spec.js <<'NODE'
+          const { test, expect } = require('@playwright/test');
+          test.setTimeout(90000);
+          const URL='https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev';
+
+          test('real browser renders live Gopi Alerts evidence from /api/nandi', async ({ page }) => {
+            await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
+              contentType:'application/javascript',
+              body:"window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async()=>true};"
+            }));
+            await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
+            await page.locator('#input').fill('Check Gopi Alerts');
+            await page.locator('button.send').click();
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified', { timeout: 70000 });
+            await expect(page.locator('#answerText')).toContainText('Status: PASS');
+            await expect(page.locator('#answerText')).toHaveText(/Latest commit SHA: [0-9a-f]{40}/);
+            await page.locator('#activity').click();
+            await expect(page.locator('#drawer')).toContainText('nandi-repo-check');
+          });
+          NODE
+          npx playwright test nandi-live.spec.js --workers=1 --reporter=line
+
       - name: Verify live Gopi Alerts through Nandi
         shell: bash
         run: |
