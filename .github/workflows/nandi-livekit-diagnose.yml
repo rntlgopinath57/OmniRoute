@@ -29,10 +29,7 @@ jobs:
         shell: bash
         run: |
           short='Gopi Alerts is verified. Status pass.'
-          long="$(python - <<'PY'
-print('This is a bounded voice response test. ' * 8)
-PY
-)"
+          long="$(python -c "print('This is a bounded voice response test. ' * 8)")"
           short_code="$(curl -sS -o /tmp/orpheus-short.wav -w '%{http_code}' https://api.groq.com/openai/v1/audio/speech \
             -H "Authorization: Bearer $GROQ_API_KEY" \
             -H 'Content-Type: application/json' \
