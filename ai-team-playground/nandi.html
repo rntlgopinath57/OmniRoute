@@ -73,11 +73,13 @@ linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90de
 // NANDI_PHONE_AGENT_V1
 (function(){
 const $=id=>document.getElementById(id),shell=$('shell'),presence=$('presence'),mode=$('mode'),state=$('state'),heard=$('heard'),hint=$('hint'),answer=$('answer'),answerText=$('answerText'),startBtn=$('startBtn'),mic=$('mic'),form=$('form'),input=$('input'),drawer=$('drawer'),activity=$('activity'),events=$('events');
-let stream=null,recorder=null,chunks=[],captureCtx=null,analyser=null,raf=0,session=false,awake=false,busy=false,speechStarted=false,lastLoudAt=0,recordStartedAt=0,history=[],voiceReady=false,voiceLoading=false,voiceSpeaking=false,currentRequest=null;
+let stream=null,recorder=null,chunks=[],captureCtx=null,analyser=null,raf=0,session=false,awake=false,busy=false,speechStarted=false,lastLoudAt=0,recordStartedAt=0,history=[],voiceReady=false,voiceLoading=false,voiceSpeaking=false,currentRequest=null,turnState='IDLE';
 
 function log(title,detail=''){const d=document.createElement('div');d.className='event';d.innerHTML='<b>'+escapeHtml(title)+'</b>'+(detail?' · '+escapeHtml(detail):'');events.prepend(d);while(events.children.length>10)events.removeChild(events.lastChild)}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function setVisual(kind,label,sub=''){presence.classList.remove('listen','think','speak','error');if(kind)presence.classList.add(kind);state.textContent=label;hint.textContent=sub;mode.textContent=session?'ACTIVE':'OFFLINE';shell.classList.toggle('active',session)}
+function enterState(next,label,sub=''){turnState=next;const kind=next==='LISTENING'?'listen':next==='SPEAKING'?'speak':next==='ERROR'?'error':(next==='PROCESSING'||next==='ACTING')?'think':'';setVisual(kind,label,sub)}
+function transcriptGate(text){const raw=String(text||'').trim(),normalized=raw.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();if(!normalized)return{valid:false,reason:'no_meaningful_text'};const tokens=normalized.split(/\s+/).filter(Boolean);if(tokens.length<2&&!/^(stop|cancel|yes|no)$/.test(normalized))return{valid:false,reason:'too_little_information'};const useful=(raw.match(/[a-z0-9]/gi)||[]).length;if(useful/Math.max(1,raw.length)<.5)return{valid:false,reason:'mostly_noise'};return{valid:true,reason:''}}
 function showAnswer(text){answerText.textContent=text;answer.classList.add('show')}
 function hideAnswer(){answer.classList.remove('show')}
 function pickMime(){const choices=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'];for(const t of choices){try{if(MediaRecorder.isTypeSupported(t))return t}catch(_){}}return ''}
@@ -85,33 +87,27 @@ function stopRecorder(){cancelAnimationFrame(raf);raf=0;if(recorder&&recorder.st
 function rms(){if(!analyser)return 0;const data=new Uint8Array(analyser.fftSize);analyser.getByteTimeDomainData(data);let sum=0;for(const v of data){const n=(v-128)/128;sum+=n*n}return Math.sqrt(sum/data.length)}
 async function ensureVoice(){if(voiceReady)return true;if(voiceLoading)return false;voiceLoading=true;try{const v=window.NandiNeuralVoice;if(!v)return false;await v.unlock?.();const p=v.load();const ready=await Promise.race([p.then(Boolean),new Promise(r=>setTimeout(()=>r(false),3200))]);voiceReady=Boolean(ready||v.status?.().ready);if(voiceReady)log('VOICE','Kokoro ready');return voiceReady}catch(e){log('VOICE','neural voice fallback');return false}finally{voiceLoading=false}}
 function systemSpeak(text){return new Promise(resolve=>{if(!('speechSynthesis' in window)){resolve(false);return}try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);const voices=speechSynthesis.getVoices();u.voice=voices.find(v=>/Daniel|Arthur|Rishi|Alex|Aaron|UK English Male/i.test(v.name))||voices.find(v=>/^en-(GB|IN)/i.test(v.lang))||voices.find(v=>/^en/i.test(v.lang))||null;u.rate=.96;u.pitch=.88;u.volume=1;u.onstart=()=>{voiceSpeaking=true;setVisual('speak','SPEAKING','Tap the center to interrupt')};u.onend=()=>{voiceSpeaking=false;resolve(true)};u.onerror=()=>{voiceSpeaking=false;resolve(false)};speechSynthesis.speak(u)}catch(_){resolve(false)}})}
-async function speak(text){const spoken=String(text||'').replace(/https?:\/\/\S+/g,'link').replace(/[*_#>|~]/g,' ').replace(/\s+/g,' ').trim().slice(0,900);if(!spoken)return;voiceSpeaking=true;stopRecorder();let ok=false;try{const v=window.NandiNeuralVoice;if(v&&(voiceReady||await ensureVoice()))ok=await v.speak(spoken,{voice:'bm_george',speed:.96,volume:.98})}catch(_){}
- if(!ok)ok=await systemSpeak(spoken);voiceSpeaking=false;if(session&&!busy)setTimeout(startListening,320)}
-async function transcribe(blob){const fd=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';fd.append('file',new File([blob],'nandi.'+ext,{type:blob.type||'audio/webm'}));const c=new AbortController();const timer=setTimeout(()=>c.abort(),30000);try{const r=await fetch('/api/transcribe',{method:'POST',body:fd,signal:c.signal});const data=await r.json();if(!r.ok)throw new Error(data?.error||'transcription failed');return String(data?.text||'').trim()}finally{clearTimeout(timer)}}
+async function speak(spokenResponse){const spoken=String(spokenResponse||'').replace(/https?:\/\/\S+/g,'link').replace(/[*_#>|~]/g,' ').replace(/\s+/g,' ').trim().slice(0,300);if(!spoken)return;enterState('SPEAKING','SPEAKING','Tap the center to interrupt');voiceSpeaking=true;stopRecorder();let ok=false;try{const v=window.NandiNeuralVoice;if(v&&(voiceReady||await ensureVoice()))ok=await v.speak(spoken,{voice:'bm_george',speed:.96,volume:.98})}catch(_){}
+ if(!ok)ok=await systemSpeak(spoken);voiceSpeaking=false;if(session&&!busy){enterState('LISTENING','LISTENING','Ready for your next instruction');setTimeout(startListening,160)}}
+async function transcribe(blob,durationMs){const fd=new FormData();const ext=blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm';fd.append('file',new File([blob],'nandi.'+ext,{type:blob.type||'audio/webm'}));fd.append('duration_ms',String(Math.max(0,Math.round(durationMs||0))));const c=new AbortController();const timer=setTimeout(()=>c.abort(),30000);try{const r=await fetch('/api/transcribe',{method:'POST',body:fd,signal:c.signal});const data=await r.json();if(!r.ok)throw new Error(data?.error||'transcription failed');return{text:String(data?.text||'').trim(),valid:Boolean(data?.valid),reason:String(data?.reason||'')}}finally{clearTimeout(timer)}}
 function extractWake(text){const m=String(text||'').match(/^\s*(?:hi|hey)\s+nandi\b[\s,.:;-]*/i);return m?String(text).slice(m[0].length).trim():null}
-async function handleTranscript(text){text=String(text||'').trim();if(!text)return;heard.textContent='“'+text+'”';log('HEARD',text.slice(0,80));const command=extractWake(text);if(command!==null){awake=true;presence.classList.remove('wake');void presence.offsetWidth;presence.classList.add('wake');setTimeout(()=>presence.classList.remove('wake'),950);log('WAKE','Hi Nandi');if(command){await ask(command);return}showAnswer("I'm listening.");setVisual('speak','AWAKE','Nandi is listening');await speak("I'm listening.");return}if(!awake){awake=true;log('WAKE','direct first command');}await ask(text)}
-async function processAudio(blob){if(!session||busy)return;setVisual('think','TRANSCRIBING','Turning your voice into text');try{const text=await transcribe(blob);if(!text){log('VOICE','no speech detected');setTimeout(startListening,250);return}await handleTranscript(text)}catch(e){setVisual('error','VOICE ISSUE',e?.name==='AbortError'?'Transcription timed out':'Tap to try again');log('STT ERROR',e?.message||String(e));setTimeout(()=>session&&startListening(),900)}}
-function monitor(){if(!recorder||recorder.state==='inactive'||busy||voiceSpeaking)return;const now=performance.now(),level=rms();if(level>.032){speechStarted=true;lastLoudAt=now;setVisual('listen','LISTENING','I can hear you')}const elapsed=now-recordStartedAt;if(speechStarted&&now-lastLoudAt>900&&elapsed>1000){stopRecorder();return}if(elapsed>14000){stopRecorder();return}raf=requestAnimationFrame(monitor)}
-function startListening(){if(!session||busy||voiceSpeaking||!stream)return;hideAnswer();const mime=pickMime();chunks=[];speechStarted=false;lastLoudAt=performance.now();recordStartedAt=performance.now();try{recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined)}catch(e){setVisual('error','RECORDER UNAVAILABLE','Text input still works');log('RECORDER',e.message||String(e));return}
- recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};recorder.onstop=()=>{cancelAnimationFrame(raf);const type=recorder.mimeType||mime||'audio/webm';const blob=new Blob(chunks,{type});if(speechStarted&&blob.size>800)processAudio(blob);else if(session&&!busy&&!voiceSpeaking)setTimeout(startListening,250)};recorder.start(250);setVisual('listen',awake?'LISTENING':'SAY “HI NANDI”',awake?'Speak naturally · pause when finished':'Wake Nandi, then give your command');raf=requestAnimationFrame(monitor)}
+async function handleTranscript(text,serverValid=true,serverReason=''){text=String(text||'').trim();const local=transcriptGate(text);if(!serverValid||!local.valid){log('GATE','rejected · '+(serverReason||local.reason));enterState('LISTENING','LISTENING','Ready for your instruction');setTimeout(()=>session&&startListening(),180);return}heard.textContent='“'+text+'”';log('HEARD',text.slice(0,80));const command=extractWake(text);if(command!==null){awake=true;presence.classList.remove('wake');void presence.offsetWidth;presence.classList.add('wake');setTimeout(()=>presence.classList.remove('wake'),950);log('WAKE','Hi Nandi');if(command){await ask(command);return}showAnswer("I'm listening.");await speak("I'm listening.");return}if(!awake){awake=true;log('WAKE','direct first command');}await ask(text)}
+async function processAudio(blob,durationMs){if(!session||busy)return;enterState('PROCESSING','TRANSCRIBING','Turning your voice into text');try{const result=await transcribe(blob,durationMs);await handleTranscript(result.text,result.valid,result.reason)}catch(e){enterState('ERROR','VOICE ISSUE',e?.name==='AbortError'?'Transcription timed out':'Tap to try again');log('STT ERROR',e?.message||String(e));setTimeout(()=>{if(session){enterState('LISTENING','LISTENING','Ready for your instruction');startListening()}},900)}}
+function monitor(){if(turnState!=='LISTENING'||!recorder||recorder.state==='inactive'||busy||voiceSpeaking)return;const now=performance.now(),level=rms();if(level>.032){speechStarted=true;lastLoudAt=now;setVisual('listen','LISTENING','I can hear you')}const elapsed=now-recordStartedAt;if(speechStarted&&now-lastLoudAt>900&&elapsed>1000){stopRecorder();return}if(elapsed>14000){stopRecorder();return}raf=requestAnimationFrame(monitor)}
+function startListening(){if(turnState!=='LISTENING'||!session||busy||voiceSpeaking||!stream)return;const mime=pickMime();chunks=[];speechStarted=false;lastLoudAt=performance.now();recordStartedAt=performance.now();try{recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined)}catch(e){enterState('ERROR','RECORDER UNAVAILABLE','Text input still works');log('RECORDER',e.message||String(e));return}
+ recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};recorder.onstop=()=>{cancelAnimationFrame(raf);const durationMs=performance.now()-recordStartedAt;const type=recorder.mimeType||mime||'audio/webm';const blob=new Blob(chunks,{type});if(turnState==='LISTENING'&&speechStarted&&blob.size>800){processAudio(blob,durationMs);return}if(turnState==='LISTENING'&&session&&!busy&&!voiceSpeaking)setTimeout(startListening,250)};recorder.start(250);setVisual('listen',awake?'LISTENING':'SAY “HI NANDI”',awake?'Speak naturally · pause when finished':'Wake Nandi, then give your command');raf=requestAnimationFrame(monitor)}
 async function startSession(){if(session){if(voiceSpeaking){window.NandiNeuralVoice?.cancel?.();try{speechSynthesis.cancel()}catch(_){}voiceSpeaking=false}startListening();return}
  try{startBtn.disabled=true;setVisual('think','STARTING','Opening microphone');const v=window.NandiNeuralVoice;try{await v?.unlock?.()}catch(_){}
  stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
  const Ctx=window.AudioContext||window.webkitAudioContext;captureCtx=new Ctx();await captureCtx.resume();const src=captureCtx.createMediaStreamSource(stream);analyser=captureCtx.createAnalyser();analyser.fftSize=1024;src.connect(analyser);
- session=true;startBtn.classList.add('hidden');log('SESSION','microphone active');ensureVoice();startListening()
+ session=true;startBtn.classList.add('hidden');log('SESSION','microphone active');ensureVoice();enterState('LISTENING',awake?'LISTENING':'SAY “HI NANDI”','Speak naturally · pause when finished');startListening()
  }catch(e){setVisual('error','MICROPHONE BLOCKED','Allow microphone access, then tap Start Nandi');startBtn.disabled=false;log('MIC',e?.message||String(e))}}
-function workflowVoiceIntent(q){const s=String(q||'').toLowerCase();return /\b(workflows?|github actions?|automations?)\b/.test(s)&&/\b(show|list|check|status|statuses|review|find|count|inventory|all|my)\b/.test(s)}
-function gopiAlertsVoiceIntent(q){return /\b(?:gopi|goopy|gopy|gobi)\s+alerts?\b/i.test(String(q||''))}
-function workflowVoiceSummary(count){const n=Math.max(0,Number(count)||0);return n===1?"I found 1 live workflow run. I'm showing the full details on screen.":n>1?`I found ${n} live workflow runs. I'm showing the full details on screen.`:"I have the workflow results. The full details are on screen."}
 async function ask(q){
  q=String(q||'').trim();if(!q||busy)return;
- const workflowVoiceMode=workflowVoiceIntent(q);
- const gopiVoiceMode=gopiAlertsVoiceIntent(q);
- let workflowSpeechStarted=false,workflowSpeechPromise=null;
- busy=true;stopRecorder();hideAnswer();setVisual('think','THINKING','Nandi is working');log('ASK','Nandi + verified skills');
- const c=new AbortController();currentRequest=c;const timer=setTimeout(()=>c.abort(),65000);let final='';
+ busy=true;stopRecorder();enterState('ACTING','WORKING','Nandi is handling your instruction');log('ASK','validated command');
+ const c=new AbortController();currentRequest=c;const timer=setTimeout(()=>c.abort(),65000);let displayResponse='',spokenResponse='',ignored=false;
  try{
-  const r=await fetch('/api/nandi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:'[Nandi voice session] Reply naturally and briefly unless detail is requested. Use live GitHub/workflow evidence when asked. '+q,history:history.slice(-6)}),signal:c.signal});
+  const r=await fetch('/api/nandi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,history:history.slice(-6)}),signal:c.signal});
   if(!r.ok)throw new Error('Nandi '+r.status);
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
   while(true){
@@ -119,47 +115,28 @@ async function ask(q){
    for(const line of lines){
     if(!line.trim())continue;
     const e=JSON.parse(line);
-    if(e.type==='tool'){
-     log('TOOL',e.tool+(e.liveWorkflowRuns?' · live runs':''));
-     if(workflowVoiceMode&&e.tool==='github'&&e.liveWorkflowRuns&&!workflowSpeechStarted){
-      workflowSpeechStarted=true;
-      const shortVoice=workflowVoiceSummary(e.runCount);
-      log('VOICE','short workflow summary');
-      setVisual('speak','QUICK UPDATE','Full workflow details will stay on screen');
-      workflowSpeechPromise=speak(shortVoice).then(()=>{if(busy)setVisual('think','WORKING','Preparing workflow details')});
-     }
-    }
+    if(e.type==='tool')log('TOOL',e.tool+(e.liveWorkflowRuns?' · live runs':''));
     if(e.type==='worker'||e.type==='worker_selected')log('MODEL',String(e.model||'worker').replace(/^.*\//,''));
     if(e.type==='reviewer')log('VERIFY',String(e.model||'reviewer'));
-    if(e.type==='done')final=String(e.answer||'').trim();
+    if(e.type==='ignored'){ignored=true;log('GATE','backend rejected · '+String(e.reason||'low information'))}
+    if(e.type==='done'){displayResponse=String(e.display_response||'').trim();spokenResponse=String(e.spoken_response||'').trim()}
     if(e.type==='error')throw new Error(e.message||'Nandi error');
    }
    if(p.done)break;
   }
-  if(!final)final='I finished, but no answer text came back.';
-  showAnswer(final);history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);
-  if(workflowVoiceMode){
-   if(!workflowSpeechStarted){
-    workflowSpeechStarted=true;
-    setVisual('speak','QUICK UPDATE','Full workflow details are on screen');
-    workflowSpeechPromise=speak(workflowVoiceSummary(0));
-   }
-   if(workflowSpeechPromise)await workflowSpeechPromise;
-   setVisual('','RESULT READY','Full workflow details are on screen');
-  }else if(gopiVoiceMode){
-   setVisual('speak','RESPONDING','Verified result');
-   await speak('Gopi Alerts is verified. Status pass.');
-  }else{
-   setVisual('speak','RESPONDING','Voice reply');await speak(final);
-  }
+  if(ignored)return;
+  if(!displayResponse)throw new Error('Nandi returned no display response.');
+  showAnswer(displayResponse);history.push({role:'user',content:q},{role:'assistant',content:displayResponse});history=history.slice(-8);
+  if(spokenResponse)await speak(spokenResponse);
  }catch(e){
   const msg=e?.name==='AbortError'?'That request took too long, so I stopped it.':'I hit a problem: '+(e?.message||String(e));
-  showAnswer(msg);setVisual('error','REQUEST ISSUE','Tap the center to continue');log('ERROR',msg);await systemSpeak(msg);
+  showAnswer(msg);enterState('ERROR','REQUEST ISSUE','Tap the center to continue');log('ERROR',msg);await systemSpeak(msg);
  }finally{
-  clearTimeout(timer);busy=false;currentRequest=null;if(session&&!voiceSpeaking)setTimeout(startListening,300);
+  clearTimeout(timer);busy=false;currentRequest=null;
+  if(session&&!voiceSpeaking){enterState('LISTENING','LISTENING','Ready for your next instruction');setTimeout(startListening,180)}
  }
 }
-function interrupt(){if(currentRequest){try{currentRequest.abort()}catch(_){}currentRequest=null}busy=false;window.NandiNeuralVoice?.cancel?.();try{speechSynthesis.cancel()}catch(_){}voiceSpeaking=false;setVisual('listen','LISTENING','Speak your new instruction');startListening()}
+function interrupt(){if(currentRequest){try{currentRequest.abort()}catch(_){}currentRequest=null}busy=false;window.NandiNeuralVoice?.cancel?.();try{speechSynthesis.cancel()}catch(_){}voiceSpeaking=false;enterState('LISTENING','LISTENING','Speak your new instruction');startListening()}
 startBtn.addEventListener('click',startSession);mic.addEventListener('click',()=>{if(!session)startSession();else if(busy||voiceSpeaking)interrupt();else startListening()});presence.addEventListener('click',()=>{if(!session)startSession();else if(busy||voiceSpeaking)interrupt()});
 form.addEventListener('submit',e=>{e.preventDefault();const q=input.value.trim();if(!q)return;if(!session){session=true;startBtn.classList.add('hidden');shell.classList.add('active')}awake=true;input.value='';ask(q)});
 activity.addEventListener('click',()=>{const show=!drawer.classList.contains('show');drawer.classList.toggle('show',show);drawer.setAttribute('aria-hidden',String(!show))});
