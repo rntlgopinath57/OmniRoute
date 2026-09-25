@@ -1,11 +1,14 @@
 # Hermes -> OmniRoute POC configuration template
 # No secrets committed. Use only on the isolated POC runtime.
+#
+# VERIFIED CONTRACT:
+# Hermes custom provider sends POST {base_url}/chat/completions.
+# OmniRoute exposes POST /api/v1/chat/completions as OpenAI-compatible.
+# Therefore base_url MUST end in /api/v1 (not /v1).
 model:
   provider: custom
   default: relay
-  # Hermes supports OpenAI-compatible endpoints. Point this to the existing
-  # OmniRoute/Relay OpenAI-compatible endpoint when running the POC.
-  base_url: ${OMNIROUTE_OPENAI_BASE_URL}
+  base_url: ${OMNIROUTE_BASE_URL}/api/v1
   api_key: ${OMNIROUTE_API_KEY}
   context_length: 64000
 
