@@ -1,4 +1,5 @@
 import askHandler from "./ask.mts";
+import { envGet } from "../../relay-runtime/env.mts";
 
 type ChatMessage = { role?: string; content?: unknown };
 
@@ -20,12 +21,42 @@ function completionPayload(answer: string, model: string, done: any) {
   };
 }
 
+async function proxyHermesToolTurn(body: any) {
+  const apiKey = envGet("GROQ_API_KEY");
+  if (!apiKey) return null;
+  const hasTools = Array.isArray(body?.tools) && body.tools.length > 0;
+  const hasToolResult = Array.isArray(body?.messages) && body.messages.some((m: any) => m?.role === "tool");
+  if (!hasTools && !hasToolResult) return null;
+
+  const upstreamBody = {
+    ...body,
+    model: "openai/gpt-oss-20b",
+    stream: body?.stream === true,
+  };
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", "authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify(upstreamBody),
+  });
+  return new Response(response.body, {
+    status: response.status,
+    headers: {
+      "Content-Type": response.headers.get("Content-Type") || (body?.stream ? "text/event-stream; charset=utf-8" : "application/json"),
+      "Cache-Control": "no-store",
+      "X-OmniRoute-Compat": "hermes-tool-bridge-poc",
+    },
+  });
+}
+
 export default async function openAICompatHandler(request: Request) {
   if (request.method !== "POST") return Response.json({ error: { message: "Method not allowed", type: "invalid_request_error" } }, { status: 405 });
 
   let body: any;
   try { body = await request.json(); }
   catch { return Response.json({ error: { message: "Invalid JSON body", type: "invalid_request_error" } }, { status: 400 }); }
+
+  const toolTurn = await proxyHermesToolTurn(body);
+  if (toolTurn) return toolTurn;
 
   const messages: ChatMessage[] = Array.isArray(body?.messages) ? body.messages : [];
   const lastUser = [...messages].reverse().find(m => m?.role === "user");
