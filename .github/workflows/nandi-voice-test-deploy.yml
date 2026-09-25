@@ -188,18 +188,27 @@ jobs:
           test('first spoken command works without requiring Hi Nandi', async ({ page }) => {
             await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
               contentType:'application/javascript',
-              body:`window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async()=>true};`
+              body:`window.__spoken=[];window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async(t)=>{window.__spoken.push(t);return true;}};`
             }));
-            await page.route('**/api/nandi', route => route.fulfill({
-              contentType:'application/x-ndjson',
-              body:[
-                JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
-                JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Status: PASS.',review:'PASS'})
-              ].join('\n')+'\n'
-            }));
+            await page.route('**/api/nandi', async route => {
+              await new Promise(r=>setTimeout(r,700));
+              await route.fulfill({
+                contentType:'application/x-ndjson',
+                body:[
+                  JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
+                  JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Latest commit SHA: 1234567890123456789012345678901234567890. Status: PASS.',review:'PASS'})
+                ].join('\n')+'\n'
+              });
+            });
             await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
-            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Check Gopi Alerts'));
-            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified');
+            const turn=page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Check Gopi Alerts'));
+            await expect.poll(()=>page.evaluate(()=>window.__spoken[0]||''),{timeout:1500}).toBe('Checking Gopi Alerts.');
+            await turn;
+            await expect(page.locator('#answerText')).toContainText('Latest commit SHA');
+            await expect.poll(()=>page.evaluate(()=>window.__spoken.length)).toBe(2);
+            const spoken=await page.evaluate(()=>window.__spoken);
+            expect(spoken[1]).toContain('latest main update is confirmed');
+            expect(spoken.join(' ')).not.toContain('1234567890123456789012345678901234567890');
           });
 
           test('workflow follow-up speaks only a short summary and keeps full details on screen', async ({ page }) => {
@@ -219,11 +228,12 @@ jobs:
             await page.locator('#input').fill('show workflows');
             await page.locator('button.send').click();
             await expect(page.locator('#answerText')).toContainText('WORKFLOW_DETAILS');
-            await expect.poll(()=>page.evaluate(()=>window.__spoken.length)).toBe(1);
-            const spoken=await page.evaluate(()=>window.__spoken[0]);
-            expect(spoken).toContain('12 live workflow runs');
-            expect(spoken.length).toBeLessThan(120);
-            expect(spoken).not.toContain('WORKFLOW_DETAILS');
+            await expect.poll(()=>page.evaluate(()=>window.__spoken.length)).toBe(2);
+            const spoken=await page.evaluate(()=>window.__spoken);
+            expect(spoken[0]).toBe('Checking the live workflows.');
+            expect(spoken[1]).toContain('12 live workflow runs');
+            expect(spoken.every(s=>s.length<180)).toBeTruthy();
+            expect(spoken.join(' ')).not.toContain('WORKFLOW_DETAILS');
           });
 
           test('iPhone-sized WebKit renders Nandi without the desktop-only assumptions', async () => {
