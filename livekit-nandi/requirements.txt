@@ -1,0 +1,1 @@
+livekit-agents[groq,silero]~=1.8
