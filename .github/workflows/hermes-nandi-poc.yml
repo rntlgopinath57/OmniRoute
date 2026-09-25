@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-4
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-5
   workflow_dispatch:
     inputs:
       ref:
@@ -120,7 +120,7 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           set -o pipefail
-          hermes chat --oneshot --provider nandi-relay --model relay --toolsets skills -s nandi-repo-check -q "Reply with exactly HERMES_RUNTIME_NANDI_OK" | tee /tmp/hermes-runtime.txt
+          hermes chat --oneshot --provider nandi-relay --model relay -q "Reply with exactly HERMES_RUNTIME_NANDI_OK" | tee /tmp/hermes-runtime.txt
           grep -q 'HERMES_RUNTIME_NANDI_OK' /tmp/hermes-runtime.txt
           echo "HERMES_RUNTIME: PASS"
       - name: Expected Gopi Alerts evidence
