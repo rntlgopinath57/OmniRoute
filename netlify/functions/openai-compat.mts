@@ -8,6 +8,18 @@ function textContent(value: unknown) {
   return value.map((part: any) => part?.type === "text" && typeof part?.text === "string" ? part.text : "").filter(Boolean).join("\n");
 }
 
+function completionPayload(answer: string, model: string, done: any) {
+  return {
+    id: "chatcmpl-relay-" + crypto.randomUUID(),
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [{ index: 0, message: { role: "assistant", content: answer }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    relay: { review: done.review || "", reviewer: done.reviewer || "", taskType: done.taskType || "" },
+  };
+}
+
 export default async function openAICompatHandler(request: Request) {
   if (request.method !== "POST") return Response.json({ error: { message: "Method not allowed", type: "invalid_request_error" } }, { status: 405 });
 
@@ -43,13 +55,23 @@ export default async function openAICompatHandler(request: Request) {
   if (!done?.answer) return Response.json({ error: { message: "Relay returned no final answer", type: "relay_error" } }, { status: 502 });
 
   const model = done.model || body?.model || "relay";
-  return Response.json({
-    id: "chatcmpl-relay-" + crypto.randomUUID(),
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model,
-    choices: [{ index: 0, message: { role: "assistant", content: done.answer }, finish_reason: "stop" }],
-    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-    relay: { review: done.review || "", reviewer: done.reviewer || "", taskType: done.taskType || "" },
-  }, { headers: { "Cache-Control": "no-store", "X-OmniRoute-Compat": "relay-poc" } });
+  const payload = completionPayload(done.answer, model, done);
+
+  // Hermes custom chat_completions uses streaming. Preserve the non-stream JSON
+  // response for ordinary OpenAI-compatible clients, but emit standards-shaped
+  // SSE chunks when stream=true.
+  if (body?.stream === true) {
+    const id = payload.id;
+    const created = payload.created;
+    const chunk = (delta: any, finish_reason: string | null = null) =>
+      `data: ${JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
+    const sse =
+      chunk({ role: "assistant" }) +
+      chunk({ content: done.answer }) +
+      chunk({}, "stop") +
+      "data: [DONE]\n\n";
+    return new Response(sse, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store", "X-OmniRoute-Compat": "relay-poc" } });
+  }
+
+  return Response.json(payload, { headers: { "Cache-Control": "no-store", "X-OmniRoute-Compat": "relay-poc" } });
 }
