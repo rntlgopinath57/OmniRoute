@@ -32,6 +32,7 @@ async function proxyHermesToolTurn(body: any) {
     ...body,
     model: "openai/gpt-oss-20b",
     stream: body?.stream === true,
+    tool_choice: hasToolResult ? "auto" : "required",
   };
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
