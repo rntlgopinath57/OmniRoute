@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-8
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-10
   workflow_dispatch:
     inputs:
       ref:
@@ -49,7 +49,7 @@ jobs:
           grep -q '/api/v1/chat/completions' cloudflare/worker.ts
           grep -q 'chat.completion' netlify/functions/openai-compat.mts
           grep -q 'hermes-tool-bridge-poc' netlify/functions/openai-compat.mts
-          grep -q 'gemini-3.8-flash' netlify/functions/openai-compat.mts
+          grep -q 'gemini-2.5-flash' netlify/functions/openai-compat.mts
           grep -q 'FAIL: UNVERIFIED' experiments/hermes-nandi/skills/nandi-repo-check/SKILL.md
       - name: Dry-run bundle
         run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .hermes-poc-dry-run
