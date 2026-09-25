@@ -5,22 +5,20 @@ description: Read-only repository health/current-state check for an existing Gop
 
 # Nandi Repository Check
 
-Use this skill when the user asks Nandi to check an existing project repository.
+This skill is deliberately deterministic for the Nandi POC. The evidence command runs
+when the skill is loaded, before the model answers, so provider-specific tool-call
+round trips are not part of this read-only check.
 
-## Procedure
-1. Map the user's named project only through the allowlist in `check_repo.py`.
-2. Run:
-   `python ~/.hermes/skills/nandi-repo-check/check_repo.py "Gopi Alerts"`
-3. Treat the script output as the evidence. Report repository, default branch, latest commit SHA, commit time, and PASS/FAIL.
-4. Do not invent or substitute repository names.
+## Live evidence
+!\`python ${HERMES_SKILL_DIR}/check_repo.py "Gopi Alerts"\`
+
+## Response contract
+1. Use only the live evidence printed above.
+2. Return repository, default branch, exact latest commit SHA, commit time, and PASS/FAIL.
+3. Do not invent, substitute, or infer repository evidence.
 
 ## Guardrails
 - READ ONLY.
 - Never create/update/delete files, refs, issues, PRs, workflow runs, secrets, deployments, or messages.
-- Never infer success from an LLM response.
-- If GitHub evidence is unavailable, return `FAIL: UNVERIFIED`.
-- Unknown projects must return `FAIL: UNVERIFIED`.
+- If the evidence command reports an error, return `FAIL: UNVERIFIED`.
 - Mutation requests are outside this skill and must not be executed.
-
-## Verification
-PASS only when repository metadata and latest default-branch commit are both retrieved from GitHub by `check_repo.py`.
