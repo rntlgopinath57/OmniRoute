@@ -3,6 +3,7 @@ import nandiHandler from "../netlify/functions/nandi.mts";
 import transcribeHandler from "../netlify/functions/transcribe.mts";
 import mediaHandler from "../netlify/functions/media.mts";
 import healthHandler from "../netlify/functions/health.mts";
+import livekitTokenHandler from "../netlify/functions/livekit-token.mts";
 import { setRuntimeEnv } from "../relay-runtime/env.mts";
 
 type Env = {
@@ -19,6 +20,9 @@ type Env = {
   GROQ_API_KEY?: string;
   RELAY_GITHUB_TOKEN?: string;
   GITHUB_TOKEN?: string;
+  LIVEKIT_URL?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
 };
 
 async function kokoroModelProxy(request: Request, url: URL) {
@@ -87,6 +91,7 @@ export default {
     if (url.pathname === "/api/transcribe") return secure(await transcribeHandler(request));
     if (url.pathname === "/api/media") return secure(await mediaHandler(request));
     if (url.pathname === "/api/health") return secure(await healthHandler());
+    if (url.pathname === "/api/livekit-token") return secure(await livekitTokenHandler(request, env));
 
     if (url.pathname.startsWith("/api/")) {
       return secure(Response.json({ error: "Not found" }, { status: 404 }));
