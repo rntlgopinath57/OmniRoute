@@ -44,8 +44,15 @@ const ACTIVE_WORKFLOW_REPOS = [
   "rntlgopinath57/OmniRoute",
 ];
 
+function routingQuestion(text: string) {
+  return String(text || "").replace(
+    /^\[Nandi voice session\]\s*Reply naturally and briefly unless detail is requested\.\s*Use live GitHub\/workflow evidence when asked\.\s*/i,
+    "",
+  ).trim();
+}
+
 function workflowIntent(text: string) {
-  const q = String(text || "").toLowerCase().replace(/\bwork\s+flows?\b/g, "workflows");
+  const q = routingQuestion(text).toLowerCase().replace(/\bwork\s+flows?\b/g, "workflows");
   return /\b(workflows?|github actions?|automations?)\b/.test(q)
     && /\b(show|list|check|status|statuses|review|find|count|inventory|all|my)\b/.test(q);
 }

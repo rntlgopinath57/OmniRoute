@@ -281,7 +281,7 @@ jobs:
         run: |
           URL=https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev
           start="$(python -c 'import time; print(time.time())')"
-          response="$(curl --location --fail --silent --show-error --max-time 20 -H 'Content-Type: application/json' --data '{"question":"Show workflows.","history":[]}' "$URL/api/nandi")"
+          response="$(curl --location --fail --silent --show-error --max-time 20 -H 'Content-Type: application/json' --data '{"question":"[Nandi voice session] Reply naturally and briefly unless detail is requested. Use live GitHub/workflow evidence when asked. Show workflows.","history":[]}' "$URL/api/nandi")"
           end="$(python -c 'import time; print(time.time())')"
           elapsed="$(python - "$start" "$end" <<'PY'
           import sys
