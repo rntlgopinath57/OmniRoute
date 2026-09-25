@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-7
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-8
   workflow_dispatch:
     inputs:
       ref:
@@ -49,6 +49,7 @@ jobs:
           grep -q '/api/v1/chat/completions' cloudflare/worker.ts
           grep -q 'chat.completion' netlify/functions/openai-compat.mts
           grep -q 'hermes-tool-bridge-poc' netlify/functions/openai-compat.mts
+          grep -q 'gemini-3.8-flash' netlify/functions/openai-compat.mts
           grep -q 'FAIL: UNVERIFIED' experiments/hermes-nandi/skills/nandi-repo-check/SKILL.md
       - name: Dry-run bundle
         run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .hermes-poc-dry-run
@@ -75,6 +76,8 @@ jobs:
           put_secret OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
           put_secret GROQ_API_KEY "$GROQ_API_KEY"
           put_secret RELAY_GITHUB_TOKEN "$RELAY_GITHUB_TOKEN"
+      - name: Hermes provider preflight
+        run: node experiments/hermes-nandi/provider-preflight.mjs "${{ steps.deploy.outputs.url }}"
       - name: Real OpenAI-compatible output test
         run: |
           body="$(curl --fail --show-error --silent --max-time 60 -H 'Content-Type: application/json' -d '{"model":"relay","messages":[{"role":"user","content":"Reply with exactly HERMES_NANDI_OK"}]}' "${{ steps.deploy.outputs.url }}/api/v1/chat/completions")"
