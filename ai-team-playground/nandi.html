@@ -78,7 +78,7 @@ let stream=null,recorder=null,chunks=[],captureCtx=null,analyser=null,raf=0,sess
 function log(title,detail=''){const d=document.createElement('div');d.className='event';d.innerHTML='<b>'+escapeHtml(title)+'</b>'+(detail?' · '+escapeHtml(detail):'');events.prepend(d);while(events.children.length>10)events.removeChild(events.lastChild)}
 function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function normalizedSpeech(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
-function isRecentSelfEcho(text){const heardNorm=normalizedSpeech(text),spokenNorm=normalizedSpeech(lastSpokenText);if(!heardNorm)return true;if(performance.now()-speechEndedAt<1400)return true;if(!spokenNorm)return false;return spokenNorm.includes(heardNorm)||heardNorm.includes(spokenNorm)}
+function isRecentSelfEcho(text){const heardNorm=normalizedSpeech(text),spokenNorm=normalizedSpeech(lastSpokenText);if(!heardNorm)return true;if(speechEndedAt>0&&performance.now()-speechEndedAt<1400)return true;if(!spokenNorm)return false;return spokenNorm.includes(heardNorm)||heardNorm.includes(spokenNorm)}
 function setVisual(kind,label,sub=''){presence.classList.remove('listen','think','speak','error');if(kind)presence.classList.add(kind);state.textContent=label;hint.textContent=sub;mode.textContent=session?'ACTIVE':'OFFLINE';shell.classList.toggle('active',session)}
 function showAnswer(text){answerText.textContent=text;answer.classList.add('show')}
 function hideAnswer(){answer.classList.remove('show')}
