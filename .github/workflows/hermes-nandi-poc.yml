@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-10
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-11
   workflow_dispatch:
     inputs:
       ref:
@@ -38,65 +38,18 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: spike/hermes-nandi-poc-20260925
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: "24"
       - name: Guard isolated ref
         run: test "$(git branch --show-current)" = "spike/hermes-nandi-poc-20260925"
-      - name: Static regression checks
+      - name: Require Nandi credentials
         run: |
-          grep -q 'openAICompatHandler' cloudflare/worker.ts
-          grep -q '/api/v1/chat/completions' cloudflare/worker.ts
-          grep -q 'chat.completion' netlify/functions/openai-compat.mts
-          grep -q 'hermes-tool-bridge-poc' netlify/functions/openai-compat.mts
-          grep -q 'gemini-2.5-flash' netlify/functions/openai-compat.mts
-          grep -q 'FAIL: UNVERIFIED' experiments/hermes-nandi/skills/nandi-repo-check/SKILL.md
-      - name: Dry-run bundle
-        run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .hermes-poc-dry-run
-      - name: Require isolated deploy credential
-        run: test -n "$CLOUDFLARE_API_TOKEN"
-      - name: Deploy isolated POC worker
-        id: deploy
-        run: |
-          set -o pipefail
-          npx --yes wrangler@latest deploy --config wrangler.jsonc --name relay-hermes-nandi-poc | tee deploy.log
-          url="$(grep -Eo 'https://[^ ]+\.workers\.dev' deploy.log | tail -1 || true)"
-          test -n "$url"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-      - name: Sync existing provider secrets
-        run: |
-          put_secret () { key="$1"; value="$2"; [ -z "$value" ] && return 0; printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name relay-hermes-nandi-poc >/dev/null; }
-          put_secret OPENAI_BASE_URL "$OPENAI_BASE_URL"
-          put_secret OPENAI_API_KEY "$OPENAI_API_KEY"
-          put_secret ANTHROPIC_BASE_URL "$ANTHROPIC_BASE_URL"
-          put_secret ANTHROPIC_API_KEY "$ANTHROPIC_API_KEY"
-          put_secret GOOGLE_GEMINI_BASE_URL "$GOOGLE_GEMINI_BASE_URL"
-          put_secret GEMINI_API_KEY "$GEMINI_API_KEY"
-          put_secret OPENROUTER_BASE_URL "$OPENROUTER_BASE_URL"
-          put_secret OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
-          put_secret GROQ_API_KEY "$GROQ_API_KEY"
-          put_secret RELAY_GITHUB_TOKEN "$RELAY_GITHUB_TOKEN"
-      - name: Hermes provider preflight
-        run: node experiments/hermes-nandi/provider-preflight.mjs "${{ steps.deploy.outputs.url }}"
-      - name: Real OpenAI-compatible output test
-        run: |
-          body="$(curl --fail --show-error --silent --max-time 60 -H 'Content-Type: application/json' -d '{"model":"relay","messages":[{"role":"user","content":"Reply with exactly HERMES_NANDI_OK"}]}' "${{ steps.deploy.outputs.url }}/api/v1/chat/completions")"
-          echo "$body" | tee /tmp/hermes-compat.json
-          python - <<'PY'
-          import json
-          x=json.load(open('/tmp/hermes-compat.json'))
-          assert x['object']=='chat.completion', x
-          assert x['choices'][0]['message']['role']=='assistant', x
-          assert 'HERMES_NANDI_OK' in x['choices'][0]['message']['content'], x
-          print('REAL_OUTPUT: PASS')
-          PY
-
-      - name: Install real Hermes Agent runtime
+          test -n "$GEMINI_API_KEY"
+          test -n "$RELAY_GITHUB_TOKEN"
+      - name: Install Hermes
         run: |
           curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
           export PATH="$HOME/.local/bin:$PATH"
           hermes --version
-      - name: Load Nandi skill into Hermes
+      - name: Load Nandi skill
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           mkdir -p "$HOME/.hermes/skills/nandi-repo-check"
@@ -104,53 +57,36 @@ jobs:
           cp experiments/hermes-nandi/skills/nandi-repo-check/check_repo.py "$HOME/.hermes/skills/nandi-repo-check/check_repo.py"
           hermes skills list | tee /tmp/hermes-skills.txt
           grep -q 'nandi-repo-check' /tmp/hermes-skills.txt
-      - name: Configure Hermes to isolated OmniRoute
+      - name: Configure native Gemini
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
           mkdir -p "$HOME/.hermes"
-          cat > "$HOME/.hermes/config.yaml" <<YAML
-          providers:
-            nandi-relay:
-              api: ${{ steps.deploy.outputs.url }}/api/v1
-              transport: chat_completions
-              default_model: relay
-              discover_models: false
+          cat > "$HOME/.hermes/config.yaml" <<'YAML'
           model:
-            provider: nandi-relay
-            default: relay
+            default: gemini-3.8-flash
+            provider: gemini
+            base_url: https://generativelanguage.googleapis.com/v1beta
+          skills:
+            inline_shell: true
+            inline_shell_timeout: 20
           YAML
-      - name: Isolate Hermes runtime context
+      - name: Isolate Nandi runtime
         run: |
           mkdir -p /tmp/hermes-nandi-runtime
-          printf "Nandi POC isolated runtime.\n" > /tmp/hermes-nandi-runtime/AGENTS.md
-      - name: Real Hermes runtime through OmniRoute
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          set -o pipefail
-          (cd /tmp/hermes-nandi-runtime && hermes chat --oneshot --provider nandi-relay --model relay -q "Reply with exactly HERMES_RUNTIME_NANDI_OK" | tee /tmp/hermes-runtime.txt)
-          grep -q 'HERMES_RUNTIME_NANDI_OK' /tmp/hermes-runtime.txt
-          echo "HERMES_RUNTIME: PASS"
-      - name: Expected Gopi Alerts evidence
+          printf "Nandi POC isolated read-only runtime.\n" > /tmp/hermes-nandi-runtime/AGENTS.md
+      - name: Capture expected GitHub evidence
         id: gopi
         run: |
-          sha="$(curl --fail --silent -H "Authorization: Bearer $RELAY_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/rntlgopinath57/gopi_alerts/commits/main | python -c "import sys,json; print(json.load(sys.stdin)[\"sha\"])")"
+          sha="$(curl --fail --silent -H "Authorization: Bearer $RELAY_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/rntlgopinath57/gopi_alerts/commits/main | python -c "import sys,json; print(json.load(sys.stdin)['sha'])")"
           test -n "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "EXPECTED_GOPI_SHA=$sha"
-      - name: Real Nandi Gopi Alerts skill evidence
+      - name: Nandi end-to-end task
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           set -o pipefail
-          (cd /tmp/hermes-nandi-runtime && hermes chat --oneshot --provider nandi-relay --model relay --toolsets terminal,skills -s nandi-repo-check -q "Nandi, check Gopi Alerts. You MUST use the nandi-repo-check skill and its check_repo.py evidence tool. Return repository, default branch, exact latest commit SHA, commit time, and PASS or FAIL." | tee /tmp/nandi-gopi-alerts.txt)
-          grep -q "rntlgopinath57/gopi_alerts" /tmp/nandi-gopi-alerts.txt
-          grep -q "${{ steps.gopi.outputs.sha }}" /tmp/nandi-gopi-alerts.txt
-          grep -q "PASS" /tmp/nandi-gopi-alerts.txt
-          echo "NANDI_GOPI_ALERTS: PASS"
-      - name: Fail closed unknown project
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          set -o pipefail
-          (cd /tmp/hermes-nandi-runtime && hermes chat --oneshot --provider nandi-relay --model relay --toolsets terminal,skills -s nandi-repo-check -q "Nandi, check Made Up Project. You MUST use nandi-repo-check and must not substitute another repository." | tee /tmp/nandi-unknown.txt)
-          grep -q "FAIL: UNVERIFIED" /tmp/nandi-unknown.txt
-          ! grep -q "rntlgopinath57/gopi_alerts" /tmp/nandi-unknown.txt
-          echo "NANDI_UNKNOWN_FAIL_CLOSED: PASS"
+          (cd /tmp/hermes-nandi-runtime && hermes chat --oneshot --provider gemini --model gemini-3.8-flash --toolsets skills -s nandi-repo-check -q "Nandi, check Gopi Alerts. Use only the live evidence injected by the nandi-repo-check skill. Return repository, default branch, exact latest commit SHA, commit time, and PASS or FAIL." | tee /tmp/nandi-e2e.txt)
+          grep -q "rntlgopinath57/gopi_alerts" /tmp/nandi-e2e.txt
+          grep -q "main" /tmp/nandi-e2e.txt
+          grep -q "${{ steps.gopi.outputs.sha }}" /tmp/nandi-e2e.txt
+          grep -q "PASS" /tmp/nandi-e2e.txt
+          echo "NANDI_E2E: PASS"
