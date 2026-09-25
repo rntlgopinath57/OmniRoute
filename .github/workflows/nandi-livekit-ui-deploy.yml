@@ -1,0 +1,161 @@
+name: Nandi LiveKit UI Deploy
+
+on:
+  push:
+    branches:
+      - nandi-livekit-proof
+    paths:
+      - "ai-team-playground/nandi.html"
+      - "ai-team-playground/src/nandi-livekit-client.mjs"
+      - "netlify/functions/livekit-token.mts"
+      - "cloudflare/worker.ts"
+      - ".github/workflows/nandi-livekit-ui-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nandi-livekit-ui
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+      LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+      LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nandi-livekit-proof
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Build LiveKit browser client
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/nandi-livekit-web
+          mkdir -p /tmp/nandi-livekit-web ai-team-playground/assets
+          cd /tmp/nandi-livekit-web
+          npm init -y >/dev/null 2>&1
+          npm install --silent --no-audit --no-fund --ignore-scripts livekit-client@2.22.3 esbuild@0.28.2
+          NODE_PATH=/tmp/nandi-livekit-web/node_modules ./node_modules/.bin/esbuild             "$GITHUB_WORKSPACE/ai-team-playground/src/nandi-livekit-client.mjs"             --bundle --format=esm --platform=browser --target=es2022             --outfile="$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-livekit-client.js"
+          test "$(wc -c < "$GITHUB_WORKSPACE/ai-team-playground/assets/nandi-livekit-client.js")" -gt 100000
+
+      - name: Validate LiveKit UI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$LIVEKIT_URL"
+          test -n "$LIVEKIT_API_KEY"
+          test -n "$LIVEKIT_API_SECRET"
+          grep -q 'NANDI_LIVEKIT_UI_V1' ai-team-playground/nandi.html
+          grep -q '/api/livekit-token' ai-team-playground/nandi.html
+          grep -q 'lk.transcription' ai-team-playground/nandi.html
+          grep -q 'sendText' ai-team-playground/nandi.html
+          ! grep -q 'MediaRecorder' ai-team-playground/nandi.html
+          ! grep -q '/api/transcribe' ai-team-playground/nandi.html
+          ! grep -q 'nandi-neural-voice' ai-team-playground/nandi.html
+          grep -q 'nandi-livekit-proof' netlify/functions/livekit-token.mts
+          grep -q 'roomConfig' netlify/functions/livekit-token.mts
+          grep -q '/api/livekit-token' cloudflare/worker.ts
+          npx --yes esbuild@0.28.2 netlify/functions/livekit-token.mts             --bundle --platform=browser --format=esm --outfile=/tmp/livekit-token-check.mjs >/dev/null
+
+      - name: Deploy isolated Nandi UI worker
+        run: npx --yes wrangler@latest deploy --config wrangler.jsonc --name nandi-immersive-test
+
+      - name: Sync LiveKit secrets to worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          put_secret () {
+            key="$1"; value="$2"
+            test -n "$value"
+            printf '%s' "$value" | npx --yes wrangler@latest secret put "$key" --name nandi-immersive-test >/dev/null
+            echo "Synced $key"
+          }
+          put_secret LIVEKIT_URL "$LIVEKIT_URL"
+          put_secret LIVEKIT_API_KEY "$LIVEKIT_API_KEY"
+          put_secret LIVEKIT_API_SECRET "$LIVEKIT_API_SECRET"
+
+      - name: Verify deployed token contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL=https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev
+          for attempt in 1 2 3 4 5 6; do
+            page="$(curl --location --fail --silent --show-error "$URL/nandi" || true)"
+            if printf '%s' "$page" | grep -q 'NANDI_LIVEKIT_UI_V1'; then break; fi
+            sleep 5
+          done
+          printf '%s' "$page" | grep -q 'NANDI_LIVEKIT_UI_V1'
+          ! printf '%s' "$page" | grep -q 'MediaRecorder'
+          response="$(curl --fail --silent --show-error -X POST             -H "Origin: $URL" -H 'Content-Type: application/json'             --data '{}' "$URL/api/livekit-token")"
+          printf '%s' "$response" > /tmp/livekit-token.json
+          python - <<'PY'
+          import base64,json
+          data=json.load(open('/tmp/livekit-token.json'))
+          assert data['server_url'].startswith('wss://')
+          token=data['participant_token']
+          parts=token.split('.')
+          assert len(parts)==3
+          payload=parts[1] + '=' * (-len(parts[1]) % 4)
+          claims=json.loads(base64.urlsafe_b64decode(payload))
+          assert claims['video']['roomJoin'] is True
+          assert claims['roomConfig']['agents'][0]['agentName']=='nandi-livekit-proof'
+          assert claims['video']['room'].startswith('nandi-')
+          print('NANDI_LIVEKIT_TOKEN: PASS')
+          PY
+
+      - name: Browser verify Nandi UI to LiveKit agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/nandi-livekit-pw
+          mkdir -p /tmp/nandi-livekit-pw
+          cd /tmp/nandi-livekit-pw
+          npm init -y >/dev/null 2>&1
+          npm install --silent --no-audit --no-fund @playwright/test@1.63.0
+          npx playwright install --with-deps chromium
+          cat > nandi-livekit.spec.js <<'NODE'
+          const { test, expect, chromium } = require('@playwright/test');
+          test.setTimeout(120000);
+          const URL='https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev';
+
+          test('custom Nandi UI connects to LiveKit agent and receives real tool response', async () => {
+            const browser=await chromium.launch({
+              headless:true,
+              args:[
+                '--use-fake-device-for-media-stream',
+                '--use-fake-ui-for-media-stream',
+                '--autoplay-policy=no-user-gesture-required'
+              ]
+            });
+            const context=await browser.newContext({permissions:['microphone']});
+            const page=await context.newPage();
+            await page.goto(URL+'/nandi',{waitUntil:'domcontentloaded'});
+            await expect(page.locator('#startBtn')).toBeVisible();
+            await page.locator('#startBtn').click();
+            await expect.poll(
+              ()=>page.evaluate(()=>Boolean(window.__NANDI_LIVEKIT_UI__?.connected)),
+              {timeout:45000}
+            ).toBeTruthy();
+            await expect(page.locator('#state')).toContainText(/LISTENING|CONNECTED/);
+            await page.locator('#input').fill('Check Gopi Alerts');
+            await page.locator('button.send').click();
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts', {timeout:70000});
+            await page.locator('#activity').click();
+            await expect(page.locator('#drawer')).toContainText(/ROOM|AGENT|NANDI/);
+            await browser.close();
+          });
+          NODE
+          npx playwright test nandi-livekit.spec.js --workers=1 --reporter=line
+          echo "NANDI_LIVEKIT_UI_E2E: PASS"
