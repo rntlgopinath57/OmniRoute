@@ -30,13 +30,7 @@ jobs:
         run: |
           curl -sS https://api.groq.com/openai/v1/models \
             -H "Authorization: Bearer $GROQ_API_KEY" > /tmp/groq-models.json
-          python - <<'PY'
-import json
-data=json.load(open('/tmp/groq-models.json'))
-ids=[m.get('id','') for m in data.get('data',[])]
-print('ORPHEUS_MODEL_VISIBLE=' + str('canopylabs/orpheus-v1-english' in ids).lower())
-print('GPT_OSS_MODEL_VISIBLE=' + str('openai/gpt-oss-120b' in ids).lower())
-PY
+          python -c "import json; data=json.load(open('/tmp/groq-models.json')); ids=[m.get('id','') for m in data.get('data',[])]; print('ORPHEUS_MODEL_VISIBLE=' + str('canopylabs/orpheus-v1-english' in ids).lower()); print('GPT_OSS_MODEL_VISIBLE=' + str('openai/gpt-oss-120b' in ids).lower())"
           short='Gopi Alerts is verified. Status pass.'
           for voice in daniel troy autumn; do
             code="$(curl -sS -o "/tmp/orpheus-${voice}.out" -w '%{http_code}' https://api.groq.com/openai/v1/audio/speech \
