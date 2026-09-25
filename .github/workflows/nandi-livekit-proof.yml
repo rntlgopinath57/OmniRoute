@@ -51,20 +51,20 @@ jobs:
 
       - name: Create LiveKit agent
         if: ${{ hashFiles('livekit-nandi/livekit.toml') == '' }}
-        uses: livekit/deploy-action@v2
+        uses: livekit/deploy-action@v2.12.1
         with:
           OPERATION: create
           WORKING_DIRECTORY: livekit-nandi
 
       - name: Deploy existing LiveKit agent
         if: ${{ hashFiles('livekit-nandi/livekit.toml') != '' }}
-        uses: livekit/deploy-action@v2
+        uses: livekit/deploy-action@v2.12.1
         with:
           OPERATION: deploy
           WORKING_DIRECTORY: livekit-nandi
 
       - name: Wait for LiveKit agent
-        uses: livekit/deploy-action@v2
+        uses: livekit/deploy-action@v2.12.1
         with:
           OPERATION: status-retry
           WORKING_DIRECTORY: livekit-nandi
