@@ -1,1 +1,2 @@
-livekit-agents[groq,silero]~=1.8
+livekit-agents[groq,silero,google]~=1.8
+pypdf~=6.1

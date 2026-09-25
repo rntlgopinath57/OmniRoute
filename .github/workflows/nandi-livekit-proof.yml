@@ -25,7 +25,7 @@ jobs:
       LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
       LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
       LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
-      SECRET_LIST: GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},RELAY_GITHUB_TOKEN=${{ secrets.RELAY_GITHUB_TOKEN }}
+      SECRET_LIST: GROQ_API_KEY=${{ secrets.GROQ_API_KEY }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},RELAY_GITHUB_TOKEN=${{ secrets.RELAY_GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -41,6 +41,7 @@ jobs:
           test -n "$LIVEKIT_API_KEY"
           test -n "$LIVEKIT_API_SECRET"
           test -n "${{ secrets.GROQ_API_KEY }}"
+          test -n "${{ secrets.GEMINI_API_KEY }}"
           test -n "${{ secrets.RELAY_GITHUB_TOKEN }}"
           python -m py_compile livekit-nandi/agent.py
           grep -q 'agent_name="nandi-livekit-proof"' livekit-nandi/agent.py
@@ -49,6 +50,10 @@ jobs:
           grep -q 'check_gopi_alerts' livekit-nandi/agent.py
           grep -q 'list_workflows' livekit-nandi/agent.py
           grep -q 'workflow_health' livekit-nandi/agent.py
+          grep -q 'alert_update' livekit-nandi/agent.py
+          grep -q 'fetch_public_report' livekit-nandi/agent.py
+          grep -q 'tts.FallbackAdapter' livekit-nandi/agent.py
+          grep -q 'GeminiTTS' livekit-nandi/agent.py
 
       - name: Create LiveKit agent
         if: ${{ hashFiles('livekit-nandi/livekit.toml') == '' }}
@@ -88,4 +93,4 @@ jobs:
         run: |
           echo "NANDI_LIVEKIT_AGENT: RUNNING"
           echo "AGENT_NAME: nandi-livekit-proof"
-          echo "VOICE_RUNTIME: LiveKit WebRTC + Silero VAD + Groq STT/LLM/TTS"
+          echo "VOICE_RUNTIME: LiveKit WebRTC + Silero VAD + Groq STT/LLM + Orpheus/Gemini TTS fallback"
