@@ -3,7 +3,7 @@ name: Hermes Nandi POC
 on:
   push:
     branches: [release/v3.8.51]
-    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-3
+    paths: ['.github/workflows/hermes-nandi-poc.yml'] # poc-trigger-4
   workflow_dispatch:
     inputs:
       ref:
@@ -48,6 +48,7 @@ jobs:
           grep -q 'openAICompatHandler' cloudflare/worker.ts
           grep -q '/api/v1/chat/completions' cloudflare/worker.ts
           grep -q 'chat.completion' netlify/functions/openai-compat.mts
+          grep -q 'hermes-tool-bridge-poc' netlify/functions/openai-compat.mts
           grep -q 'FAIL: UNVERIFIED' experiments/hermes-nandi/skills/nandi-repo-check/SKILL.md
       - name: Dry-run bundle
         run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc --outdir .hermes-poc-dry-run
@@ -122,13 +123,20 @@ jobs:
           hermes chat --oneshot --provider nandi-relay --model relay --toolsets skills -s nandi-repo-check -q "Reply with exactly HERMES_RUNTIME_NANDI_OK" | tee /tmp/hermes-runtime.txt
           grep -q 'HERMES_RUNTIME_NANDI_OK' /tmp/hermes-runtime.txt
           echo "HERMES_RUNTIME: PASS"
+      - name: Expected Gopi Alerts evidence
+        id: gopi
+        run: |
+          sha="$(curl --fail --silent -H "Authorization: Bearer $RELAY_GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/rntlgopinath57/gopi_alerts/commits/main | python -c "import sys,json; print(json.load(sys.stdin)[\"sha\"])")"
+          test -n "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "EXPECTED_GOPI_SHA=$sha"
       - name: Real Nandi Gopi Alerts skill evidence
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           set -o pipefail
           hermes chat --oneshot --provider nandi-relay --model relay --toolsets terminal,skills -s nandi-repo-check -q "Nandi, check Gopi Alerts. You MUST use the nandi-repo-check skill and its check_repo.py evidence tool. Return repository, default branch, exact latest commit SHA, commit time, and PASS or FAIL." | tee /tmp/nandi-gopi-alerts.txt
           grep -q "rntlgopinath57/gopi_alerts" /tmp/nandi-gopi-alerts.txt
-          grep -q "200a6cc2cc94c24114f7a6df794e972a4b5ae778" /tmp/nandi-gopi-alerts.txt
+          grep -q "${{ steps.gopi.outputs.sha }}" /tmp/nandi-gopi-alerts.txt
           grep -q "PASS" /tmp/nandi-gopi-alerts.txt
           echo "NANDI_GOPI_ALERTS: PASS"
       - name: Fail closed unknown project
