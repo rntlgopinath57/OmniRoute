@@ -218,6 +218,30 @@ jobs:
             expect(spoken.join(' ')).not.toContain('1234567890123456789012345678901234567890');
           });
 
+          test('STT variant Goopy Alerts uses the Gopi action path', async ({ page }) => {
+            await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
+              contentType:'application/javascript',
+              body:`window.__spoken=[];window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async(t)=>{window.__spoken.push(t);return true;}};`
+            }));
+            let postedQuestion='';
+            await page.route('**/api/nandi', async route => {
+              const body=route.request().postDataJSON();
+              postedQuestion=String(body?.question||'');
+              await route.fulfill({
+                contentType:'application/x-ndjson',
+                body:[
+                  JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
+                  JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Status: PASS.',review:'PASS',taskType:'repo_check'})
+                ].join('\n')+'\n'
+              });
+            });
+            await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
+            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Show Goopy Alerts'));
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified');
+            await expect.poll(()=>page.evaluate(()=>window.__spoken[0]||'')).toBe('Checking Gopi Alerts.');
+            expect(postedQuestion).toContain('Show Goopy Alerts');
+          });
+
           test('workflow follow-up speaks only a short summary and keeps full details on screen', async ({ page }) => {
             await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
               contentType:'application/javascript',
@@ -340,6 +364,19 @@ jobs:
           assert elapsed < 8.0, f"workflow fast path too slow: {elapsed:.2f}s"
           print(f"NANDI_WORKFLOW_FAST_PATH: PASS {elapsed:.2f}s")
           PY
+
+      - name: Verify Goopy speech alias routes to Gopi Alerts
+        shell: bash
+        run: |
+          URL=https://nandi-immersive-test.gopi-alerts-3859dc2239de.workers.dev
+          response="$(curl --location --fail --silent --show-error --max-time 20 -H 'Content-Type: application/json' --data '{"question":"[Nandi voice session] Reply naturally and briefly unless detail is requested. Use live GitHub/workflow evidence when asked. Show Goopy Alerts","history":[]}' "$URL/api/nandi")"
+          printf '%s\n' "$response"
+          printf '%s' "$response" | grep -q '"runtime":"verified-skill-bridge-v1"'
+          printf '%s' "$response" | grep -q '"tool":"nandi-repo-check"'
+          printf '%s' "$response" | grep -q '"taskType":"repo_check"'
+          ! printf '%s' "$response" | grep -q '"taskType":"workflow_inventory"'
+          printf '%s' "$response" | grep -q 'Gopi Alerts is verified'
+          echo "NANDI_GOPI_STT_ALIAS: PASS"
 
       - name: Verify live Gopi Alerts through Nandi
         shell: bash

@@ -51,6 +51,10 @@ function routingQuestion(text: string) {
   ).trim();
 }
 
+function gopiAlertsIntent(text: string) {
+  return /\b(?:gopi|goopy|gopy|gobi)\s+alerts?\b/i.test(routingQuestion(text));
+}
+
 function workflowIntent(text: string) {
   const q = routingQuestion(text).toLowerCase().replace(/\bwork\s+flows?\b/g, "workflows");
   return /\b(workflows?|github actions?|automations?)\b/.test(q)
@@ -124,7 +128,7 @@ export default async function nandiHandler(request: Request) {
     }
   }
 
-  if (/\bgopi\s+alerts\b/i.test(question)) {
+  if (gopiAlertsIntent(question)) {
     try {
       const evidence = await checkGopiAlerts();
       const answer =

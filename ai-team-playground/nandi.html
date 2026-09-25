@@ -105,9 +105,10 @@ async function startSession(){if(session){if(voiceSpeaking){window.NandiNeuralVo
  session=true;startBtn.classList.add('hidden');log('SESSION','microphone active');ensureVoice();startListening()
  }catch(e){setVisual('error','MICROPHONE BLOCKED','Allow microphone access, then tap Start Nandi');startBtn.disabled=false;log('MIC',e?.message||String(e))}}
 function workflowVoiceIntent(q){const s=String(q||'').toLowerCase();return /\b(workflows?|github actions?|automations?)\b/.test(s)&&/\b(show|list|check|status|statuses|review|find|count|inventory|all|my)\b/.test(s)}
+function gopiAlertsVoiceIntent(q){return /\b(?:gopi|goopy|gopy|gobi)\s+alerts?\b/i.test(String(q||''))}
 function actionProfile(q){
  const s=String(q||'');
- if(/\bgopi\s+alerts\b/i.test(s))return{kind:'gopi',label:'CHECKING GOPI ALERTS',sub:'GitHub · live repository',ack:'Checking Gopi Alerts.'};
+ if(gopiAlertsVoiceIntent(s))return{kind:'gopi',label:'CHECKING GOPI ALERTS',sub:'GitHub · live repository',ack:'Checking Gopi Alerts.'};
  if(workflowVoiceIntent(s))return{kind:'workflow',label:'CHECKING WORKFLOWS',sub:'GitHub Actions · live status',ack:'Checking the live workflows.'};
  return null;
 }
