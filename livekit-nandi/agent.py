@@ -137,8 +137,8 @@ async def nandi_session(ctx: JobContext) -> None:
             temperature=0.1,
         ),
         tts=groq.TTS(
-            model="playai-tts",
-            voice="Arista-PlayAI",
+            model="canopylabs/orpheus-v1-english",
+            voice="daniel",
         ),
     )
     await session.start(agent=Nandi(), room=ctx.room)
