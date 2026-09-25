@@ -2,6 +2,14 @@ name: Hermes Nandi POC
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - spike/hermes-nandi-poc-20260925
+    paths:
+      - '.github/workflows/hermes-nandi-poc.yml'
+      - 'experiments/hermes-nandi/**'
+      - 'netlify/functions/openai-compat.mts'
+      - 'cloudflare/worker.ts'
 
 permissions:
   contents: read
