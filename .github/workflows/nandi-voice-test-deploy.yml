@@ -185,6 +185,30 @@ jobs:
             await expect(page.locator('#drawer')).toHaveClass(/show/);
           });
 
+          test('workflow follow-up speaks only a short summary and keeps full details on screen', async ({ page }) => {
+            await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
+              contentType:'application/javascript',
+              body:`window.__spoken=[];window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async(t)=>{window.__spoken.push(t);return true;}};`
+            }));
+            const longAnswer='WORKFLOW_DETAILS '+('full workflow row with status and metadata. '.repeat(80));
+            await page.route('**/api/nandi', route => route.fulfill({
+              contentType:'application/x-ndjson',
+              body:[
+                JSON.stringify({type:'tool',tool:'github',status:'complete',liveWorkflowRuns:true,runCount:12}),
+                JSON.stringify({type:'done',answer:longAnswer,review:'PASS'})
+              ].join('\n')+'\n'
+            }));
+            await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
+            await page.locator('#input').fill('show workflows');
+            await page.locator('button.send').click();
+            await expect(page.locator('#answerText')).toContainText('WORKFLOW_DETAILS');
+            await expect.poll(()=>page.evaluate(()=>window.__spoken.length)).toBe(1);
+            const spoken=await page.evaluate(()=>window.__spoken[0]);
+            expect(spoken).toContain('12 live workflow runs');
+            expect(spoken.length).toBeLessThan(120);
+            expect(spoken).not.toContain('WORKFLOW_DETAILS');
+          });
+
           test('iPhone-sized WebKit renders Nandi without the desktop-only assumptions', async () => {
             const browser=await webkit.launch();
             const context=await browser.newContext({...devices['iPhone 15']});

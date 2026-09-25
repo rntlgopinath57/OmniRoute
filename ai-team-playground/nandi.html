@@ -100,8 +100,60 @@ async function startSession(){if(session){if(voiceSpeaking){window.NandiNeuralVo
  const Ctx=window.AudioContext||window.webkitAudioContext;captureCtx=new Ctx();await captureCtx.resume();const src=captureCtx.createMediaStreamSource(stream);analyser=captureCtx.createAnalyser();analyser.fftSize=1024;src.connect(analyser);
  session=true;startBtn.classList.add('hidden');log('SESSION','microphone active');ensureVoice();startListening()
  }catch(e){setVisual('error','MICROPHONE BLOCKED','Allow microphone access, then tap Start Nandi');startBtn.disabled=false;log('MIC',e?.message||String(e))}}
-async function ask(q){q=String(q||'').trim();if(!q||busy)return;busy=true;stopRecorder();hideAnswer();setVisual('think','THINKING','Nandi is working');log('ASK','Nandi + verified skills');const c=new AbortController();currentRequest=c;const timer=setTimeout(()=>c.abort(),65000);let final='';try{const r=await fetch('/api/nandi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:'[Nandi voice session] Reply naturally and briefly unless detail is requested. Use live GitHub/workflow evidence when asked. '+q,history:history.slice(-6)}),signal:c.signal});if(!r.ok)throw new Error('Nandi '+r.status);const rd=r.body.getReader(),dec=new TextDecoder();let buf='';while(true){const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';for(const line of lines){if(!line.trim())continue;const e=JSON.parse(line);if(e.type==='tool')log('TOOL',e.tool+(e.liveWorkflowRuns?' · live runs':''));if(e.type==='worker'||e.type==='worker_selected')log('MODEL',String(e.model||'worker').replace(/^.*\//,''));if(e.type==='reviewer')log('VERIFY',String(e.model||'reviewer'));if(e.type==='done')final=String(e.answer||'').trim();if(e.type==='error')throw new Error(e.message||'Nandi error')}if(p.done)break}if(!final)final='I finished, but no answer text came back.';showAnswer(final);history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);setVisual('speak','RESPONDING','Voice reply');await speak(final)
- }catch(e){const msg=e?.name==='AbortError'?'That request took too long, so I stopped it.':'I hit a problem: '+(e?.message||String(e));showAnswer(msg);setVisual('error','REQUEST ISSUE','Tap the center to continue');log('ERROR',msg);await systemSpeak(msg)}finally{clearTimeout(timer);busy=false;currentRequest=null;if(session&&!voiceSpeaking)setTimeout(startListening,300)}}
+function workflowVoiceIntent(q){const s=String(q||'').toLowerCase();return /\b(workflows?|github actions?|automations?)\b/.test(s)&&/\b(show|list|check|status|statuses|review|find|count|inventory|all|my)\b/.test(s)}
+function workflowVoiceSummary(count){const n=Math.max(0,Number(count)||0);return n===1?"I found 1 live workflow run. I'm showing the full details on screen.":n>1?`I found ${n} live workflow runs. I'm showing the full details on screen.`:"I have the workflow results. The full details are on screen."}
+async function ask(q){
+ q=String(q||'').trim();if(!q||busy)return;
+ const workflowVoiceMode=workflowVoiceIntent(q);
+ let workflowSpeechStarted=false,workflowSpeechPromise=null;
+ busy=true;stopRecorder();hideAnswer();setVisual('think','THINKING','Nandi is working');log('ASK','Nandi + verified skills');
+ const c=new AbortController();currentRequest=c;const timer=setTimeout(()=>c.abort(),65000);let final='';
+ try{
+  const r=await fetch('/api/nandi',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:'[Nandi voice session] Reply naturally and briefly unless detail is requested. Use live GitHub/workflow evidence when asked. '+q,history:history.slice(-6)}),signal:c.signal});
+  if(!r.ok)throw new Error('Nandi '+r.status);
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+  while(true){
+   const p=await rd.read();buf+=dec.decode(p.value||new Uint8Array(),{stream:!p.done});const lines=buf.split('\n');buf=lines.pop()||'';
+   for(const line of lines){
+    if(!line.trim())continue;
+    const e=JSON.parse(line);
+    if(e.type==='tool'){
+     log('TOOL',e.tool+(e.liveWorkflowRuns?' · live runs':''));
+     if(workflowVoiceMode&&e.tool==='github'&&e.liveWorkflowRuns&&!workflowSpeechStarted){
+      workflowSpeechStarted=true;
+      const shortVoice=workflowVoiceSummary(e.runCount);
+      log('VOICE','short workflow summary');
+      setVisual('speak','QUICK UPDATE','Full workflow details will stay on screen');
+      workflowSpeechPromise=speak(shortVoice).then(()=>{if(busy)setVisual('think','WORKING','Preparing workflow details')});
+     }
+    }
+    if(e.type==='worker'||e.type==='worker_selected')log('MODEL',String(e.model||'worker').replace(/^.*\//,''));
+    if(e.type==='reviewer')log('VERIFY',String(e.model||'reviewer'));
+    if(e.type==='done')final=String(e.answer||'').trim();
+    if(e.type==='error')throw new Error(e.message||'Nandi error');
+   }
+   if(p.done)break;
+  }
+  if(!final)final='I finished, but no answer text came back.';
+  showAnswer(final);history.push({role:'user',content:q},{role:'assistant',content:final});history=history.slice(-8);
+  if(workflowVoiceMode){
+   if(!workflowSpeechStarted){
+    workflowSpeechStarted=true;
+    setVisual('speak','QUICK UPDATE','Full workflow details are on screen');
+    workflowSpeechPromise=speak(workflowVoiceSummary(0));
+   }
+   if(workflowSpeechPromise)await workflowSpeechPromise;
+   setVisual('','RESULT READY','Full workflow details are on screen');
+  }else{
+   setVisual('speak','RESPONDING','Voice reply');await speak(final);
+  }
+ }catch(e){
+  const msg=e?.name==='AbortError'?'That request took too long, so I stopped it.':'I hit a problem: '+(e?.message||String(e));
+  showAnswer(msg);setVisual('error','REQUEST ISSUE','Tap the center to continue');log('ERROR',msg);await systemSpeak(msg);
+ }finally{
+  clearTimeout(timer);busy=false;currentRequest=null;if(session&&!voiceSpeaking)setTimeout(startListening,300);
+ }
+}
 function interrupt(){if(currentRequest){try{currentRequest.abort()}catch(_){}currentRequest=null}busy=false;window.NandiNeuralVoice?.cancel?.();try{speechSynthesis.cancel()}catch(_){}voiceSpeaking=false;setVisual('listen','LISTENING','Speak your new instruction');startListening()}
 startBtn.addEventListener('click',startSession);mic.addEventListener('click',()=>{if(!session)startSession();else if(busy||voiceSpeaking)interrupt();else startListening()});presence.addEventListener('click',()=>{if(!session)startSession();else if(busy||voiceSpeaking)interrupt()});
 form.addEventListener('submit',e=>{e.preventDefault();const q=input.value.trim();if(!q)return;if(!session){session=true;startBtn.classList.add('hidden');shell.classList.add('active')}awake=true;input.value='';ask(q)});
