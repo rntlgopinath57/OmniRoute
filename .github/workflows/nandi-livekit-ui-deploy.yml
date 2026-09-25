@@ -58,6 +58,8 @@ jobs:
           test -n "$LIVEKIT_API_KEY"
           test -n "$LIVEKIT_API_SECRET"
           grep -q 'NANDI_LIVEKIT_UI_V1' ai-team-playground/nandi.html
+          grep -q 'nandi-shiva-cinematic.jpg' ai-team-playground/nandi.html
+          test -s ai-team-playground/assets/nandi-shiva-cinematic.jpg
           grep -q '/api/livekit-token' ai-team-playground/nandi.html
           grep -q 'lk.transcription' ai-team-playground/nandi.html
           grep -q 'sendText' ai-team-playground/nandi.html
@@ -154,6 +156,9 @@ jobs:
             await expect(page.locator('#answerText')).toContainText('Gopi Alerts', {timeout:70000});
             await page.locator('#activity').click();
             await expect(page.locator('#drawer')).toContainText(/ROOM|AGENT|NANDI/);
+            await expect(page.locator('#drawer')).toContainText(/AUDIO/);
+            const bg=await page.locator('.scene-art').evaluate(el=>getComputedStyle(el).backgroundImage);
+            expect(bg).toContain('nandi-shiva-cinematic.jpg');
             await browser.close();
           });
           NODE
