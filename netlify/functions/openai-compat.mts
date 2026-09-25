@@ -36,7 +36,8 @@ async function proxyHermesToolTurn(body: any) {
 
   const upstreamBody = {
     ...body,
-    model: "gemini-3.8-flash",
+    model: "gemini-2.5-flash",
+    reasoning_effort: "none",
     stream: body?.stream === true,
     tool_choice: hasToolResult ? "auto" : "required",
   };
