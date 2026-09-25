@@ -94,10 +94,19 @@ async function waitForClient(){
 function installRoomHandlers(C){
  room.on(C.RoomEvent.TrackSubscribed,(track,_publication,participant)=>{
    if(track.kind===C.Track.Kind.Audio){
-     const el=track.attach();el.autoplay=true;el.style.display='none';document.body.appendChild(el);
-     log('AUDIO','agent track subscribed');
+     const el=track.attach();
+     el.autoplay=true;el.playsInline=true;el.volume=1;el.style.display='none';
+     document.body.appendChild(el);
+     Promise.resolve(el.play()).then(()=>log('AUDIO','agent audio playing')).catch(e=>{
+       log('AUDIO BLOCKED',e?.message||String(e));
+       hint.textContent='Tap the center once to enable Nandi audio';
+     });
    }
    bindAgentParticipant(participant);
+ });
+ room.on(C.RoomEvent.AudioPlaybackStatusChanged,playing=>{
+   log('AUDIO',playing?'playback enabled':'playback blocked');
+   if(!playing)hint.textContent='Tap the center once to enable Nandi audio';
  });
  room.on(C.RoomEvent.ParticipantConnected,p=>bindAgentParticipant(p));
  room.on(C.RoomEvent.ParticipantAttributesChanged,(changed,p)=>{
@@ -129,14 +138,17 @@ async function startNandi(){
  connecting=true;startBtn.disabled=true;setVisual('think','CONNECTING','Opening secure LiveKit session');clearAnswer();
  try{
    const C=await waitForClient();
-   const r=await fetch('/api/livekit-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-   const credentials=await r.json();if(!r.ok)throw new Error(credentials?.error||'Token request failed');
    room=new C.Room({adaptiveStream:true,dynacast:true});
    installRoomHandlers(C);
+
+   // Must be invoked directly from the user's click/tap before any network await.
+   try{await room.startAudio();log('AUDIO','browser audio unlocked')}catch(e){log('AUDIO UNLOCK',e?.message||String(e))}
+
+   const r=await fetch('/api/livekit-token',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   const credentials=await r.json();if(!r.ok)throw new Error(credentials?.error||'Token request failed');
    await room.connect(credentials.server_url,credentials.participant_token);
    connected=true;connecting=false;log('ROOM','LiveKit connected');
    for(const p of room.remoteParticipants.values())bindAgentParticipant(p);
-   try{await room.startAudio()}catch(_){}
    await room.localParticipant.setMicrophoneEnabled(true);
    micEnabled=true;mic.textContent='●';
    startBtn.classList.add('hidden');startBtn.disabled=false;
@@ -146,6 +158,15 @@ async function startNandi(){
    setVisual('error','CONNECTION ISSUE','Tap Start Nandi to retry');
    log('ERROR',e?.message||String(e));
  }
+}
+
+async function unlockPlayback(){
+ if(!room)return;
+ try{
+   await room.startAudio();
+   log('AUDIO','playback unlocked');
+   if(connected)hint.textContent='Speak naturally · Nandi is live';
+ }catch(e){log('AUDIO UNLOCK',e?.message||String(e))}
 }
 
 async function toggleMic(){
@@ -168,6 +189,7 @@ async function sendText(q){
 }
 
 startBtn.addEventListener('click',startNandi);
+presence.addEventListener('click',unlockPlayback);
 mic.addEventListener('click',toggleMic);
 form.addEventListener('submit',async e=>{e.preventDefault();const q=input.value.trim();if(!q)return;input.value='';try{await sendText(q)}catch(err){setVisual('error','REQUEST ISSUE','Try again');log('ERROR',err?.message||String(err))}});
 activity.addEventListener('click',()=>{const show=!drawer.classList.contains('show');drawer.classList.toggle('show',show);drawer.setAttribute('aria-hidden',String(!show))});
