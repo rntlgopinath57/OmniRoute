@@ -22,21 +22,31 @@ function completionPayload(answer: string, model: string, done: any) {
 }
 
 async function proxyHermesToolTurn(body: any) {
-  const apiKey = envGet("OPENROUTER_API_KEY");
-  if (!apiKey) return null;
   const hasTools = Array.isArray(body?.tools) && body.tools.length > 0;
   const hasToolResult = Array.isArray(body?.messages) && body.messages.some((m: any) => m?.role === "tool");
   if (!hasTools && !hasToolResult) return null;
 
+  // POC provider is selected only from an existing route that natively preserves
+  // OpenAI streaming + tools/tool_calls. Gemini's official OpenAI compatibility
+  // endpoint supports both, so no schema translation is needed here.
+  const apiKey = envGet("GEMINI_API_KEY");
+  if (!apiKey) {
+    return Response.json({ error: { message: "HERMES_PREFLIGHT_BLOCKED: GEMINI_API_KEY unavailable", type: "provider_unavailable" } }, { status: 503 });
+  }
+
   const upstreamBody = {
     ...body,
-    model: "qwen/qwen3.8-27b:free",
+    model: "gemini-3.8-flash",
     stream: body?.stream === true,
     tool_choice: hasToolResult ? "auto" : "required",
   };
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", "authorization": `Bearer ${apiKey}` },
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${apiKey}`,
+      "x-goog-api-client": "omniroute-hermes-poc/1.0",
+    },
     body: JSON.stringify(upstreamBody),
   });
   return new Response(response.body, {
@@ -45,6 +55,7 @@ async function proxyHermesToolTurn(body: any) {
       "Content-Type": response.headers.get("Content-Type") || (body?.stream ? "text/event-stream; charset=utf-8" : "application/json"),
       "Cache-Control": "no-store",
       "X-OmniRoute-Compat": "hermes-tool-bridge-poc",
+      "X-OmniRoute-Hermes-Provider": "gemini-openai-compat",
     },
   });
 }
