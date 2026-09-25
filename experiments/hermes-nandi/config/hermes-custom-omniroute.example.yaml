@@ -1,0 +1,13 @@
+# Hermes -> OmniRoute POC configuration template
+# No secrets committed. Use only on the isolated POC runtime.
+model:
+  provider: custom
+  default: relay
+  # Hermes supports OpenAI-compatible endpoints. Point this to the existing
+  # OmniRoute/Relay OpenAI-compatible endpoint when running the POC.
+  base_url: ${OMNIROUTE_OPENAI_BASE_URL}
+  api_key: ${OMNIROUTE_API_KEY}
+  context_length: 64000
+
+# First gate is deliberately read-only.
+# Do not enable deploy/messaging/browser mutation until repo-check passes.
