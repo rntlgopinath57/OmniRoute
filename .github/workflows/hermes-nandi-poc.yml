@@ -1,6 +1,9 @@
 name: Hermes Nandi POC
 
 on:
+  push:
+    branches: [release/v3.8.51]
+    paths: ['.github/workflows/hermes-nandi-poc.yml']
   workflow_dispatch:
     inputs:
       ref:
@@ -18,7 +21,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
@@ -34,12 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ inputs.ref }}
+          ref: spike/hermes-nandi-poc-20260925
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "24"
       - name: Guard isolated ref
-        run: test "${{ inputs.ref }}" = "spike/hermes-nandi-poc-20260925"
+        run: test "$(git branch --show-current)" = "spike/hermes-nandi-poc-20260925"
       - name: Static regression checks
         run: |
           grep -q 'openAICompatHandler' cloudflare/worker.ts
@@ -83,3 +86,38 @@ jobs:
           assert 'HERMES_NANDI_OK' in x['choices'][0]['message']['content'], x
           print('REAL_OUTPUT: PASS')
           PY
+
+      - name: Install real Hermes Agent runtime
+        run: |
+          curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+          export PATH="$HOME/.local/bin:$PATH"
+          hermes --version
+      - name: Load Nandi skill into Hermes
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir -p "$HOME/.hermes/skills/nandi-repo-check"
+          cp experiments/hermes-nandi/skills/nandi-repo-check/SKILL.md "$HOME/.hermes/skills/nandi-repo-check/SKILL.md"
+          hermes skills list | tee /tmp/hermes-skills.txt
+          grep -q 'nandi-repo-check' /tmp/hermes-skills.txt
+      - name: Configure Hermes to isolated OmniRoute
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir -p "$HOME/.hermes"
+          cat > "$HOME/.hermes/config.yaml" <<YAML
+          providers:
+            nandi-relay:
+              api: ${{ steps.deploy.outputs.url }}/api/v1
+              transport: chat_completions
+              default_model: relay
+              discover_models: false
+          model:
+            provider: nandi-relay
+            default: relay
+          YAML
+      - name: Real Hermes runtime through OmniRoute
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          set -o pipefail
+          hermes chat --oneshot --provider nandi-relay --model relay --toolsets skills -s nandi-repo-check -q "Reply with exactly HERMES_RUNTIME_NANDI_OK" | tee /tmp/hermes-runtime.txt
+          grep -q 'HERMES_RUNTIME_NANDI_OK' /tmp/hermes-runtime.txt
+          echo "HERMES_RUNTIME: PASS"
