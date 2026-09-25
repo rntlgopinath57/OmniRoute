@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, cli, function_tool
+from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, cli, function_tool, text_transforms
 from livekit.plugins import groq, silero
 
 logger = logging.getLogger("nandi-livekit")
@@ -16,6 +16,42 @@ GITHUB_REPOS = (
     "rntlgopinath57/gopi_alerts",
     "rntlgopinath57/OmniRoute",
 )
+
+
+HUMAN_RESPONSE_POLICY = (
+    "Speak like a capable personal assistant, not a terminal, dashboard, or raw API. "
+    "Always translate technical evidence into plain human meaning before answering. "
+    "Lead with the conclusion, then give only the context that helps Gopinath decide or act. "
+    "Do not recite GitHub owner paths, slash-separated repository identifiers, commit hashes, URLs, "
+    "JSON, IDs, branch names, workflow filenames, file extensions, markdown syntax, or raw tool payloads "
+    "unless the user explicitly asks for that exact technical detail. "
+    "When discussing repositories, use friendly project names and explain what each is for. "
+    "When discussing workflows, use friendly workflow names and explain health or purpose, not YAML filenames. "
+    "When discussing alerts or checks, say what is healthy, failing, changed, or needs attention. "
+    "Default to one to three natural sentences. Use lists only when the user asks for a list. "
+    "Never read tool output verbatim. Synthesize it into a human response."
+)
+
+
+def friendly_workflow_name(filename: str) -> str:
+    stem = str(filename or "")
+    if stem.endswith(".yaml"):
+        stem = stem[:-5]
+    elif stem.endswith(".yml"):
+        stem = stem[:-4]
+    stem = stem.replace("_", " ").replace("-", " ")
+    words = [part for part in stem.split() if part]
+    special = {
+        "nandi": "Nandi",
+        "livekit": "LiveKit",
+        "gopi": "Gopi",
+        "github": "GitHub",
+        "nse": "NSE",
+        "ai": "AI",
+        "cbm": "CBM",
+        "qr": "QR",
+    }
+    return " ".join(special.get(word.lower(), word.capitalize()) for word in words)
 
 
 def _github_json(url: str) -> Any:
@@ -46,22 +82,62 @@ class Nandi(Agent):
     def __init__(self) -> None:
         super().__init__(
             instructions=(
-                "You are Nandi, Gopi's concise voice agent. "
-                "This is a proof of a real conversational agent, not a general chatbot. "
-                "For any request about Gopi Alerts, including likely speech-to-text variants such as "
+                "You are Nandi, Gopinath's natural personal voice agent. "
+                + HUMAN_RESPONSE_POLICY
+                + " For any request about Gopi Alerts, including likely speech-to-text variants such as "
                 "Gopy, Goopy, or Gobi Alerts, always call check_gopi_alerts before answering. "
+                "For requests about the user's repositories, repos, projects, or what each repository is for, "
+                "always call repo_overview before answering. "
                 "For requests to list, count, enumerate, or name workflows, always call list_workflows. "
                 "For requests about workflow status, health, failures, or recent GitHub Actions runs, always call "
-                "workflow_health. Never substitute recent run names for the workflow-file inventory. "
-                "When list_workflows returns a total and repository groups, use that total exactly and list the "
-                "workflow files from those groups without recalculating from other context. "
-                "Never invent repository or workflow status. "
-                "Otherwise speak only the useful conclusion in one or two short sentences. "
-                "Do not read commit hashes, raw JSON, or internal tool names aloud. "
-                "For unrelated questions, answer briefly. If speech is unclear or fragmentary, ask the user "
-                "to repeat instead of guessing."
+                "workflow_health. Never substitute recent run names for the workflow inventory. "
+                "If speech is unclear or fragmentary, ask the user to repeat instead of guessing."
             ),
         )
+
+    @function_tool()
+    async def repo_overview(self, context: RunContext) -> dict[str, Any]:
+        """Return a verified, human-friendly overview of the user's main repositories and what each one is for."""
+        friendly = {
+            "rntlgopinath57/safeqr": {
+                "name": "SafeQR",
+                "purpose": "the Bharosa child-safety QR project, including reliability, privacy, and alerting",
+            },
+            "rntlgopinath57/gopi_alerts": {
+                "name": "Gopi Alerts",
+                "purpose": "the automation hub for monitoring, scheduled checks, alerts, and delivery workflows",
+            },
+            "rntlgopinath57/OmniRoute": {
+                "name": "OmniRoute",
+                "purpose": "the routing and agent workspace for model switching, Relay, and Nandi voice-agent flows",
+            },
+        }
+
+        async def verify(repo: str) -> dict[str, Any]:
+            data = await github_json(f"https://api.github.com/repos/{repo}")
+            info = friendly[repo]
+            return {
+                "name": info["name"],
+                "purpose": info["purpose"],
+                "verified": bool(data.get("full_name")),
+            }
+
+        repositories = await asyncio.gather(*(verify(repo) for repo in GITHUB_REPOS))
+        if not all(item["verified"] for item in repositories):
+            raise RuntimeError("Repository overview verification is incomplete")
+
+        logger.info("Repository overview verified: %s repositories", len(repositories))
+        return {
+            "status": "PASS",
+            "repository_count": len(repositories),
+            "repositories": repositories,
+            "spoken_summary": (
+                "You have three main repositories. SafeQR supports Bharosa, "
+                "Gopi Alerts runs your monitoring and automations, "
+                "and OmniRoute handles routing, Relay, and Nandi agent flows."
+            ),
+            "instruction": "Use friendly names and purposes only. Never speak raw GitHub paths or owner names.",
+        }
 
     @function_tool()
     async def check_gopi_alerts(self, context: RunContext) -> dict[str, Any]:
@@ -77,11 +153,10 @@ class Nandi(Agent):
         logger.info("Gopi Alerts live evidence verified")
         return {
             "status": "PASS",
-            "repository": repo,
-            "default_branch": branch,
-            "latest_commit_sha": sha,
-            "commit_time": commit_time,
-            "spoken_summary": "Gopi Alerts is verified and the latest main update is confirmed.",
+            "name": "Gopi Alerts",
+            "latest_update_time": commit_time,
+            "spoken_summary": "Gopi Alerts is verified and its latest update is confirmed.",
+            "instruction": "Explain the health and relevance. Do not speak the commit hash, branch name, or repository path.",
         }
 
     @function_tool()
@@ -97,9 +172,13 @@ class Nandi(Agent):
                 and str(item.get("name") or "").endswith((".yml", ".yaml"))
             )
             return {
-                "repository": repo,
+                "repository_name": {
+                    "rntlgopinath57/safeqr": "SafeQR",
+                    "rntlgopinath57/gopi_alerts": "Gopi Alerts",
+                    "rntlgopinath57/OmniRoute": "OmniRoute",
+                }[repo],
                 "workflow_count": len(workflow_files),
-                "workflow_files": workflow_files,
+                "workflows": [friendly_workflow_name(name) for name in workflow_files],
             }
 
         repositories = await asyncio.gather(*(repo_inventory(repo) for repo in GITHUB_REPOS))
@@ -112,6 +191,7 @@ class Nandi(Agent):
             "repositories": repositories,
             "instruction": (
                 "Use workflow_count exactly as returned. The repositories array is the complete inventory. "
+                "Speak the friendly workflow names, not filenames or extensions. "
                 "Do not use recent run names or infer a different count."
             ),
         }
@@ -129,7 +209,14 @@ class Nandi(Agent):
                     "state": str(state or "unknown"),
                     "updated_at": str(run.get("updated_at") or ""),
                 })
-            return {"repository": repo, "runs": runs}
+            return {
+                "repository_name": {
+                    "rntlgopinath57/safeqr": "SafeQR",
+                    "rntlgopinath57/gopi_alerts": "Gopi Alerts",
+                    "rntlgopinath57/OmniRoute": "OmniRoute",
+                }[repo],
+                "runs": runs,
+            }
 
         repositories = await asyncio.gather(*(repo_runs(repo) for repo in GITHUB_REPOS))
         run_count = sum(len(item["runs"]) for item in repositories)
@@ -175,6 +262,19 @@ async def nandi_session(ctx: JobContext) -> None:
             model="canopylabs/orpheus-v1-english",
             voice="daniel",
         ),
+        tts_text_transforms=[
+            "filter_emoji",
+            "filter_markdown",
+            text_transforms.replace({
+                "rntlgopinath57/safeqr": "SafeQR",
+                "rntlgopinath57/gopi_alerts": "Gopi Alerts",
+                "rntlgopinath57/OmniRoute": "OmniRoute",
+                "gopi_alerts": "Gopi Alerts",
+                "safeqr": "SafeQR",
+                ".yml": "",
+                ".yaml": "",
+            }),
+        ],
     )
     await session.start(agent=Nandi(), room=ctx.room)
     await ctx.connect()
