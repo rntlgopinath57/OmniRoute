@@ -3,6 +3,7 @@ import transcribeHandler from "../netlify/functions/transcribe.mts";
 import transcribeHandler from "../netlify/functions/transcribe.mts";
 import mediaHandler from "../netlify/functions/media.mts";
 import healthHandler from "../netlify/functions/health.mts";
+import openAICompatHandler from "../netlify/functions/openai-compat.mts";
 import { setRuntimeEnv } from "../relay-runtime/env.mts";
 
 type Env = {
@@ -87,6 +88,7 @@ export default {
     if (url.pathname === "/api/transcribe") return secure(await transcribeHandler(request));
     if (url.pathname === "/api/media") return secure(await mediaHandler(request));
     if (url.pathname === "/api/health") return secure(await healthHandler());
+    if (url.pathname === "/api/v1/chat/completions") return secure(await openAICompatHandler(request));
 
     if (url.pathname.startsWith("/api/")) {
       return secure(Response.json({ error: "Not found" }, { status: 404 }));
