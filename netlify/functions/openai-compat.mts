@@ -22,7 +22,7 @@ function completionPayload(answer: string, model: string, done: any) {
 }
 
 async function proxyHermesToolTurn(body: any) {
-  const apiKey = envGet("GROQ_API_KEY");
+  const apiKey = envGet("OPENROUTER_API_KEY");
   if (!apiKey) return null;
   const hasTools = Array.isArray(body?.tools) && body.tools.length > 0;
   const hasToolResult = Array.isArray(body?.messages) && body.messages.some((m: any) => m?.role === "tool");
@@ -30,11 +30,11 @@ async function proxyHermesToolTurn(body: any) {
 
   const upstreamBody = {
     ...body,
-    model: "openai/gpt-oss-20b",
+    model: "qwen/qwen3.8-27b:free",
     stream: body?.stream === true,
     tool_choice: hasToolResult ? "auto" : "required",
   };
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", "authorization": `Bearer ${apiKey}` },
     body: JSON.stringify(upstreamBody),
