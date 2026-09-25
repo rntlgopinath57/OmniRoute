@@ -5,24 +5,22 @@ description: Read-only repository health/current-state check for an existing Gop
 
 # Nandi Repository Check
 
+Use this skill when the user asks Nandi to check an existing project repository.
+
 ## Procedure
-1. Map the user's named existing project to its canonical repository. For the first POC only: Gopi Alerts -> rntlgopinath57/gopi_alerts.
-2. Fetch repository metadata from GitHub.
-3. Identify the default branch.
-4. Fetch the latest commit on that branch.
-5. Report repository, default branch, latest commit SHA, pushed/commit time, and whether evidence was successfully retrieved.
+1. Map the user's named project only through the allowlist in `check_repo.py`.
+2. Run:
+   `python ~/.hermes/skills/nandi-repo-check/check_repo.py "Gopi Alerts"`
+3. Treat the script output as the evidence. Report repository, default branch, latest commit SHA, commit time, and PASS/FAIL.
+4. Do not invent or substitute repository names.
 
 ## Guardrails
 - READ ONLY.
 - Never create/update/delete files, refs, issues, PRs, workflow runs, secrets, deployments, or messages.
 - Never infer success from an LLM response.
-- If GitHub evidence is unavailable, return FAIL: UNVERIFIED.
-- Do not silently substitute another repository.
-
-## Regression checks
-- Wrong repo must fail closed.
-- Missing GitHub evidence must not be called healthy.
-- A successful tool call without user-visible evidence is not a pass.
+- If GitHub evidence is unavailable, return `FAIL: UNVERIFIED`.
+- Unknown projects must return `FAIL: UNVERIFIED`.
+- Mutation requests are outside this skill and must not be executed.
 
 ## Verification
-PASS only when repository metadata and latest default-branch commit are both retrieved from GitHub.
+PASS only when repository metadata and latest default-branch commit are both retrieved from GitHub by `check_repo.py`.
