@@ -185,6 +185,23 @@ jobs:
             await expect(page.locator('#drawer')).toHaveClass(/show/);
           });
 
+          test('first spoken command works without requiring Hi Nandi', async ({ page }) => {
+            await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
+              contentType:'application/javascript',
+              body:`window.NandiNeuralVoice={unlock:async()=>true,load:async()=>({}),status:()=>({ready:true,unlocked:true,dtype:'q4'}),cancel:()=>{},speak:async()=>true};`
+            }));
+            await page.route('**/api/nandi', route => route.fulfill({
+              contentType:'application/x-ndjson',
+              body:[
+                JSON.stringify({type:'tool',tool:'nandi-repo-check',status:'complete',evidence:'github-live'}),
+                JSON.stringify({type:'done',answer:'Gopi Alerts is verified. Status: PASS.',review:'PASS'})
+              ].join('\n')+'\n'
+            }));
+            await page.goto(URL+'/nandi?nandi_test=1',{waitUntil:'domcontentloaded'});
+            await page.evaluate(()=>window.__NANDI_PHONE_TEST__.simulateTranscript('Check Gopi Alerts'));
+            await expect(page.locator('#answerText')).toContainText('Gopi Alerts is verified');
+          });
+
           test('workflow follow-up speaks only a short summary and keeps full details on screen', async ({ page }) => {
             await page.route('**/assets/nandi-neural-voice.js', route => route.fulfill({
               contentType:'application/javascript',
