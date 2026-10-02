@@ -1,0 +1,35 @@
+name: One-Time Infra Branch Cleanup
+
+on:
+  push:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ops/infra-branch-cleanup.trigger"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-infra-branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout production branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Delete superseded Cloudflare infra branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "release/v3.8.51"
+          test -f archive/branch-recovery-map-2026-10-02.json
+          test -f archive/infra-cloudflare-relay-final-snapshot-2026-10-02.json
+          git push origin --delete infra/cloudflare-relay
+          echo "INFRA_BRANCH_CLEANUP=PASS"
