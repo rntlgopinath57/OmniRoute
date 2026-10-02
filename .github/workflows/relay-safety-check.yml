@@ -62,6 +62,7 @@ jobs:
           ask = Path("netlify/functions/ask.mts").read_text(encoding="utf-8")
           media = Path("netlify/functions/media.mts").read_text(encoding="utf-8")
           worker = Path("cloudflare/worker.ts").read_text(encoding="utf-8")
+          named = Path("relay-runtime/named-agent-routing.mjs").read_text(encoding="utf-8")
 
           for item in ["Ask Relay anything", "GENERATE IMAGE", "GENERATE VIDEO", "EDIT VIDEO",
                        "media-generator.js", "video-editor.js"]:
@@ -93,7 +94,7 @@ jobs:
           assert "let pool = explicitRoute.strict" in ask and "? sameFamilyPool" in ask, "Explicit-only provider must use a same-family strict pool"
           assert "strict: route.strict" in ask and "affinity: route.affinity" in ask, "Strict-vs-affinity provider intent split missing"
           for provider in ["gemini", "claude", "openai", "deepseek", "qwen", "groq", "cloudflare", "grok"]:
-              assert f'family: "{provider}"' in ask, f"Missing explicit route for {provider}"
+              assert f'family: "{provider}"' in named, f"Missing named-agent route for {provider}"
           print("Relay safety invariants: PASS")
 
       - name: Secret guard
