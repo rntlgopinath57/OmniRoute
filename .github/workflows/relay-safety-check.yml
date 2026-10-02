@@ -3,7 +3,7 @@ name: Relay Safety Check
 on:
   push:
     branches:
-      - infra/cloudflare-relay
+      - "release/v3.8.51"
     paths:
       - "ai-team-playground/**"
       - "netlify/functions/**"
@@ -14,7 +14,7 @@ on:
       - ".github/workflows/relay-safety-check.yml"
   pull_request:
     branches:
-      - infra/cloudflare-relay
+      - "release/v3.8.51"
     paths:
       - "ai-team-playground/**"
       - "netlify/functions/**"
