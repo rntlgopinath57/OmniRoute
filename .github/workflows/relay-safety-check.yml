@@ -90,8 +90,8 @@ jobs:
           assert reviewer_block.index("CLOUDFLARE_MODELS.fast") < reviewer_block.index("GROQ_MODELS.fast"), "Local Cloudflare reviewer must be preferred before external Groq"
           assert "Explicit provider intent is strict" in ask, "Explicit provider strictness regression"
           assert "Relay will not silently switch providers" in ask and "explicit-only request" in ask, "Explicit provider failsafe missing"
-          assert "let pool = explicitRoute.explicit" in ask, "Explicit provider must use a strict candidate pool"
-          assert "const strictIntent =" in ask, "Provider mention must not force strict routing"
+          assert "let pool = explicitRoute.strict" in ask and "? sameFamilyPool" in ask, "Explicit-only provider must use a same-family strict pool"
+          assert "strict: route.strict" in ask and "affinity: route.affinity" in ask, "Strict-vs-affinity provider intent split missing"
           for provider in ["gemini", "claude", "openai", "deepseek", "qwen", "groq", "cloudflare", "grok"]:
               assert f'family: "{provider}"' in ask, f"Missing explicit route for {provider}"
           print("Relay safety invariants: PASS")
