@@ -6,7 +6,6 @@ on:
     - cron: "35 2 * * *" # 08:05 IST daily runtime verification
   push:
     branches:
-      - infra/cloudflare-relay
       - release/v3.8.51
     paths:
       - "cloudflare/**"
