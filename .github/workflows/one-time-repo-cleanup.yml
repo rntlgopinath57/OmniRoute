@@ -1,0 +1,78 @@
+name: One-Time Repo Branch Cleanup
+
+on:
+  push:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ops/repo-cleanup.trigger"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-repo-branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  archive-and-clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout full repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Archive deleted branches as tags and remove branch refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "repo-cleanup-bot"
+          git config user.email "repo-cleanup-bot@users.noreply.github.com"
+          git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+          keep_branch() {
+            case "$1" in
+              release/v3.8.51|infra/cloudflare-relay|nandi-immersive-v1|nandi-livekit-proof) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          deleted=0
+          tagged=0
+          failed=0
+          while IFS= read -r ref; do
+            branch="${ref#origin/}"
+            [ "$branch" = "HEAD" ] && continue
+            if keep_branch "$branch"; then
+              echo "KEEP $branch"
+              continue
+            fi
+
+            tag="archive/pre-cleanup-20261002/$branch"
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "ARCHIVE_TAG_EXISTS $tag"
+            else
+              git tag "$tag" "$ref"
+              if git push origin "refs/tags/$tag"; then
+                echo "ARCHIVED $branch -> $tag"
+                tagged=$((tagged + 1))
+              else
+                echo "FAILED_TAG $branch"
+                failed=$((failed + 1))
+                continue
+              fi
+            fi
+
+            if git push origin --delete "$branch"; then
+              echo "DELETED $branch"
+              deleted=$((deleted + 1))
+            else
+              echo "FAILED_DELETE $branch"
+              failed=$((failed + 1))
+            fi
+          done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin | sort)
+
+          echo "CLEANUP_RESULT tagged=$tagged deleted=$deleted failed=$failed"
+          test "$failed" -eq 0
