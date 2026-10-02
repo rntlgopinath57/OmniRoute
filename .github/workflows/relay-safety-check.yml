@@ -89,7 +89,7 @@ jobs:
           reviewer_block = ask[ask.index("function resolveReviewerModels"):ask.index("function disambiguationContext")]
           assert reviewer_block.index("CLOUDFLARE_MODELS.fast") < reviewer_block.index("GROQ_MODELS.fast"), "Local Cloudflare reviewer must be preferred before external Groq"
           assert "Explicit provider intent is strict" in ask, "Explicit provider strictness regression"
-          assert "Relay will not silently switch providers for an explicit request." in ask, "Explicit provider failsafe missing"
+          assert "Relay will not silently switch providers" in ask and "explicit-only request" in ask, "Explicit provider failsafe missing"
           assert "let pool = explicitRoute.explicit" in ask, "Explicit provider must use a strict candidate pool"
           assert "const strictIntent =" in ask, "Provider mention must not force strict routing"
           for provider in ["gemini", "claude", "openai", "deepseek", "qwen", "groq", "cloudflare", "grok"]:
