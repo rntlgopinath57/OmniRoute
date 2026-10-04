@@ -32,3 +32,27 @@ export function selfTest() {
   assert.equal(fixed.repaired, true);
   return true;
 }
+
+
+export function createHindsightAdapter({ baseUrl, bankId, fetchImpl = fetch }) {
+  const endpoint = String(baseUrl || "").replace(/\/$/, "");
+  async function request(path, body) {
+    const response = await fetchImpl(endpoint + path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(`hindsight_http_${response.status}`);
+    return response.json();
+  }
+  return {
+    retainVerified: async ({ content, verified }) => {
+      if (!verified) return { retained: false, reason: "unverified" };
+      const result = await request(`/v1/default/banks/${encodeURIComponent(bankId)}/memories`, {
+        items: [{ content }],
+      });
+      return { retained: true, result };
+    },
+    recall: async (query) => request(`/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`, { query }),
+  };
+}
