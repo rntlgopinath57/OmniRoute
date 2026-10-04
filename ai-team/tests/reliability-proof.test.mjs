@@ -4,7 +4,7 @@ import { assessOutput, retainVerifiedMemory, repairOnce } from "../reliability/p
 
 test("Unlazy-style acceptance gate preserves structural failure", () => {
   assert.deepEqual(assessOutput("A plausible but unstructured Relay answer."), {
-    ok: false, reason: "output_too_short"
+    ok: false, reason: "format_structure_incomplete"
   });
 });
 
