@@ -1,5 +1,16 @@
 import { selectModelRoute } from "./router.mjs";
 
+function reliabilityEnabled(env = process.env) {
+  return env.OMNI_RELIABILITY_V1 === "1";
+}
+
+export function validateTaskResult(result, env = process.env) {
+  if (!reliabilityEnabled(env)) return { ok: true, mode: "legacy" };
+  const route = result?.route;
+  const ok = result?.status === "success" && route && typeof route === "object";
+  return { ok: Boolean(ok), mode: "reliability-v1", reason: ok ? "pass" : "route_or_status_invalid" };
+}
+
 const CLASSIFICATION_RULES = [
   {
     type: "automation",
@@ -95,11 +106,13 @@ export function executeTask(input) {
   const task = normalizeTask(input);
   const route = selectModelRoute(task.type);
 
-  return {
+  const result = {
     status: "success",
     task: task.task,
     type: task.type,
     route,
     result: "AI Team task received successfully",
   };
+  const acceptance = validateTaskResult(result);
+  return reliabilityEnabled() ? { ...result, acceptance } : result;
 }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { classifyTask, executeTask, normalizeTask } from "../src/task.mjs";
+import { classifyTask, executeTask, normalizeTask, validateTaskResult } from "../src/task.mjs";
 
 test("normalizes a valid task with explicit type", () => {
   assert.deepEqual(normalizeTask({ task: "  Review Bharosa security  ", type: "ANALYSIS" }), {
@@ -53,4 +53,16 @@ test("returns a classified and routed structured result", () => {
     },
     result: "AI Team task received successfully",
   });
+});
+
+
+test("reliability gate is legacy-safe when feature flag is off", () => {
+  assert.deepEqual(validateTaskResult({ status: "broken" }, {}), { ok: true, mode: "legacy" });
+});
+
+test("reliability gate validates routed result when feature flag is on", () => {
+  const good = validateTaskResult({ status: "success", route: { primaryProvider: "openai" } }, { OMNI_RELIABILITY_V1: "1" });
+  assert.deepEqual(good, { ok: true, mode: "reliability-v1", reason: "pass" });
+  const bad = validateTaskResult({ status: "success", route: null }, { OMNI_RELIABILITY_V1: "1" });
+  assert.deepEqual(bad, { ok: false, mode: "reliability-v1", reason: "route_or_status_invalid" });
 });
