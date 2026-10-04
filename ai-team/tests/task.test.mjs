@@ -56,8 +56,9 @@ test("returns a classified and routed structured result", () => {
 });
 
 
-test("reliability gate is legacy-safe when feature flag is off", () => {
-  assert.deepEqual(validateTaskResult({ status: "broken" }, {}), { ok: true, mode: "legacy" });
+test("reliability gate is active by default with explicit rollback switch", () => {
+  assert.deepEqual(validateTaskResult({ status: "success", route: { primaryProvider: "openai" } }, {}).mode, "reliability-v1");
+  assert.deepEqual(validateTaskResult({ status: "broken" }, { OMNI_RELIABILITY_V1: "0" }), { ok: true, mode: "legacy" });
 });
 
 test("reliability gate validates routed result when feature flag is on", () => {
