@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: "24"
       - name: Legacy path
+        env:
+          OMNI_RELIABILITY_V1: "0"
         run: |
           node ai-team/src/main.mjs '{"task":"Create a workflow every morning"}' > /tmp/legacy.json
           node --input-type=module -e "import fs from 'node:fs'; const x=JSON.parse(fs.readFileSync('/tmp/legacy.json')); if (x.acceptance !== undefined) process.exit(1); if (x.status !== 'success' || !x.route) process.exit(1)"
