@@ -41,7 +41,9 @@ test("rejects an empty task", () => {
   assert.throws(() => normalizeTask({ task: "   " }), /non-empty task string/);
 });
 
-test("returns a classified and routed structured result", () => {
+test("returns the legacy structured result when rollback switch is explicit", () => {
+  const previous = process.env.OMNI_RELIABILITY_V1;
+  process.env.OMNI_RELIABILITY_V1 = "0";
   assert.deepEqual(executeTask({ task: "Create a workflow every morning" }), {
     status: "success",
     task: "Create a workflow every morning",
@@ -53,6 +55,8 @@ test("returns a classified and routed structured result", () => {
     },
     result: "AI Team task received successfully",
   });
+  if (previous === undefined) delete process.env.OMNI_RELIABILITY_V1;
+  else process.env.OMNI_RELIABILITY_V1 = previous;
 });
 
 
