@@ -11,6 +11,12 @@ export function validateTaskResult(result, env = process.env) {
   return { ok: Boolean(ok), mode: "reliability-v1", reason: ok ? "pass" : "route_or_status_invalid" };
 }
 
+export function enforceTaskResult(result, env = process.env) {
+  const acceptance = validateTaskResult(result, env);
+  if (!acceptance.ok) throw new Error(`Reliability gate rejected task result: ${acceptance.reason}`);
+  return reliabilityEnabled(env) ? { ...result, acceptance } : result;
+}
+
 const CLASSIFICATION_RULES = [
   {
     type: "automation",
@@ -113,6 +119,5 @@ export function executeTask(input) {
     route,
     result: "AI Team task received successfully",
   };
-  const acceptance = validateTaskResult(result);
-  return reliabilityEnabled() ? { ...result, acceptance } : result;
+  return enforceTaskResult(result);
 }

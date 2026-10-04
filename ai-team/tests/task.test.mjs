@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { classifyTask, executeTask, normalizeTask, validateTaskResult } from "../src/task.mjs";
+import { classifyTask, enforceTaskResult, executeTask, normalizeTask, validateTaskResult } from "../src/task.mjs";
 
 test("normalizes a valid task with explicit type", () => {
   assert.deepEqual(normalizeTask({ task: "  Review Bharosa security  ", type: "ANALYSIS" }), {
@@ -70,4 +70,17 @@ test("reliability gate validates routed result when feature flag is on", () => {
   assert.deepEqual(good, { ok: true, mode: "reliability-v1", reason: "pass" });
   const bad = validateTaskResult({ status: "success", route: null }, { OMNI_RELIABILITY_V1: "1" });
   assert.deepEqual(bad, { ok: false, mode: "reliability-v1", reason: "route_or_status_invalid" });
+});
+
+
+test("reliability enforcement rejects a bad result instead of returning false metadata", () => {
+  assert.throws(
+    () => enforceTaskResult({ status: "success", route: null }, { OMNI_RELIABILITY_V1: "1" }),
+    /Reliability gate rejected task result: route_or_status_invalid/,
+  );
+});
+
+test("rollback switch preserves legacy bad-result pass-through", () => {
+  const result = { status: "success", route: null };
+  assert.equal(enforceTaskResult(result, { OMNI_RELIABILITY_V1: "0" }), result);
 });
