@@ -1,0 +1,28 @@
+name: Agent Reliability Proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - experiment/agent-reliability-proof
+    paths:
+      - "ai-team/reliability/**"
+      - "ai-team/tests/reliability-proof.test.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Reliability proof tests
+        run: node --test ai-team/tests/reliability-proof.test.mjs
+      - name: Embedded self-test
+        run: node --input-type=module -e "import('./ai-team/reliability/proof.mjs').then(m => { if (!m.selfTest()) process.exit(1) })"
