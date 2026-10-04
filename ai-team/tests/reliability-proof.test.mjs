@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assessOutput, retainVerifiedMemory, repairOnce } from "../reliability/proof.mjs";
+import { assessOutput, retainVerifiedMemory, repairOnce, createHindsightAdapter } from "../reliability/proof.mjs";
 
 test("Unlazy-style acceptance gate preserves structural failure", () => {
   assert.deepEqual(assessOutput("A plausible but unstructured Relay answer."), {
@@ -77,4 +77,35 @@ test("real Relay failed repair is not retained and is not retried", () => {
   });
   assert.equal(retained.retained, false);
   assert.deepEqual(retained.store, {});
+});
+
+
+test("Hindsight adapter retains only verified Relay output and recalls it from isolated bank", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, body: JSON.parse(options.body) });
+    const isRecall = url.endsWith("/memories/recall");
+    return { ok: true, json: async () => isRecall ? { results: [{ text: "Relay verified route: keyless" }] } : { operation_id: "test-retain" } };
+  };
+  const memory = createHindsightAdapter({ baseUrl: "http://hindsight.test", bankId: "omniroute-experiment", fetchImpl });
+  const rejected = await memory.retainVerified({ content: "bad unverified answer", verified: false });
+  assert.equal(rejected.retained, false);
+  assert.equal(calls.length, 0);
+
+  const accepted = await memory.retainVerified({ content: "Relay verified route: keyless", verified: true });
+  assert.equal(accepted.retained, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /omniroute-experiment\/memories$/);
+
+  const recalled = await memory.recall("What Relay route was verified?");
+  assert.equal(calls.length, 2);
+  assert.equal(recalled.results[0].text, "Relay verified route: keyless");
+});
+
+test("Hindsight transport failure fails closed instead of pretending memory was retained", async () => {
+  const memory = createHindsightAdapter({
+    baseUrl: "http://hindsight.test", bankId: "omniroute-experiment",
+    fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
+  });
+  await assert.rejects(() => memory.retainVerified({ content: "verified result", verified: true }), /hindsight_http_503/);
 });
