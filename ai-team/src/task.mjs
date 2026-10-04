@@ -1,7 +1,7 @@
 import { selectModelRoute } from "./router.mjs";
 
 function reliabilityEnabled(env = process.env) {
-  return env.OMNI_RELIABILITY_V1 === "1";
+  return env.OMNI_RELIABILITY_V1 !== "0";
 }
 
 export function validateTaskResult(result, env = process.env) {
