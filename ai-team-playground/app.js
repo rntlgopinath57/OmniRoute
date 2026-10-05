@@ -496,6 +496,57 @@ function renderHandwrittenPages(body,text=''){
   body.appendChild(deck);
   show(0);
 }
+function parseFlowchartStages(text=''){
+  const normalized=String(text||'')
+    .replace(/\s+(?=\d+[.)]\s+)/g,'\n')
+    .trim();
+  return [...normalized.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]+)/g)]
+    .map(match=>({
+      index:Number(match[1]),
+      label:cleanPresentationLine(match[2])
+        .replace(/[ \t]*(?:→|⇒|➜|->|=>)[ \t]*$/g,'')
+        .trim()
+    }))
+    .filter(stage=>stage.label);
+}
+function renderFlowchart(body,text=''){
+  const stages=parseFlowchartStages(text);
+  if(stages.length<2){
+    appendStructuredText(body,text);
+    return;
+  }
+
+  const deck=document.createElement('div');
+  deck.className='flowchartVisual';
+  deck.setAttribute('role','list');
+  deck.setAttribute('aria-label','Flowchart');
+
+  stages.forEach((stage,index)=>{
+    const node=document.createElement('section');
+    node.className='flowchartNode';
+    node.setAttribute('role','listitem');
+
+    const badge=document.createElement('span');
+    badge.className='flowchartNodeIndex';
+    badge.textContent=String(index+1);
+
+    const label=document.createElement('div');
+    label.className='flowchartNodeText';
+    appendInlineMarkdown(label,stage.label);
+
+    node.append(badge,label);
+    deck.appendChild(node);
+
+    if(index<stages.length-1){
+      const connector=document.createElement('div');
+      connector.className='flowchartConnector';
+      connector.setAttribute('aria-hidden','true');
+      deck.appendChild(connector);
+    }
+  });
+
+  body.appendChild(deck);
+}
 function applyPresentation(row,text,presentation){
   if(!row)return;
   const p=presentation&&presentation.format?presentation:{format:'default',label:'STANDARD',visual:false};
@@ -527,6 +578,7 @@ function applyPresentation(row,text,presentation){
   bubble.insertBefore(header,body);
 
   if(p.format==='handwritten')renderHandwrittenPages(body,text);
+  else if(p.format==='flowchart')renderFlowchart(body,text);
   else appendStructuredText(body,text);
 }
 
