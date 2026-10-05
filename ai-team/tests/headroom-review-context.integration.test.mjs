@@ -40,7 +40,8 @@ test("Headroom compresses large structured reviewer context and preserves critic
   assert.equal(result.compressed, true, JSON.stringify(result));
   assert.equal(result.reason, "compressed");
   assert.match(result.content, /CRITICAL_REVIEW_FAILURE/);
-  console.log("HEADROOM_RATIO", result.outputBytes, result.originalBytes, result.outputBytes / result.originalBytes);\n  assert.ok(result.outputBytes < result.originalBytes * 0.5, JSON.stringify(result));
+  console.log("HEADROOM_RATIO", result.outputBytes, result.originalBytes, result.outputBytes / result.originalBytes);
+  assert.ok(result.outputBytes < result.originalBytes * 0.5, JSON.stringify(result));
 });
 
 test("reviewer sees compressed context while final executor output stays original", async () => {
@@ -75,6 +76,8 @@ test("reviewer sees compressed context while final executor output stays origina
 
   assert.equal(verdict, "PASS");
   assert.match(reviewedOutput, /CRITICAL_REVIEW_FAILURE/);
-  const reviewerRatio = Buffer.byteLength(reviewedOutput) / Buffer.byteLength(originalOutput);\n  console.log("HEADROOM_REVIEWER_RATIO", reviewerRatio);\n  assert.ok(reviewerRatio < 0.5);
+  const reviewerRatio = Buffer.byteLength(reviewedOutput) / Buffer.byteLength(originalOutput);
+  console.log("HEADROOM_REVIEWER_RATIO", reviewerRatio);
+  assert.ok(reviewerRatio < 0.5);
   assert.equal(execution.output, originalOutput);
 });
