@@ -22,6 +22,8 @@ function buildPayload() {
   return JSON.stringify(rows);
 }
 
+const runHeadroomIntegration = process.env.AI_TEAM_HEADROOM_INTEGRATION === "1";
+
 const enabledEnv = {
   ...process.env,
   AI_TEAM_HEADROOM_REVIEW: "1",
@@ -29,7 +31,10 @@ const enabledEnv = {
   AI_TEAM_HEADROOM_TIMEOUT_MS: "10000",
 };
 
-test("Headroom compresses large structured reviewer context and preserves critical evidence", async () => {
+test(
+  "Headroom compresses large structured reviewer context and preserves critical evidence",
+  { skip: !runHeadroomIntegration },
+  async () => {
   const source = buildPayload();
   const result = await compressInternalReviewContext({
     content: source,
@@ -42,9 +47,13 @@ test("Headroom compresses large structured reviewer context and preserves critic
   assert.match(result.content, /CRITICAL_REVIEW_FAILURE/);
   console.log("HEADROOM_RATIO", result.outputBytes, result.originalBytes, result.outputBytes / result.originalBytes);
   assert.ok(result.outputBytes < result.originalBytes * 0.5, JSON.stringify(result));
-});
+  },
+);
 
-test("reviewer sees compressed context while final executor output stays original", async () => {
+test(
+  "reviewer sees compressed context while final executor output stays original",
+  { skip: !runHeadroomIntegration },
+  async () => {
   const originalOutput = buildPayload();
   const execution = {
     status: "success",
@@ -80,4 +89,5 @@ test("reviewer sees compressed context while final executor output stays origina
   console.log("HEADROOM_REVIEWER_RATIO", reviewerRatio);
   assert.ok(reviewerRatio < 0.5);
   assert.equal(execution.output, originalOutput);
-});
+  },
+);
