@@ -837,7 +837,7 @@ jobs:
           echo "$response" | grep -q '"serverGeminiConfigured":true'
 
       - name: Manual live flowchart routing contract
-        if: steps.deploy.outputs.url != '' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && env.OPENROUTER_API_KEY != ''
+        if: steps.deploy.outputs.url != '' && env.OPENROUTER_API_KEY != ''
         run: |
           response="$(curl --fail --show-error --silent             -H 'Content-Type: application/json'             -d '{"question":"/flowchart Show a simple three-step release process: validate, deploy, verify.","history":[]}'             "${{ steps.deploy.outputs.url }}/api/ask")"
           echo "$response"
