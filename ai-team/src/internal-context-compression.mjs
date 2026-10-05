@@ -87,6 +87,11 @@ function runBridge({
       stderr += chunk;
     });
 
+    child.stdin.on("error", (error) => {
+      clearTimeout(timer);
+      finish(rejectResult, error);
+    });
+
     child.on("error", (error) => {
       clearTimeout(timer);
       finish(rejectResult, error);
@@ -109,7 +114,12 @@ function runBridge({
       }
     });
 
-    child.stdin.end(JSON.stringify({ content, query }));
+    try {
+      child.stdin.end(JSON.stringify({ content, query }));
+    } catch (error) {
+      clearTimeout(timer);
+      finish(rejectResult, error);
+    }
   });
 }
 
