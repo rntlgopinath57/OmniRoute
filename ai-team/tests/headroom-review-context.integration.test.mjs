@@ -37,7 +37,7 @@ test("Headroom compresses large structured reviewer context and preserves critic
     env: enabledEnv,
   });
 
-  assert.equal(result.compressed, true, result.error || result.reason);
+  assert.equal(result.compressed, true, JSON.stringify(result));
   assert.equal(result.reason, "compressed");
   assert.match(result.content, /CRITICAL_REVIEW_FAILURE/);
   assert.ok(result.outputBytes < result.originalBytes * 0.1, result);
