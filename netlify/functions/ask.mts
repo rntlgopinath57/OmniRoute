@@ -1,6 +1,7 @@
 import { envGet, envGetRaw } from "../../relay-runtime/env.mts";
 import { PUBLIC_FREE_MODEL, assessRoutingLane } from "../../relay-runtime/routing-policy.mjs";
 import { detectNamedAgentRoute } from "../../relay-runtime/named-agent-routing.mjs";
+import { flowchartLooksStructured, normalizeFlowchartAnswer } from "../../relay-runtime/flowchart-contract.mjs";
 
 function dateSensitiveFactIntent(text: string) {
   const q = String(text || "").toLowerCase();
@@ -500,7 +501,7 @@ function presentationInstruction(presentation: PresentationIntent) {
     flashcards: " Produce repeated QUESTION / ANSWER pairs, one concept per card.",
     mindmap: " Start with one central topic, then branches and sub-branches using concise labels.",
     exploded: " Break the subject into parts, what each part does, inputs/outputs, and how parts connect.",
-    flowchart: " Use ordered steps with clear decisions and transitions. Keep each step short enough to render as a node. Do not output Mermaid/Graphviz source, node IDs such as A/B/C, arrows such as A --> B, or code fences; Relay renders the flow visually itself.",
+    flowchart: " Return one numbered node per line, for example: 1. Validate input\\n2. Deploy release\\n3. Verify health. Use at least three nodes when the requested process has three or more stages. Keep every node concise. Do not output Mermaid/Graphviz source, node IDs such as A/B/C, arrow characters, ASCII diagrams, or code fences; Relay renders the nodes and connectors visually itself.",
     timeline: " Use dated or ordered milestones with a short event/outcome for each.",
     roadmap: " Use phases or time periods, with objective, actions, and exit criteria for each.",
     framework: " Use named pillars/components with purpose, inputs, outputs, and relationships.",
@@ -522,6 +523,11 @@ function presentationInstruction(presentation: PresentationIntent) {
 function presentationLooksStructured(answer: string, presentation: PresentationIntent, question: string) {
   if (!presentation || presentation.format === "default") return true;
   const text = String(answer || "").trim();
+
+  if (presentation.format === "flowchart") {
+    return flowchartLooksStructured(text);
+  }
+
   if (text.length < 220) return false;
 
   const q = question.toLowerCase();
@@ -536,10 +542,7 @@ function presentationLooksStructured(answer: string, presentation: PresentationI
   if (presentation.format === "comparison" || presentation.format === "matrix") {
     return /\b(vs\.?|versus|compare|comparison|criteria)\b/i.test(text) || /\|/.test(text);
   }
-  if (presentation.format === "flowchart" || presentation.format === "roadmap" || presentation.format === "timeline") {
-    if (presentation.format === "flowchart" && /(?:^|\n)\s*(?:flowchart|graph)\s+(?:TD|LR|TB|RL)\b|\b[A-Za-z0-9_]+--?>[A-Za-z0-9_]+|\b[A-Za-z0-9_]+\s*\[["'][^\n]+|[│▼▲├└┬┴┼─]{2,}|[-=]{2,}>/i.test(text)) {
-      return false;
-    }
+  if (presentation.format === "roadmap" || presentation.format === "timeline") {
     const numberedStages = text.match(/(?:^|\n)\s*\d+[.)]\s+/gm) || [];
     return /\b(step|phase|week|stage|milestone|then|next)\b/i.test(text)
       || numberedStages.length >= 3
@@ -1427,6 +1430,9 @@ export default async (request: Request) => {
         }
 
         answer = cleanVisibleAnswer(answer);
+        if (presentation.format === "flowchart") {
+          answer = normalizeFlowchartAnswer(answer);
+        }
 
         const reviewerCandidates = resolveReviewerModels(actualWorkerModel);
         let actualReviewerModel = reviewerCandidates[0] || "";
@@ -1512,6 +1518,9 @@ export default async (request: Request) => {
               8000,
             );
             answer = cleanVisibleAnswer(answer);
+            if (presentation.format === "flowchart") {
+              answer = normalizeFlowchartAnswer(answer);
+            }
           } catch (retryError) {
             console.warn("Refinement unavailable; returning first worker answer", {
               error: retryError instanceof Error ? retryError.message : String(retryError),
@@ -1522,6 +1531,14 @@ export default async (request: Request) => {
           if (presentation.format !== "default" && reviewStatus !== "SKIPPED") {
             reviewStatus = presentationLooksStructured(answer, presentation, question) ? "PASS" : "FAIL";
           }
+        }
+
+        if (presentation.format !== "default" && reviewStatus === "FAIL") {
+          emit({
+            type: "error",
+            message: `Relay could not satisfy the requested ${presentation.label} format; the incomplete result was blocked.`,
+          });
+          return;
         }
 
         emit({
