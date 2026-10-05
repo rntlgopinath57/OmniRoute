@@ -1,0 +1,60 @@
+name: AI Team Headroom Context Gate
+
+on:
+  push:
+    paths:
+      - "ai-team/src/internal-context-compression.mjs"
+      - "ai-team/src/reviewer.mjs"
+      - "ai-team/tools/headroom-compress.py"
+      - "ai-team/tests/internal-context-compression.test.mjs"
+      - "ai-team/tests/headroom-review-context.integration.test.mjs"
+      - "ai-team/tests/reviewer.test.mjs"
+      - ".github/workflows/ai-team-headroom-context.yml"
+  pull_request:
+    branches:
+      - "release/v3.8.51"
+    paths:
+      - "ai-team/src/internal-context-compression.mjs"
+      - "ai-team/src/reviewer.mjs"
+      - "ai-team/tools/headroom-compress.py"
+      - "ai-team/tests/internal-context-compression.test.mjs"
+      - "ai-team/tests/headroom-review-context.integration.test.mjs"
+      - "ai-team/tests/reviewer.test.mjs"
+      - ".github/workflows/ai-team-headroom-context.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-team-headroom-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headroom-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.2"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned released Headroom
+        run: python -m pip install --disable-pip-version-check -q "headroom-ai==0.39.1"
+
+      - name: Run Headroom integration proof
+        run: node --test ai-team/tests/headroom-review-context.integration.test.mjs
+
+      - name: Run full AI Team regression suite
+        run: node --test ai-team/tests/*.test.mjs
