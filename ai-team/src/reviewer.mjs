@@ -1,3 +1,5 @@
+import { compressInternalReviewContext } from "./internal-context-compression.mjs";
+
 export class ReviewerError extends Error {
   constructor(message, options = {}) {
     super(message, options);
@@ -13,7 +15,13 @@ function requireNonEmptyString(value, fieldName) {
   return value.trim();
 }
 
-export async function reviewExecution({ task, execution, reviewerProvider, reviewerClient }) {
+export async function reviewExecution({
+  task,
+  execution,
+  reviewerProvider,
+  reviewerClient,
+  contextCompressor = compressInternalReviewContext,
+}) {
   const taskText = requireNonEmptyString(task, "task");
   const output = requireNonEmptyString(execution?.output, "execution.output");
   const executorProvider = requireNonEmptyString(execution?.provider, "execution.provider");
@@ -27,10 +35,29 @@ export async function reviewExecution({ task, execution, reviewerProvider, revie
     throw new ReviewerError(`No reviewer client configured for ${reviewer}`);
   }
 
+  if (typeof contextCompressor !== "function") {
+    throw new TypeError("contextCompressor must be a function");
+  }
+
+  // Headroom is reviewer-context-only. The original executor output remains
+  // untouched in the task result. Any compression failure fails open.
+  let reviewerOutput = output;
+  try {
+    const prepared = await contextCompressor({
+      content: output,
+      query: taskText,
+    });
+    if (typeof prepared?.content === "string" && prepared.content.trim()) {
+      reviewerOutput = prepared.content;
+    }
+  } catch {
+    reviewerOutput = output;
+  }
+
   try {
     const response = await reviewerClient.review({
       task: taskText,
-      output,
+      output: reviewerOutput,
       executorProvider,
       executorModelProfile: execution?.modelProfile ?? null,
     });

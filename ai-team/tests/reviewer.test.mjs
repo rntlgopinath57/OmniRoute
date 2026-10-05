@@ -97,3 +97,60 @@ test("wraps reviewer client failures with reviewer context", async () => {
     (error) => error instanceof ReviewerError && /Reviewer google failed: temporary failure/.test(error.message),
   );
 });
+
+
+test("compresses reviewer context without mutating the executor result", async () => {
+  const originalOutput = JSON.stringify(
+    Array.from({ length: 100 }, (_, id) => ({ id, status: "ok" })),
+  );
+  const largeExecution = {
+    status: "success",
+    provider: "openai",
+    modelProfile: "research-strong",
+    output: originalOutput,
+  };
+  const calls = [];
+
+  const verdict = await reviewExecution({
+    task: "Review a large structured result",
+    execution: largeExecution,
+    reviewerProvider: "google",
+    contextCompressor: async ({ content, query }) => {
+      assert.equal(content, originalOutput);
+      assert.equal(query, "Review a large structured result");
+      return { content: "[{\"id\":99,\"status\":\"error\"}]", compressed: true };
+    },
+    reviewerClient: {
+      async review(input) {
+        calls.push(input);
+        return { verdict: "PASS" };
+      },
+    },
+  });
+
+  assert.equal(verdict, "PASS");
+  assert.equal(calls[0].output, "[{\"id\":99,\"status\":\"error\"}]");
+  assert.equal(largeExecution.output, originalOutput);
+});
+
+test("reviewer context compression fails open", async () => {
+  const calls = [];
+
+  const verdict = await reviewExecution({
+    task: "Review fallback behavior",
+    execution,
+    reviewerProvider: "google",
+    contextCompressor: async () => {
+      throw new Error("compression unavailable");
+    },
+    reviewerClient: {
+      async review(input) {
+        calls.push(input);
+        return { verdict: "PASS" };
+      },
+    },
+  });
+
+  assert.equal(verdict, "PASS");
+  assert.equal(calls[0].output, execution.output);
+});
