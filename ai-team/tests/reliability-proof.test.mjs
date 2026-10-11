@@ -80,32 +80,82 @@ test("real Relay failed repair is not retained and is not retried", () => {
 });
 
 
-test("Hindsight adapter retains only verified Relay output and recalls it from isolated bank", async () => {
-  const calls = [];
-  const fetchImpl = async (url, options) => {
-    calls.push({ url, body: JSON.parse(options.body) });
-    const isRecall = url.endsWith("/memories/recall");
-    return { ok: true, json: async () => isRecall ? { results: [{ text: "Relay verified route: keyless" }] } : { operation_id: "test-retain" } };
-  };
-  const memory = createHindsightAdapter({ baseUrl: "http://hindsight.test", bankId: "omniroute-experiment", fetchImpl });
-  const rejected = await memory.retainVerified({ content: "bad unverified answer", verified: false });
-  assert.equal(rejected.retained, false);
-  assert.equal(calls.length, 0);
+const delivered = { reviewed: true, delivery: { status: "delivered", receiptId: "relay-proof-123" } };
 
-  const accepted = await memory.retainVerified({ content: "Relay verified route: keyless", verified: true });
-  assert.equal(accepted.retained, true);
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /omniroute-experiment\/memories$/);
-
-  const recalled = await memory.recall("What Relay route was verified?");
-  assert.equal(calls.length, 2);
-  assert.equal(recalled.results[0].text, "Relay verified route: keyless");
+test("Hindsight remains disabled without explicit opt-in", async () => {
+  let called = 0;
+  const adapter = createHindsightAdapter({
+    fetchImpl: async () => { called++; throw new Error("should not call"); },
+  });
+  assert.equal((await adapter.retainVerified({ content: "any", verified: true })).retained, false);
+  assert.equal((await adapter.recall("query")).degraded, true);
+  assert.equal(called, 0);
 });
 
-test("Hindsight transport failure fails closed instead of pretending memory was retained", async () => {
-  const memory = createHindsightAdapter({
-    baseUrl: "http://hindsight.test", bankId: "omniroute-experiment",
+test("Hindsight rejects undelivered, unreviewed and invalid facts without network calls", async () => {
+  let called = 0;
+  const adapter = createHindsightAdapter({
+    enabled: true, baseUrl: "http://localhost:8888", bankId: "omniroute-experiment",
+    fetchImpl: async () => { called++; throw new Error("should not call"); },
+  });
+  for (const candidate of [
+    { content: "fact", verified: false, evidence: delivered },
+    { content: "fact", verified: true },
+    { content: "fact", verified: true, evidence: { ...delivered, reviewed: false } },
+    { content: "fact", verified: true, evidence: { reviewed: true, delivery: { status: "queued", receiptId: "r1" } } },
+    { content: "", verified: true, evidence: delivered },
+  ]) assert.equal((await adapter.retainVerified(candidate)).retained, false);
+  assert.equal(called, 0);
+});
+
+test("Hindsight requires synchronous successful extraction and isolates the project bank", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, headers: options.headers, body: JSON.parse(options.body) });
+    const recall = url.endsWith("/memories/recall");
+    return { ok: true, json: async () => recall
+      ? { results: [{ text: "Verified Relay decision" }] }
+      : { success: true, items_count: 1, async: false } };
+  };
+  const adapter = createHindsightAdapter({
+    enabled: true, baseUrl: "https://hindsight.test", bankId: "omniroute-experiment",
+    apiKey: "test-only", fetchImpl,
+  });
+  const retained = await adapter.retainVerified({
+    content: "Verified Relay decision", verified: true, evidence: delivered,
+  });
+  assert.equal(retained.retained, true);
+  assert.equal(calls[0].headers.authorization, "Bearer test-only");
+  assert.equal(calls[0].body.async, false);
+  assert.equal(calls[0].body.items[0].document_id, "relay-proof-123");
+  assert.match(calls[0].url, /omniroute-experiment\/memories$/);
+  const recalled = await adapter.recall("Which decision was verified?");
+  assert.equal(calls.length, 2);
+  assert.equal(recalled.results[0].text, "Verified Relay decision");
+});
+
+test("Hindsight must not claim retained on HTTP success without server confirmation", async () => {
+  const adapter = createHindsightAdapter({
+    enabled: true, baseUrl: "http://localhost:8888", bankId: "omniroute-experiment",
+    fetchImpl: async () => ({ ok: true, json: async () => ({ operation_id: "queued" }) }),
+  });
+  const result = await adapter.retainVerified({ content: "decision", verified: true, evidence: delivered });
+  assert.deepEqual(result, { retained: false, reason: "server_unconfirmed" });
+});
+
+test("Hindsight HTTP failure fails closed instead of pretending memory was retained", async () => {
+  const adapter = createHindsightAdapter({
+    enabled: true, baseUrl: "http://localhost:8888", bankId: "omniroute-experiment",
     fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
   });
-  await assert.rejects(() => memory.retainVerified({ content: "verified result", verified: true }), /hindsight_http_503/);
+  await assert.rejects(
+    () => adapter.retainVerified({ content: "decision", verified: true, evidence: delivered }),
+    /hindsight_http_503/,
+  );
+});
+
+test("Hindsight refuses remote plaintext URLs so credentials cannot leak", () => {
+  assert.throws(() => createHindsightAdapter({
+    enabled: true, baseUrl: "http://other-host:8888", bankId: "omniroute-experiment", apiKey: "secret",
+  }), /hindsight_insecure_remote_url/);
 });
