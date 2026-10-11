@@ -232,7 +232,10 @@ test("OpenShell static policy is restrictive and requires enforced read-only Git
   assert.match(policy, /host: api\.github\.com/);
   assert.match(policy, /protocol: rest/);
   assert.match(policy, /enforcement: enforce/);
-  assert.match(policy, /access: read-only/);
+  assert.match(policy, /path: \/repos\/NVIDIA\/OpenShell/);
+  assert.match(policy, /path: \/repos\/rntlgopinath57\/OmniRoute/);
+  assert.match(policy, /method: GET/);
+  assert.doesNotMatch(policy, /access: full/);
   assert.doesNotMatch(policy, /access: (full|read-write)/);
   assert.doesNotMatch(policy, /host: \*/);
 });
