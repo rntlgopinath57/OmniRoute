@@ -18,10 +18,9 @@ existing sandbox. Use a fresh sandbox instead of weakening one.
 Example only (on a provisioned host after reviewing the base policy):
 
 \`\`\`sh
-openshell sandbox create --name gopi-github-proof
+openshell sandbox create --name gopi-github-proof --policy ops/openshell/github-readonly-policy.yaml
 openshell policy get gopi-github-proof --full
-# Add the github_readonly policy without overwriting runtime baseline
-# filesystem settings. Inspect the effective policy before and after.
+# Confirm the active policy matches the intended restricted rules.
 openshell sandbox exec -n gopi-github-proof --no-login-shell -- \
   /usr/bin/curl -fsS https://api.github.com/repos/NVIDIA/OpenShell
 \`\`\`
