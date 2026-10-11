@@ -53,12 +53,12 @@ export function createHindsightAdapter({
   }
   const endpoint = url.href.replace(/\/$/, "");
   const bank = encodeURIComponent(bankId);
-  async function request(path, body) {
+  async function request(path, body, method = "POST") {
     const headers = { "content-type": "application/json" };
     if (apiKey) headers.authorization = "Bearer " + apiKey;
     const response = await fetchImpl(endpoint + path, {
-      method: "POST", headers, signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify(body),
+      method, headers, signal: AbortSignal.timeout(timeoutMs),
+      ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
     });
     if (!response.ok) throw new Error("hindsight_http_" + response.status);
     return response.json();
@@ -82,10 +82,21 @@ export function createHindsightAdapter({
       const result = await request("/v1/default/banks/" + bank + "/memories", {
         async: false, items: [{ content: text, document_id: id }],
       });
-      if (result?.success !== true || result?.items_count !== 1 || result?.async === true) {
+      if (result?.success !== true || result?.items_count !== 1 ||
+          result?.async !== false || result?.bank_id !== bankId) {
         return { retained: false, reason: "server_unconfirmed" };
       }
-      return { retained: true, result };
+      // items_count is a submitted count, not durable storage proof.
+      const document = await request("/v1/default/banks/" + bank +
+        "/documents/" + encodeURIComponent(id), undefined, "GET");
+      if (document?.id !== id || document?.bank_id !== bankId ||
+          String(document?.original_text || "").trim() !== text ||
+          !Number.isInteger(document?.memory_unit_count) ||
+          document.memory_unit_count < 1) {
+        return { retained: false, reason: "memory_readback_unverified" };
+      }
+      return { retained: true, result, documentId: id,
+        memoryCount: document.memory_unit_count };
     },
     recall: async (query) => {
       if (!String(query || "").trim()) return { results: [], degraded: true, reason: "empty_query" };
