@@ -19,6 +19,12 @@ network_policies:
         port: 443
         protocol: rest
         enforcement: enforce
-        access: read-only
+        rules:
+          - allow:
+              method: GET
+              path: /repos/NVIDIA/OpenShell
+          - allow:
+              method: GET
+              path: /repos/rntlgopinath57/OmniRoute
     binaries:
       - path: /usr/bin/curl
