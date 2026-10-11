@@ -114,11 +114,15 @@ test("Hindsight rejects undelivered, unreviewed and invalid facts without networ
 test("Hindsight requires synchronous successful extraction and isolates the project bank", async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
-    calls.push({ url, headers: options.headers, body: JSON.parse(options.body) });
+    calls.push({ url, method: options.method, headers: options.headers,
+      body: options.body ? JSON.parse(options.body) : null });
     const recall = url.endsWith("/memories/recall");
+    const document = url.endsWith("/documents/relay-proof-123");
     return { ok: true, json: async () => recall
       ? { results: [{ text: "Verified Relay decision" }] }
-      : { success: true, items_count: 1, async: false } };
+      : document ? { id: "relay-proof-123", bank_id: "omniroute-experiment",
+          original_text: "Verified Relay decision", memory_unit_count: 1 }
+      : { success: true, bank_id: "omniroute-experiment", items_count: 1, async: false } };
   };
   const adapter = createHindsightAdapter({
     enabled: true, baseUrl: "https://hindsight.test", bankId: "omniroute-experiment",
@@ -133,7 +137,10 @@ test("Hindsight requires synchronous successful extraction and isolates the proj
   assert.equal(calls[0].body.items[0].document_id, "relay-proof-123");
   assert.match(calls[0].url, /omniroute-experiment\/memories$/);
   const recalled = await adapter.recall("Which decision was verified?");
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[1].method, "GET");
+  assert.equal(calls[1].body, null);
+  assert.equal(retained.memoryCount, 1);
   assert.equal(recalled.results[0].text, "Verified Relay decision");
 });
 
@@ -144,6 +151,21 @@ test("Hindsight must not claim retained on HTTP success without server confirmat
   });
   const result = await adapter.retainVerified({ content: "decision", verified: true, evidence: delivered });
   assert.deepEqual(result, { retained: false, reason: "server_unconfirmed" });
+});
+
+test("Hindsight requires durable readback and extracted facts, not just accepted writes", async () => {
+  const adapter = createHindsightAdapter({
+    enabled: true, baseUrl: "http://localhost:8888", bankId: "omniroute-experiment",
+    fetchImpl: async (url) => ({ ok: true, json: async () =>
+      url.includes("/documents/") ? {
+        id: "relay-proof-123", bank_id: "omniroute-experiment",
+        original_text: "decision", memory_unit_count: 0,
+      } : { success: true, bank_id: "omniroute-experiment", items_count: 1, async: false },
+    }),
+  });
+  assert.deepEqual(await adapter.retainVerified({
+    content: "decision", verified: true, evidence: delivered,
+  }), { retained: false, reason: "memory_readback_unverified" });
 });
 
 test("Hindsight HTTP failure fails closed instead of pretending memory was retained", async () => {
