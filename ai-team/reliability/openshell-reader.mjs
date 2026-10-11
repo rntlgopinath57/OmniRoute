@@ -19,6 +19,10 @@ export function createOpenShellGitHubReader({
       if (!REPO.test(String(repository || ""))) {
         return { ok: false, reason: "invalid_repo" };
       }
+      if (!new Set(["nvidia/openshell", "rntlgopinath57/omniroute"])
+        .has(repository.toLowerCase())) {
+        return { ok: false, reason: "repo_not_allowlisted" };
+      }
       const [owner, name] = repository.split("/");
       const url = "https://api.github.com/repos/" +
         encodeURIComponent(owner) + "/" + encodeURIComponent(name);
