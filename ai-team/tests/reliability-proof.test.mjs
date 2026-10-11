@@ -1,3 +1,6 @@
+import { createOpenShellGitHubReader } from "../reliability/openshell-reader.mjs";
+import { readFileSync } from "node:fs";
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assessOutput, retainVerifiedMemory, repairOnce, createHindsightAdapter } from "../reliability/proof.mjs";
@@ -158,4 +161,78 @@ test("Hindsight refuses remote plaintext URLs so credentials cannot leak", () =>
   assert.throws(() => createHindsightAdapter({
     enabled: true, baseUrl: "http://other-host:8888", bankId: "omniroute-experiment", apiKey: "secret",
   }), /hindsight_insecure_remote_url/);
+});
+
+test("OpenShell reader does not run unless explicitly enabled", async () => {
+  let attempts = 0;
+  const reader = createOpenShellGitHubReader({
+    execFileImpl: async () => { attempts++; throw Error("unexpected execution"); },
+  });
+  assert.deepEqual(await reader.readRepository("NVIDIA/OpenShell"),
+    { ok: false, reason: "disabled" });
+  assert.equal(attempts, 0);
+});
+
+test("OpenShell blocks malformed repo and sandbox arguments before execution", async () => {
+  let attempts = 0;
+  const execFileImpl = async () => { attempts++; throw Error("unexpected execution"); };
+  const badSandbox = createOpenShellGitHubReader({
+    enabled: true, sandboxName: "demo; rm -rf /", execFileImpl,
+  });
+  const badRepo = createOpenShellGitHubReader({
+    enabled: true, sandboxName: "demo", execFileImpl,
+  });
+  assert.equal((await badSandbox.readRepository("NVIDIA/OpenShell")).ok, false);
+  assert.equal((await badRepo.readRepository("NVIDIA/OpenShell;bad")).ok, false);
+  assert.equal(attempts, 0);
+});
+
+test("OpenShell reader delegates fixed GitHub GET to isolated CLI and verifies real repo identity", async () => {
+  let captured;
+  const reader = createOpenShellGitHubReader({
+    enabled: true, sandboxName: "gopi-proof",
+    execFileImpl: async (...args) => {
+      captured = args;
+      return { stdout: JSON.stringify({
+        full_name: "NVIDIA/OpenShell", default_branch: "main", archived: false,
+      }) };
+    },
+  });
+  const result = await reader.readRepository("NVIDIA/OpenShell");
+  assert.deepEqual(result, {
+    ok: true, repository: "NVIDIA/OpenShell", defaultBranch: "main", archived: false,
+  });
+  assert.equal(captured[0], "openshell");
+  assert.deepEqual(captured[1].slice(0, 7),
+    ["sandbox", "exec", "-n", "gopi-proof", "--no-login-shell", "--", "/usr/bin/curl"]);
+  assert.equal(captured[1].at(-1), "https://api.github.com/repos/NVIDIA/OpenShell");
+  assert.equal(captured[2].timeout, 10000);
+});
+
+test("OpenShell missing runtime or wrong result never returns success", async () => {
+  const offline = createOpenShellGitHubReader({
+    enabled: true, sandboxName: "gopi-proof",
+    execFileImpl: async () => { throw Error("CLI not installed"); },
+  });
+  assert.equal((await offline.readRepository("NVIDIA/OpenShell")).ok, false);
+  const wrong = createOpenShellGitHubReader({
+    enabled: true, sandboxName: "gopi-proof",
+    execFileImpl: async () => ({ stdout: '{"full_name":"someone/else"}' }),
+  });
+  assert.deepEqual(await wrong.readRepository("NVIDIA/OpenShell"),
+    { ok: false, reason: "wrong_repo_or_response" });
+});
+
+test("OpenShell static policy is restrictive and requires enforced read-only GitHub", () => {
+  const policy = readFileSync(new URL("../../ops/openshell/github-readonly-policy.yaml",
+    import.meta.url), "utf8");
+  assert.match(policy, /^version: 1$/m);
+  assert.match(policy, /include_workdir: false/);
+  assert.match(policy, /compatibility: hard_requirement/);
+  assert.match(policy, /host: api\.github\.com/);
+  assert.match(policy, /protocol: rest/);
+  assert.match(policy, /enforcement: enforce/);
+  assert.match(policy, /access: read-only/);
+  assert.doesNotMatch(policy, /access: (full|read-write)/);
+  assert.doesNotMatch(policy, /host: \*/);
 });
