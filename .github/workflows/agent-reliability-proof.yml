@@ -7,6 +7,7 @@ on:
       - release/v3.8.51
     paths:
       - "ai-team/reliability/**"
+      - "ops/openshell/**"
       - "ai-team/tests/reliability-proof.test.mjs"
       - ".github/workflows/agent-reliability-proof.yml"
   push:
