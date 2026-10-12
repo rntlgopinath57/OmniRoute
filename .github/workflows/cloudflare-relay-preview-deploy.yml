@@ -155,17 +155,7 @@ jobs:
           done
           printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
           cat /tmp/relay-freellmapi-smoke.ndjson
-          grep -q '"routeReason":"public_free_lane"' /tmp/relay-freellmapi-smoke.ndjson
-          grep -Eq '"type":"worker".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson
-          grep -q '"type":"done"' /tmp/relay-freellmapi-smoke.ndjson
-          ! grep -q '"type":"error"' /tmp/relay-freellmapi-smoke.ndjson
-          if grep -Eq '"type":"worker_selected".*"model":"freellmapi:' /tmp/relay-freellmapi-smoke.ndjson; then
-            echo "Live keyless FreeLLMAPI primary: PASS"
-          else
-            grep -q '"type":"fallback"' /tmp/relay-freellmapi-smoke.ndjson
-            echo "::warning::FreeLLMAPI primary was unavailable; bounded fallback completed successfully."
-            echo "Live keyless route + fallback: PASS"
-          fi
+          node relay-runtime/live-route-proof.mjs /tmp/relay-freellmapi-smoke.ndjson
 
       - name: Live named-agent affinity smoke
         if: steps.deploy.outputs.url != ''
