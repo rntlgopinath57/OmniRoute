@@ -155,7 +155,9 @@ jobs:
           done
           printf '%s\n' "$response" > /tmp/relay-freellmapi-smoke.ndjson
           cat /tmp/relay-freellmapi-smoke.ndjson
-          node relay-runtime/live-route-proof.mjs /tmp/relay-freellmapi-smoke.ndjson
+          if ! node relay-runtime/live-route-proof.mjs /tmp/relay-freellmapi-smoke.ndjson; then
+            echo "RELAY_ROUTE_PROOF_FAILED=1" >> "$GITHUB_ENV"
+          fi
 
       - name: Live named-agent affinity smoke
         if: steps.deploy.outputs.url != ''
@@ -869,3 +871,7 @@ jobs:
             echo "- Netlify security headers preserved on Cloudflare"
             echo "- Provider coverage is reported by /api/health; unavailable providers remain disabled rather than silently assumed"
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${RELAY_ROUTE_PROOF_FAILED:-0}" = "1" ]; then
+            echo "::error::DEGRADED: FreeLLMAPI primary did not deliver. Remaining Relay checks completed; preview verification is not green."
+            exit 1
+          fi
