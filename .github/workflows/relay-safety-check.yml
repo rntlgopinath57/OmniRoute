@@ -101,6 +101,9 @@ jobs:
               assert f'family: "{provider}"' in named, f"Missing named-agent route for {provider}"
           print("Relay safety invariants: PASS")
 
+      - name: Delivered route proof regression
+        run: node --test relay-runtime/live-route-proof.test.mjs
+
       - name: Secret guard
         shell: bash
         run: |
